@@ -1,0 +1,95 @@
+{{define "finance_account.html"}}
+{{template "header" .}}
+
+<div class="row">
+    <div class="col-md-8">
+        <h2>{{if .Account}}Редактирование счета{{else}}Новый счет{{end}}</h2>
+
+        <form method="POST" hx-post="/api/v1/finance/account/save" hx-target="#result" hx-swap="innerHTML">
+            {{if .Account}}
+            <input type="hidden" name="id" value="{{.Account.ID}}">
+            {{end}}
+
+            <div class="mb-3">
+                <label for="account_name" class="form-label">Название счета *</label>
+                <input type="text" class="form-control" id="account_name" name="account_name"
+                       value="{{if .Account}}{{.Account.Name}}{{end}}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="account_description" class="form-label">Описание</label>
+                <input type="text" class="form-control" id="account_description" name="account_description"
+                       value="{{if .Account}}{{.Account.Description}}{{end}}">
+            </div>
+
+            <div class="mb-3">
+                <label for="account_type" class="form-label">Тип счета *</label>
+                <select class="form-control" id="account_type" name="account_type" required>
+                    <option value="ASSET" {{if .Account}}{{if eq .Account.AccountType "ASSET"}}selected{{end}}{{end}}>Актив</option>
+                    <option value="CASH" {{if .Account}}{{if eq .Account.AccountType "CASH"}}selected{{end}}{{end}}>Наличные</option>
+                    <option value="BANK" {{if .Account}}{{if eq .Account.AccountType "BANK"}}selected{{end}}{{end}}>Банк</option>
+                    <option value="LIABILITY" {{if .Account}}{{if eq .Account.AccountType "LIABILITY"}}selected{{end}}{{end}}>Обязательства</option>
+                    <option value="INCOME" {{if .Account}}{{if eq .Account.AccountType "INCOME"}}selected{{end}}{{end}}>Доход</option>
+                    <option value="EXPENSE" {{if .Account}}{{if eq .Account.AccountType "EXPENSE"}}selected{{end}}{{end}}>Расход</option>
+                    <option value="EQUITY" {{if .Account}}{{if eq .Account.AccountType "EQUITY"}}selected{{end}}{{end}}>Капитал</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="commodity_id" class="form-label">Валюта *</label>
+                <select class="form-control" id="commodity_id" name="commodity_id" required>
+                    {{if .Commodities}}
+                        {{range .Commodities}}
+                        <option value="{{.ID}}" {{if $.Account}}{{if eq $.Account.CommodityID .ID}}selected{{end}}{{end}}>
+                            {{.Fullname}} ({{.Sign}})
+                        </option>
+                        {{end}}
+                    {{else}}
+                        <option value="">Нет доступных валют</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="account_parent" class="form-label">Родительский счет</label>
+                <select class="form-control" id="account_parent" name="account_parent">
+                    <option value="">Нет</option>
+                    {{range .Accounts}}
+                    {{if ne .AccountType "ROOT"}}
+                    <option value="{{.ID}}" {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID $.Account.ParentID}}selected{{end}}{{end}}{{end}}>
+                        {{.Name}}
+                    </option>
+                    {{end}}
+                    {{end}}
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <a href="/finance/" class="btn btn-secondary">Отмена</a>
+        </form>
+
+        <div id="result" class="mt-3"></div>
+
+        <script>
+            document.body.addEventListener('htmx:afterRequest', function(evt) {
+                if (evt.detail.successful) {
+                    try {
+                        const response = JSON.parse(evt.detail.xhr.responseText);
+                        if (response.result === 'ok') {
+                            // Перенаправляем на страницу списка счетов
+                            window.location.href = '/finance/';
+                        } else if (response.error) {
+                            document.getElementById('result').innerHTML =
+                                '<div class="alert alert-danger">Ошибка: ' + response.error + '</div>';
+                        }
+                    } catch (e) {
+                        console.error('Error parsing response:', e);
+                    }
+                }
+            });
+        </script>
+    </div>
+</div>
+
+{{template "footer" .}}
+{{end}}

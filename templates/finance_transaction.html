@@ -1,0 +1,82 @@
+{{define "finance_transaction.html"}}
+{{template "header" .}}
+
+<div class="row">
+    <div class="col-md-8">
+        <h2>{{if .Transaction}}Редактирование транзакции{{else}}Новая транзакция{{end}}</h2>
+
+        <form method="POST" hx-post="/api/v1/finance/transaction/save" hx-target="#result">
+            {{if .Transaction}}
+            <input type="hidden" name="id" value="{{.Transaction.ID}}">
+            {{end}}
+
+            <div class="mb-3">
+                <label for="description" class="form-label">Описание</label>
+                <input type="text" class="form-control" id="description" name="description"
+                       value="{{if .Transaction}}{{.Transaction.Description}}{{end}}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="post_date" class="form-label">Дата</label>
+                <input type="date" class="form-control" id="post_date" name="post_date"
+                       value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{end}}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="tags" class="form-label">Теги (через запятую)</label>
+                <input type="text" class="form-control" id="tags" name="tags"
+                       value="{{if .Transaction}}{{.Transaction.Tags}}{{end}}">
+            </div>
+
+            <div class="mb-3">
+                <label for="value" class="form-label">Сумма</label>
+                <input type="number" step="0.01" class="form-control" id="value" name="value" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="debit_account" class="form-label">Счет дебета</label>
+                <select class="form-control" id="debit_account" name="debit_account" required>
+                    {{range .Accounts}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="credit_account" class="form-label">Счет кредита</label>
+                <select class="form-control" id="credit_account" name="credit_account" required>
+                    {{range .Accounts}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <a href="/finance/account/{{.AccountID}}" class="btn btn-secondary">Отмена</a>
+        </form>
+
+        <div id="result" class="mt-3"></div>
+
+        <script>
+            document.body.addEventListener('htmx:afterRequest', function(evt) {
+                if (evt.detail.successful) {
+                    try {
+                        const response = JSON.parse(evt.detail.xhr.responseText);
+                        if (response.result === 'ok') {
+                            // Перенаправляем на страницу счета
+                            window.location.href = '/finance/account/{{.AccountID}}';
+                        } else if (response.error) {
+                            document.getElementById('result').innerHTML =
+                                '<div class="alert alert-danger">Ошибка: ' + response.error + '</div>';
+                        }
+                    } catch (e) {
+                        console.error('Error parsing response:', e);
+                    }
+                }
+            });
+        </script>
+    </div>
+</div>
+
+{{template "footer" .}}
+{{end}}

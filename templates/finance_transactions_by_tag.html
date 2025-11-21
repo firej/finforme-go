@@ -1,0 +1,42 @@
+{{define "finance_transactions_by_tag.html"}}
+{{template "header" .}}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Транзакции с тегом: <span class="badge bg-success">{{.Tag}}</span></h1>
+
+        <table class="table table-hover mt-3">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Описание</th>
+                    <th>Счета</th>
+                    <th>Сумма</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Transactions}}
+                <tr>
+                    <td>{{.post_date}}</td>
+                    <td>{{.description}}</td>
+                    <td>
+                        {{range .splits}}
+                        <div>{{.account_name}}: {{printf "%.2f" .value}}</div>
+                        {{template "footer" .}}
+{{end}}
+                    </td>
+                    <td>{{printf "%.2f" .value}}</td>
+                    <td>
+                        <a href="/finance/transaction/0/{{.id}}" class="btn btn-sm btn-primary">Просмотр</a>
+                    </td>
+                </tr>
+                {{template "footer" .}}
+{{end}}
+            </tbody>
+        </table>
+
+        <a href="/finance/" class="btn btn-secondary mt-3">Назад к счетам</a>
+    </div>
+</div>
+{{template "footer" .}}
+{{end}}

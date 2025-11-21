@@ -1,0 +1,51 @@
+{{define "finance.html"}}
+{{template "header" .}}
+<div class="finance-main">
+    <h1>Список счетов</h1>
+    <a class="btn btn-success mb-3" href="/finance/account/new">Добавить счет</a>
+
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Баланс</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Accounts}}
+            {{if ne .AccountType "ROOT"}}
+            {{if eq .Hidden 0}}
+            <tr>
+                <td>
+                    <a href="/finance/account/{{.ID}}">{{.Name}}</a>
+                    {{if .Description}}<br><small class="text-muted">{{.Description}}</small>{{template "footer" .}}
+{{end}}
+                </td>
+                <td>{{.AccountType}}</td>
+                <td>{{printf "%.2f" .Balance}}</td>
+                <td>
+                    <a href="/finance/account/{{.ID}}" class="btn btn-sm btn-primary">Просмотр</a>
+                    <a href="/finance/account/{{.ID}}/edit" class="btn btn-sm btn-secondary">Редактировать</a>
+                    <button
+                        hx-delete="/api/v1/finance/account/delete?id={{.ID}}"
+                        hx-confirm="Вы уверены?"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML swap:1s"
+                        class="btn btn-sm btn-danger">
+                        Удалить
+                    </button>
+                </td>
+            </tr>
+            {{template "footer" .}}
+{{end}}
+            {{template "footer" .}}
+{{end}}
+            {{template "footer" .}}
+{{end}}
+        </tbody>
+    </table>
+</div>
+{{template "footer" .}}
+{{end}}

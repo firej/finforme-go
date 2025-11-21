@@ -1,0 +1,44 @@
+.finance-main {
+  padding: 40px 15px;
+  text-align: center;
+}
+
+.account {
+  display: block;
+  float: none;
+}
+.account_name {
+  padding-left: 20px;
+  text-align: left;
+}
+.account_name:hover {
+  background-color: #A0A0A0;
+  cursor: default;
+}
+.account_name_hand {
+}
+.account_childs {
+  margin-left: 20px;
+  border-left: 1px dotted gray;
+}
+.account_pin {
+  float: left;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/*
+.account_parent{
+}
+
+.account ul {
+    list-style: none;
+}
+.account > ul {
+    float: left;
+}
+.account > ul > li {
+    float: left;
+}
+
+*/

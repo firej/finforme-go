@@ -1,0 +1,31 @@
+{{define "finance_welcome.html"}}
+{{template "header" .}}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Добро пожаловать в систему учета финансов!</h1>
+        <p class="lead">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
+
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Создать новый счет</h5>
+                        <p class="card-text">Начните с чистого листа и создайте свой первый счет вручную.</p>
+                        <a href="/finance/account/new" class="btn btn-primary">Создать счет</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Импортировать из GnuCash</h5>
+                        <p class="card-text">Импортируйте существующие счета и транзакции из базы данных GnuCash.</p>
+                        <a href="/finance/settings" class="btn btn-info">Перейти к настройкам</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{template "footer" .}}
+{{end}}

@@ -1,0 +1,83 @@
+/* Основные стили для finfor.me */
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.finance-main {
+    background: white;
+    padding: 2rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+}
+
+.table {
+    background: white;
+}
+
+.badge {
+    margin-right: 0.25rem;
+}
+
+/* Анимации для htmx */
+.htmx-swapping {
+    opacity: 0;
+    transition: opacity 1s ease-out;
+}
+
+.htmx-settling {
+    opacity: 1;
+}
+
+/* Стили для форм */
+.form-label {
+    font-weight: 500;
+}
+
+.btn {
+    transition: all 0.2s ease-in-out;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.15);
+}
+
+/* Карточки */
+.card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Таблицы */
+.table-hover tbody tr:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+/* Алерты */
+.alert {
+    border-radius: 0.5rem;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .finance-main {
+        padding: 1rem;
+    }
+
+    .table {
+        font-size: 0.875rem;
+    }
+}

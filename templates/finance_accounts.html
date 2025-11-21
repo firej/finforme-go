@@ -1,0 +1,26 @@
+{{define "finance_accounts"}}
+{{range .}}
+  <div class="account">
+    {{if .Childs}}
+    <div class="account_pin">
+    +
+    </div>
+    {{end}}
+    <div class="account_name">
+      {{if not .Childs}}
+        <a href='/finance/account/{{.ID}}'>
+      {{end}}
+            {{.Name}} ||
+            {{.AccountType}} ||
+            {{.Description}} ||
+            {{.Balance}}
+      {{if .Childs}}</a>{{end}}
+    </div>
+  {{if .Childs}}
+    <div class="account_childs">
+      {{template "finance_accounts" .Childs}}
+    </div>
+  {{end}}
+  </div>
+{{end}}
+{{end}}

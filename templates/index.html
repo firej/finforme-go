@@ -1,0 +1,24 @@
+{{define "index.html"}}
+{{template "header" .}}
+
+<div class="row">
+    <div class="col-md-12">
+        <h1>Добро пожаловать в finfor.me</h1>
+        <p class="lead">Система учета личных финансов</p>
+
+        {{if .Authenticated}}
+        <div class="mt-4">
+            <a href="/finance/" class="btn btn-primary btn-lg">Перейти к финансам</a>
+        </div>
+        {{else}}
+        <div class="mt-4">
+            <p>Для начала работы необходимо войти в систему или зарегистрироваться.</p>
+            <a href="/accounts/login/" class="btn btn-primary">Вход</a>
+            <a href="/accounts/register/" class="btn btn-secondary">Регистрация</a>
+        </div>
+        {{end}}
+    </div>
+</div>
+
+{{template "footer" .}}
+{{end}}

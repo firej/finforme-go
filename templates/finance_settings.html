@@ -1,0 +1,144 @@
+{{define "finance_settings.html"}}
+{{template "header" .}}
+<div class="row">
+    <div class="col-md-12">
+        <h2>Настройки</h2>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Импорт данных</h5>
+            </div>
+            <div class="card-body">
+                <h6>Импорт из GnuCash</h6>
+                <p>Загрузите файл базы данных GnuCash (*.sqlite) для импорта счетов и транзакций.</p>
+
+                <form id="importForm" enctype="multipart/form-data" class="mb-3">
+                    <div class="mb-3">
+                        <label for="fileInput" class="form-label">Файл базы данных GnuCash</label>
+                        <input type="file" class="form-control" id="fileInput" name="file" accept=".sqlite,.db" required>
+                        <div class="form-text">Поддерживаются только файлы SQLite базы данных GnuCash</div>
+                    </div>
+
+                    <div id="progressDiv" class="mb-3" style="display: none;">
+                        <div class="progress">
+                            <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar" style="width: 100%">
+                                Импорт данных...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="messageDiv" class="alert" style="display: none;"></div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <i class="bi bi-upload"></i> Импортировать
+                    </button>
+                </form>
+
+                <div class="alert alert-info">
+                    <strong>Инструкция:</strong>
+                    <ol class="mb-0">
+                        <li>Откройте GnuCash и сохраните вашу базу данных в формате SQLite</li>
+                        <li>Выберите сохраненный файл с помощью кнопки выше</li>
+                        <li>Нажмите "Импортировать" и дождитесь завершения процесса</li>
+                    </ol>
+                </div>
+
+                <div class="alert alert-warning">
+                    <strong>Внимание!</strong> Импорт добавит новые счета и транзакции к существующим данным.
+                    Если вы хотите полностью заменить данные, сначала удалите существующие счета.
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Экспорт данных</h5>
+            </div>
+            <div class="card-body">
+                <p>Экспортировать все данные в JSON формате</p>
+                <a href="/api/v1/finance/export/json" class="btn btn-primary" download>Экспортировать JSON</a>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header bg-danger text-white">
+                <h5>Опасная зона</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-danger">Внимание! Это действие необратимо!</p>
+                <button
+                    hx-delete="/api/v1/finance/delete"
+                    hx-confirm="Вы уверены? Все данные будут удалены безвозвратно!"
+                    class="btn btn-danger">
+                    Удалить все данные
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('importForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const fileInput = document.getElementById('fileInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressDiv = document.getElementById('progressDiv');
+    const messageDiv = document.getElementById('messageDiv');
+
+    if (!fileInput.files || fileInput.files.length === 0) {
+        messageDiv.className = 'alert alert-danger';
+        messageDiv.textContent = 'Пожалуйста, выберите файл';
+        messageDiv.style.display = 'block';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+
+    // Показываем прогресс
+    submitBtn.disabled = true;
+    progressDiv.style.display = 'block';
+    messageDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/v1/finance/welcome/import', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        progressDiv.style.display = 'none';
+
+        if (data.result === 'ok') {
+            messageDiv.className = 'alert alert-success';
+            messageDiv.textContent = 'Импорт успешно завершен! Перенаправление...';
+            messageDiv.style.display = 'block';
+
+            // Очищаем форму
+            fileInput.value = '';
+
+            // Перенаправляем на страницу счетов через 2 секунды
+            setTimeout(() => {
+                window.location.href = '/finance/view';
+            }, 2000);
+        } else {
+            messageDiv.className = 'alert alert-danger';
+            messageDiv.textContent = 'Ошибка импорта: ' + (data.message || 'Неизвестная ошибка');
+            messageDiv.style.display = 'block';
+            submitBtn.disabled = false;
+        }
+    } catch (error) {
+        progressDiv.style.display = 'none';
+        messageDiv.className = 'alert alert-danger';
+        messageDiv.textContent = 'Ошибка при отправке запроса: ' + error.message;
+        messageDiv.style.display = 'block';
+        submitBtn.disabled = false;
+    }
+});
+</script>
+
+{{template "footer" .}}
+{{end}}

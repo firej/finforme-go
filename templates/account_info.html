@@ -1,0 +1,33 @@
+{{define "account_info.html"}}
+{{template "header" .}}
+<div class="row">
+    <div class="col-md-8">
+        <h2>Информация об аккаунте</h2>
+
+        <table class="table">
+            <tr>
+                <th>Логин:</th>
+                <td>{{.User.Username}}</td>
+            </tr>
+            <tr>
+                <th>Email:</th>
+                <td>{{.User.Email}}</td>
+            </tr>
+            <tr>
+                <th>Имя:</th>
+                <td>{{.User.FirstName}}</td>
+            </tr>
+            <tr>
+                <th>Фамилия:</th>
+                <td>{{.User.LastName}}</td>
+            </tr>
+        </table>
+
+        <div class="mt-3">
+            <a href="/accounts/change_info/" class="btn btn-primary">Изменить информацию</a>
+            <a href="/accounts/password_change/" class="btn btn-secondary">Сменить пароль</a>
+        </div>
+    </div>
+</div>
+{{template "footer" .}}
+{{end}}

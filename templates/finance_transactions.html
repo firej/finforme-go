@@ -1,0 +1,52 @@
+{{define "finance_transactions.html"}}
+{{template "header" .}}
+<div class="block-content">
+    {{if .Account}}
+    <h1>{{.Account.Name}}
+        <a class="btn btn-success float-end" href="/finance/transaction/{{.Account.ID}}/">Добавить</a>
+        <br><small>{{.Account.Description}}</small>
+    </h1>
+
+    <table class="table table-sm table-hover">
+        <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Описание</th>
+                <th>Счет-контрагент</th>
+                <th>Приход</th>
+                <th>Расход</th>
+                <th>Баланс</th>
+                <th>Теги</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Transactions}}
+            <tr>
+                <td>{{.post_date}}</td>
+                <td>{{.description}}</td>
+                <td><a href="/finance/account/{{.account_id}}">{{.account_name}}</a></td>
+                <td>{{if .plus_balance_changing}}{{printf "%.2f" .plus_balance_changing}}{{template "footer" .}}
+{{end}}</td>
+                <td>{{if .balance_changing}}{{printf "%.2f" .balance_changing}}{{template "footer" .}}
+{{end}}</td>
+                <td>{{printf "%.2f" .account_balance}}</td>
+                <td>
+                    {{range .tags}}
+                    <span class="badge bg-success">{{.}}</span>
+                    {{template "footer" .}}
+{{end}}
+                </td>
+                <td>
+                    <a href="/finance/transaction/{{$.Account.ID}}/{{.id}}" class="btn btn-sm btn-primary">Просмотр</a>
+                </td>
+            </tr>
+            {{template "footer" .}}
+{{end}}
+        </tbody>
+    </table>
+    {{template "footer" .}}
+{{end}}
+</div>
+{{template "footer" .}}
+{{end}}
