@@ -26,22 +26,27 @@
                 <td>{{.post_date}}</td>
                 <td>{{.description}}</td>
                 <td><a href="/finance/account/{{.account_id}}">{{.account_name}}</a></td>
-                <td>{{if .plus_balance_changing}}{{printf "%.2f" .plus_balance_changing}}{{template "footer" .}}
-{{end}}</td>
-                <td>{{if .balance_changing}}{{printf "%.2f" .balance_changing}}{{template "footer" .}}
-{{end}}</td>
+                <td>{{if .plus_balance_changing}}{{printf "%.2f" .plus_balance_changing}}{{end}}</td>
+                <td>{{if .balance_changing}}{{printf "%.2f" .balance_changing}}{{end}}</td>
                 <td>{{printf "%.2f" .account_balance}}</td>
                 <td>
                     {{range .tags}}
                     <span class="badge bg-success">{{.}}</span>
-                    {{template "footer" .}}
-{{end}}
+                    {{end}}
                 </td>
                 <td>
                     <a href="/finance/transaction/{{$.Account.ID}}/{{.id}}" class="btn btn-sm btn-primary">Просмотр</a>
+                    <button
+                        hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
+                        hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
+                        hx-target="closest tr"
+                        hx-swap="outerHTML swap:0.5s"
+                        hx-on::after-request="if(event.detail.successful) { const row = this.closest('tr'); row.style.transition = 'all 0.5s ease-out'; row.style.opacity = '0'; row.style.transform = 'translateX(-100%)'; setTimeout(() => row.remove(), 500); }"
+                        class="btn btn-sm btn-danger">
+                        Удалить
+                    </button>
                 </td>
             </tr>
-            {{template "footer" .}}
 {{end}}
         </tbody>
     </table>

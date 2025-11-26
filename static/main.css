@@ -3,6 +3,24 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: #f8f9fa;
+    margin: 0;
+    padding: 0 !important;
+}
+
+/* Переопределяем все возможные стили Bootstrap которые могут добавлять отступы */
+body, html {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* Убираем отступы у navbar */
+.navbar {
+    margin-bottom: 0;
+}
+
+/* Добавляем небольшой отступ для контента */
+.container {
+    padding-top: 1rem;
 }
 
 .navbar-brand {
@@ -28,11 +46,48 @@ body {
 /* Анимации для htmx */
 .htmx-swapping {
     opacity: 0;
-    transition: opacity 1s ease-out;
+    transform: translateX(-20px);
+    transition: all 0.5s ease-out;
 }
 
 .htmx-settling {
     opacity: 1;
+}
+
+/* Специальная анимация для удаления строк таблицы */
+tr.htmx-swapping {
+    opacity: 0;
+    transform: translateX(-100%) scale(0.8);
+    transition: all 0.5s ease-out;
+    background-color: #fff3cd;
+}
+
+/* Анимация для пустых строк после удаления */
+tr:empty {
+    display: none;
+}
+
+/* Анимация для добавления новых строк */
+tr.htmx-added {
+    opacity: 0;
+    transform: translateX(20px);
+    animation: slideIn 0.5s ease-out forwards;
+}
+
+@keyframes slideIn {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Улучшенная анимация для таблиц */
+.table tbody tr {
+    transition: all 0.3s ease;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
 }
 
 /* Стили для форм */

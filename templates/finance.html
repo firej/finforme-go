@@ -20,8 +20,7 @@
             <tr>
                 <td>
                     <a href="/finance/account/{{.ID}}">{{.Name}}</a>
-                    {{if .Description}}<br><small class="text-muted">{{.Description}}</small>{{template "footer" .}}
-{{end}}
+                    {{if .Description}}<br><small class="text-muted">{{.Description}}</small>{{end}}
                 </td>
                 <td>{{.AccountType}}</td>
                 <td>{{printf "%.2f" .Balance}}</td>
@@ -38,11 +37,8 @@
                     </button>
                 </td>
             </tr>
-            {{template "footer" .}}
 {{end}}
-            {{template "footer" .}}
 {{end}}
-            {{template "footer" .}}
 {{end}}
         </tbody>
     </table>

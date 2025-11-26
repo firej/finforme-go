@@ -637,8 +637,62 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APIAccountDelete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
+	userID, _ := h.getUserID(r)
+
+	// Получаем ID счета из параметров запроса
+	accountIDStr := r.URL.Query().Get("id")
+	if accountIDStr == "" {
+		http.Error(w, "Missing account ID", http.StatusBadRequest)
+		return
+	}
+
+	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		return
+	}
+
+	// Начинаем транзакцию
+	tx, err := h.db.Begin()
+	if err != nil {
+		fmt.Printf("ERROR starting transaction: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Сначала удаляем все splits, связанные со счетом
+	_, err = tx.Exec("DELETE FROM splits WHERE account_id = ? AND user_id = ?", accountID, userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting splits: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Затем удаляем сам счет
+	result, err := tx.Exec("DELETE FROM accounts WHERE id = ? AND user_id = ?", accountID, userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting account: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Проверяем, был ли удален счет
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Account not found", http.StatusNotFound)
+		return
+	}
+
+	// Коммитим транзакцию
+	if err := tx.Commit(); err != nil {
+		fmt.Printf("ERROR committing transaction: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем пустой ответ для HTMX
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) APITransactionsGet(w http.ResponseWriter, r *http.Request) {
@@ -762,8 +816,62 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
+	userID, _ := h.getUserID(r)
+
+	// Получаем ID транзакции из параметров запроса
+	txIDStr := r.URL.Query().Get("id")
+	if txIDStr == "" {
+		http.Error(w, "Missing transaction ID", http.StatusBadRequest)
+		return
+	}
+
+	txID, err := strconv.ParseInt(txIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid transaction ID", http.StatusBadRequest)
+		return
+	}
+
+	// Начинаем транзакцию
+	tx, err := h.db.Begin()
+	if err != nil {
+		fmt.Printf("ERROR starting transaction: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Сначала удаляем все splits, связанные с транзакцией
+	_, err = tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting splits: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Затем удаляем саму транзакцию
+	result, err := tx.Exec("DELETE FROM transactions WHERE id = ? AND user_id = ?", txID, userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting transaction: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Проверяем, была ли удалена транзакция
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		http.Error(w, "Transaction not found", http.StatusNotFound)
+		return
+	}
+
+	// Коммитим транзакцию
+	if err := tx.Commit(); err != nil {
+		fmt.Printf("ERROR committing transaction: %v\n", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем пустой ответ для HTMX
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) APIExportJSON(w http.ResponseWriter, r *http.Request) {
