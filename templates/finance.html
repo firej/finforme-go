@@ -1,47 +1,219 @@
 {{define "finance.html"}}
 {{template "header" .}}
+<style>
+.account-tree {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+}
+
+.account-tree tbody tr {
+    border-bottom: 1px solid #e9ecef;
+}
+
+.account-tree tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.account-name {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+}
+
+.account-indent {
+    display: inline-block;
+    width: 20px;
+}
+
+.account-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    color: #6c757d;
+    font-size: 12px;
+}
+
+.account-link {
+    text-decoration: none;
+    color: #212529;
+    font-weight: 500;
+}
+
+.account-link:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}
+
+.account-description {
+    font-size: 12px;
+    color: #6c757d;
+    margin-left: 22px;
+    display: block;
+    margin-top: 2px;
+}
+
+.account-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 11px;
+    border-radius: 3px;
+    font-weight: 500;
+}
+
+.type-ASSET { background-color: #d1ecf1; color: #0c5460; }
+.type-BANK { background-color: #d4edda; color: #155724; }
+.type-CASH { background-color: #fff3cd; color: #856404; }
+.type-LIABILITY { background-color: #f8d7da; color: #721c24; }
+.type-INCOME { background-color: #d1ecf1; color: #0c5460; }
+.type-EXPENSE { background-color: #f8d7da; color: #721c24; }
+.type-EQUITY { background-color: #e2e3e5; color: #383d41; }
+
+.balance-positive {
+    color: #28a745;
+    font-weight: 500;
+}
+
+.balance-negative {
+    color: #dc3545;
+    font-weight: 500;
+}
+
+.balance-zero {
+    color: #6c757d;
+}
+
+.btn-sm {
+    padding: 2px 8px;
+    font-size: 12px;
+}
+
+.account-tree thead th {
+    padding: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.account-tree tbody td {
+    padding: 6px 8px;
+    vertical-align: middle;
+}
+</style>
+
 <div class="finance-main">
     <h1>Список счетов</h1>
     <a class="btn btn-success mb-3" href="/finance/account/new">Добавить счет</a>
 
-    <table class="table table-hover">
+    <table class="table account-tree">
         <thead>
             <tr>
-                <th>Название</th>
-                <th>Тип</th>
-                <th>Баланс</th>
-                <th>Действия</th>
+                <th style="width: 50%;">Название</th>
+                <th style="width: 12%;">Тип</th>
+                <th style="width: 13%;" class="text-end">Баланс</th>
+                <th style="width: 25%;">Действия</th>
             </tr>
         </thead>
         <tbody>
-            {{range .Accounts}}
-            {{if ne .AccountType "ROOT"}}
-            {{if eq .Hidden 0}}
-            <tr>
-                <td>
-                    <a href="/finance/account/{{.ID}}">{{.Name}}</a>
-                    {{if .Description}}<br><small class="text-muted">{{.Description}}</small>{{end}}
-                </td>
-                <td>{{.AccountType}}</td>
-                <td>{{printf "%.2f" .Balance}}</td>
-                <td>
-                    <a href="/finance/account/{{.ID}}" class="btn btn-sm btn-primary">Просмотр</a>
-                    <a href="/finance/account/{{.ID}}/edit" class="btn btn-sm btn-secondary">Редактировать</a>
-                    <button
-                        hx-delete="/api/v1/finance/account/delete?id={{.ID}}"
-                        hx-confirm="Вы уверены?"
-                        hx-target="closest tr"
-                        hx-swap="outerHTML swap:1s"
-                        class="btn btn-sm btn-danger">
-                        Удалить
-                    </button>
-                </td>
-            </tr>
-{{end}}
-{{end}}
-{{end}}
+            {{range .AccountTree}}
+                {{template "account_row" .}}
+            {{end}}
         </tbody>
     </table>
 </div>
 {{template "footer" .}}
+{{end}}
+
+{{define "account_row"}}
+    {{if ne .AccountType "ROOT"}}
+    {{if eq .Hidden 0}}
+    <tr>
+        <td>
+            <div class="account-name">
+                <span class="account-icon">📁</span>
+                <a href="/finance/account/{{.ID}}" class="account-link">{{.Name}}</a>
+            </div>
+        </td>
+        <td>
+            <span class="account-type-badge type-{{.AccountType}}">{{.AccountType}}</span>
+        </td>
+        <td class="text-end">
+            {{if gt .Balance 0.01}}
+                <span class="balance-positive">{{printf "%.2f" .Balance}}</span>
+            {{else if lt .Balance -0.01}}
+                <span class="balance-negative">{{printf "%.2f" .Balance}}</span>
+            {{else}}
+                <span class="balance-zero">{{printf "%.2f" .Balance}}</span>
+            {{end}}
+        </td>
+        <td>
+            <a href="/finance/account/{{.ID}}" class="btn btn-sm btn-primary">Просмотр</a>
+            <a href="/finance/account/{{.ID}}/edit" class="btn btn-sm btn-secondary">Изменить</a>
+            <button
+                hx-delete="/api/v1/finance/account/delete?id={{.ID}}"
+                hx-confirm="Вы уверены?"
+                hx-target="closest tr"
+                hx-swap="outerHTML swap:1s"
+                class="btn btn-sm btn-danger">
+                Удалить
+            </button>
+        </td>
+    </tr>
+    {{end}}
+    {{end}}
+    {{if .Childs}}
+        {{range .Childs}}
+            {{template "account_row_child" (dict "Account" . "Level" 1)}}
+        {{end}}
+    {{end}}
+{{end}}
+
+{{define "account_row_child"}}
+    {{$account := .Account}}
+    {{$level := .Level}}
+    {{if ne $account.AccountType "ROOT"}}
+    {{if eq $account.Hidden 0}}
+    <tr>
+        <td>
+            <div class="account-name">
+                {{range $i := iterate $level}}
+                    <span class="account-indent"></span>
+                {{end}}
+                <span class="account-icon" style="color: #adb5bd;">└</span>
+                <a href="/finance/account/{{$account.ID}}" class="account-link" style="font-weight: 400;">{{$account.Name}}</a>
+            </div>
+        </td>
+        <td>
+            <span class="account-type-badge type-{{$account.AccountType}}">{{$account.AccountType}}</span>
+        </td>
+        <td class="text-end">
+            {{if gt $account.Balance 0.01}}
+                <span class="balance-positive">{{printf "%.2f" $account.Balance}}</span>
+            {{else if lt $account.Balance -0.01}}
+                <span class="balance-negative">{{printf "%.2f" $account.Balance}}</span>
+            {{else}}
+                <span class="balance-zero">{{printf "%.2f" $account.Balance}}</span>
+            {{end}}
+        </td>
+        <td>
+            <a href="/finance/account/{{$account.ID}}" class="btn btn-sm btn-primary">Просмотр</a>
+            <a href="/finance/account/{{$account.ID}}/edit" class="btn btn-sm btn-secondary">Изменить</a>
+            <button
+                hx-delete="/api/v1/finance/account/delete?id={{$account.ID}}"
+                hx-confirm="Вы уверены?"
+                hx-target="closest tr"
+                hx-swap="outerHTML swap:1s"
+                class="btn btn-sm btn-danger">
+                Удалить
+            </button>
+        </td>
+    </tr>
+    {{end}}
+    {{end}}
+    {{if $account.Childs}}
+        {{range $account.Childs}}
+            {{template "account_row_child" (dict "Account" . "Level" (add $level 1))}}
+        {{end}}
+    {{end}}
 {{end}}

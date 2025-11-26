@@ -18,8 +18,39 @@ type Handler struct {
 
 // New создает новый экземпляр Handler
 func New(db *sql.DB, store *sessions.CookieStore) *Handler {
-	// Загружаем все шаблоны
-	templates := template.Must(template.ParseGlob(filepath.Join("templates", "*.html")))
+	// Создаем функции для шаблонов
+	funcMap := template.FuncMap{
+		"dict": func(values ...interface{}) map[string]interface{} {
+			if len(values)%2 != 0 {
+				return nil
+			}
+			dict := make(map[string]interface{}, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					return nil
+				}
+				dict[key] = values[i+1]
+			}
+			return dict
+		},
+		"add": func(a, b int) int {
+			return a + b
+		},
+		"mul": func(a, b int) int {
+			return a * b
+		},
+		"iterate": func(count int) []int {
+			result := make([]int, count)
+			for i := 0; i < count; i++ {
+				result[i] = i
+			}
+			return result
+		},
+	}
+
+	// Загружаем все шаблоны с функциями
+	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join("templates", "*.html")))
 
 	return &Handler{
 		db:        db,

@@ -86,17 +86,72 @@ func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Строим дерево счетов
+	accountTree := h.buildAccountTree(accounts, accountsMap)
+
 	// Получаем валюты
 	commodities, _ := h.getCommodities()
 
 	data := map[string]interface{}{
 		"Title":         "finfor.me",
-		"Accounts":      accounts,
+		"AccountTree":   accountTree,
 		"Commodities":   commodities,
 		"Authenticated": true,
 	}
 
 	h.renderTemplate(w, "finance.html", data)
+}
+
+// buildAccountTree строит древовидную структуру счетов
+func (h *Handler) buildAccountTree(accounts []*models.Account, accountsMap map[int64]*models.Account) []*models.Account {
+	// Находим корневые счета (без родителя или с ROOT типом)
+	rootAccounts := make([]*models.Account, 0)
+
+	for _, acc := range accounts {
+		if acc.ParentID == nil || acc.AccountType == models.AccountTypeRoot {
+			rootAccounts = append(rootAccounts, acc)
+		}
+	}
+
+	// Сортируем корневые счета по ID для стабильности
+	h.sortAccountsByID(rootAccounts)
+
+	// Рекурсивно строим дерево для каждого корневого счета
+	for _, root := range rootAccounts {
+		h.buildAccountChildren(root, accountsMap)
+	}
+
+	return rootAccounts
+}
+
+// buildAccountChildren рекурсивно строит дочерние счета
+func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[int64]*models.Account) {
+	parent.Childs = make([]*models.Account, 0)
+
+	for _, acc := range accountsMap {
+		if acc.ParentID != nil && *acc.ParentID == parent.ID {
+			parent.Childs = append(parent.Childs, acc)
+		}
+	}
+
+	// Сортируем дочерние счета по ID для стабильности
+	h.sortAccountsByID(parent.Childs)
+
+	// Рекурсивно обрабатываем дочерние счета
+	for _, child := range parent.Childs {
+		h.buildAccountChildren(child, accountsMap)
+	}
+}
+
+// sortAccountsByID сортирует счета по ID
+func (h *Handler) sortAccountsByID(accounts []*models.Account) {
+	for i := 0; i < len(accounts)-1; i++ {
+		for j := i + 1; j < len(accounts); j++ {
+			if accounts[i].ID > accounts[j].ID {
+				accounts[i], accounts[j] = accounts[j], accounts[i]
+			}
+		}
+	}
 }
 
 // FinanceAccountView - просмотр транзакций счета
