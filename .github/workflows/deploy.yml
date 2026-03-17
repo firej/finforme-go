@@ -1,0 +1,51 @@
+name: Deploy to finfor.me
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Ручной запуск
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H finfor.me >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          # Синхронизация исходников
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='bin' \
+            --exclude='*.db' \
+            --exclude='*.gnucash' \
+            --exclude='scripts' \
+            --exclude='.idea' \
+            --exclude='.vscode' \
+            . firej@finfor.me:/opt/finforme/
+
+          # Сборка и перезапуск на сервере
+          ssh firej@finfor.me '
+            cd /opt/finforme && \
+            docker build -t finforme:latest . && \
+            cd /opt/traefik && \
+            docker compose up -d --force-recreate finforme
+          '
+
+      - name: Health check
+        run: |
+          sleep 5
+          curl -sf https://finfor.me/ > /dev/null && echo "✅ Deploy successful!" || exit 1

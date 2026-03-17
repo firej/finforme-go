@@ -18,6 +18,7 @@ go.work
 *.db
 *.sqlite
 *.sqlite3
+*.gnucash
 
 # Temporary files
 temp/
