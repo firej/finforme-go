@@ -3,7 +3,7 @@ name: Deploy to finfor.me
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:  # Ручной запуск
 
 jobs:
