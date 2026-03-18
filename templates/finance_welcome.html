@@ -30,8 +30,11 @@
                 <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title">📥 Импорт из GnuCash</h5>
-                        <p class="card-text">Импортируйте существующие счета и транзакции из базы данных GnuCash (SQLite формат).</p>
-                        <a href="/finance/settings" class="btn btn-info">Перейти к настройкам</a>
+                        <p class="card-text">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash - сжатый XML).</p>
+                        <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" style="display: none;" onchange="importGnuCashXML(this)">
+                        <button id="importXmlBtn" class="btn btn-info" onclick="document.getElementById('gnucashFile').click()">
+                            <i class="bi bi-upload"></i> Выбрать файл .gnucash
+                        </button>
                     </div>
                 </div>
             </div>
@@ -127,6 +130,53 @@ function createBaseAccounts() {
         btn.disabled = false;
         btn.innerHTML = 'Создать базовый набор';
     });
+}
+
+function importGnuCashXML(input) {
+    if (!input.files || input.files.length === 0) {
+        return;
+    }
+
+    const file = input.files[0];
+    const btn = document.getElementById('importXmlBtn');
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Импорт...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    fetch('/api/v1/finance/welcome/importxml', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.result === 'ok') {
+            let message = 'Импорт завершен успешно!';
+            if (data.accounts !== undefined) {
+                message += '\nИмпортировано счетов: ' + data.accounts;
+            }
+            if (data.transactions !== undefined) {
+                message += '\nИмпортировано транзакций: ' + data.transactions;
+            }
+            alert(message);
+            window.location.href = '/finance/';
+        } else {
+            alert('Ошибка импорта: ' + (data.message || 'Неизвестная ошибка'));
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+
+    // Сбрасываем input для возможности повторного выбора того же файла
+    input.value = '';
 }
 </script>
 {{template "footer" .}}

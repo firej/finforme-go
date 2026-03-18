@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evbogdanov/finforme/internal/gnucash"
 	"github.com/evbogdanov/finforme/internal/models"
 	"github.com/gorilla/mux"
 )
@@ -1566,6 +1567,245 @@ func (h *Handler) importFromGnuCash(userID int64, filename string) error {
 				INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
 				VALUES (?, ?, ?, ?, ?)
 			`, userID, txID, accountID, valueNum, valueDenom)
+
+			if err != nil {
+				return fmt.Errorf("failed to insert split: %w", err)
+			}
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// APIImportGnuCashXML handles GnuCash XML file import (compressed gzip)
+func (h *Handler) APIImportGnuCashXML(w http.ResponseWriter, r *http.Request) {
+	userID, authenticated := h.getUserID(r)
+	if !authenticated {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Not authenticated"})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Method not allowed"})
+		return
+	}
+
+	// Parse multipart form (max 32MB)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Failed to parse form"})
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Failed to get file"})
+		return
+	}
+	defer file.Close()
+
+	log.Printf("Importing GnuCash XML file: %s", header.Filename)
+
+	// Read file content
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Failed to read file"})
+		return
+	}
+
+	// Parse GnuCash XML
+	parsedData, err := gnucash.ParseReaderWithFallback(fileData)
+	if err != nil {
+		log.Printf("Error parsing GnuCash XML: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": fmt.Sprintf("Failed to parse GnuCash file: %v", err)})
+		return
+	}
+
+	// Import parsed data
+	if err := h.importFromGnuCashXML(userID, parsedData); err != nil {
+		log.Printf("Error importing GnuCash XML data: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	log.Printf("Successfully imported GnuCash XML: %d accounts, %d transactions",
+		len(parsedData.Accounts), len(parsedData.Transactions))
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"result":       "ok",
+		"accounts":     len(parsedData.Accounts),
+		"transactions": len(parsedData.Transactions),
+	})
+}
+
+// importFromGnuCashXML imports data from parsed GnuCash XML
+func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) error {
+	// Start transaction
+	tx, err := h.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Map old GUIDs to new IDs
+	accountMap := make(map[string]int64)
+	commodityMap := make(map[string]int64)
+
+	// Get existing commodities from our database
+	existingCommodities := make(map[string]int64)
+	commodityRows, err := h.db.Query("SELECT id, mnemonic FROM commodities")
+	if err != nil {
+		return fmt.Errorf("failed to query existing commodities: %w", err)
+	}
+	defer commodityRows.Close()
+
+	for commodityRows.Next() {
+		var id int64
+		var mnemonic string
+		if err := commodityRows.Scan(&id, &mnemonic); err != nil {
+			return fmt.Errorf("failed to scan commodity: %w", err)
+		}
+		existingCommodities[mnemonic] = id
+	}
+
+	// Map commodities from GnuCash to our database
+	for _, c := range data.Commodities {
+		if id, ok := existingCommodities[c.Mnemonic]; ok {
+			commodityMap[c.GUID] = id
+			commodityMap[c.Space+":"+c.Mnemonic] = id
+		} else {
+			// Default to first commodity (usually RUB)
+			commodityMap[c.GUID] = 1
+			commodityMap[c.Space+":"+c.Mnemonic] = 1
+		}
+	}
+
+	// Import accounts in multiple passes to handle hierarchy
+	remainingAccounts := make([]gnucash.ParsedAccount, len(data.Accounts))
+	copy(remainingAccounts, data.Accounts)
+
+	maxPasses := 10
+	for pass := 0; pass < maxPasses && len(remainingAccounts) > 0; pass++ {
+		var stillRemaining []gnucash.ParsedAccount
+
+		for _, acc := range remainingAccounts {
+			// Check if parent exists or is empty (root account)
+			canImport := acc.ParentGUID == "" || accountMap[acc.ParentGUID] != 0
+
+			if canImport {
+				// Get commodity ID
+				commodityID := int64(1)
+				if id, ok := commodityMap[acc.CommodityRef]; ok {
+					commodityID = id
+				}
+
+				// Get parent ID
+				var parentID sql.NullInt64
+				if acc.ParentGUID != "" && accountMap[acc.ParentGUID] != 0 {
+					parentID.Valid = true
+					parentID.Int64 = accountMap[acc.ParentGUID]
+				}
+
+				// Convert hidden/placeholder to int
+				hidden := 0
+				if acc.Hidden {
+					hidden = 1
+				}
+				placeholder := 0
+				if acc.Placeholder {
+					placeholder = 1
+				}
+
+				// Get commodity SCU (default to 100)
+				commoditySCU := acc.CommoditySCU
+				if commoditySCU == 0 {
+					commoditySCU = 100
+				}
+
+				result, err := tx.Exec(`
+					INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
+					                      non_std_scu, parent_id, code, description, hidden, placeholder)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`, userID, acc.Name, acc.AccountType, commodityID,
+					commoditySCU, acc.NonStdSCU, parentID,
+					acc.Code, acc.Description, hidden, placeholder)
+
+				if err != nil {
+					return fmt.Errorf("failed to insert account %s: %w", acc.Name, err)
+				}
+
+				newID, _ := result.LastInsertId()
+				accountMap[acc.GUID] = newID
+			} else {
+				stillRemaining = append(stillRemaining, acc)
+			}
+		}
+
+		remainingAccounts = stillRemaining
+	}
+
+	if len(remainingAccounts) > 0 {
+		log.Printf("Warning: %d accounts could not be imported due to unresolved parent references", len(remainingAccounts))
+	}
+
+	// Import transactions
+	transactionMap := make(map[string]int64)
+	for _, t := range data.Transactions {
+		// Get currency ID
+		currencyID := int64(1)
+		if id, ok := commodityMap[t.CurrencyRef]; ok {
+			currencyID = id
+		}
+
+		result, err := tx.Exec(`
+			INSERT INTO transactions (user_id, currency_id, num, post_date, enter_date, description, tags)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, userID, currencyID, t.Num, t.PostDate, t.EnterDate, t.Description, "")
+
+		if err != nil {
+			return fmt.Errorf("failed to insert transaction: %w", err)
+		}
+
+		newTxID, _ := result.LastInsertId()
+		transactionMap[t.GUID] = newTxID
+
+		// Import splits for this transaction
+		for _, s := range t.Splits {
+			accountID, accExists := accountMap[s.AccountGUID]
+			if !accExists {
+				log.Printf("Warning: skipping split with unknown account GUID: %s", s.AccountGUID)
+				continue
+			}
+
+			// Normalize value_denom to 100 if needed
+			valueNum := s.ValueNum
+			valueDenom := s.ValueDenom
+			if valueDenom == 0 {
+				valueDenom = 100
+			}
+
+			// Convert to standard denom (100)
+			if valueDenom != 100 {
+				valueNum = valueNum * 100 / valueDenom
+				valueDenom = 100
+			}
+
+			_, err := tx.Exec(`
+				INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+				VALUES (?, ?, ?, ?, ?)
+			`, userID, newTxID, accountID, valueNum, valueDenom)
 
 			if err != nil {
 				return fmt.Errorf("failed to insert split: %w", err)

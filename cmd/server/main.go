@@ -90,6 +90,7 @@ func main() {
 	api.HandleFunc("/finance/welcome/createbase", h.APIWelcomeCreateBase).Methods("POST")
 	api.HandleFunc("/finance/welcome/importjson", h.APIImportJSON).Methods("POST")
 	api.HandleFunc("/finance/welcome/import", h.APIImportGnuCash).Methods("POST")
+	api.HandleFunc("/finance/welcome/importxml", h.APIImportGnuCashXML).Methods("POST")
 
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)
