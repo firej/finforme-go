@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:  # Ручной запуск
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -32,9 +32,10 @@ jobs:
             --exclude='bin' \
             --exclude='*.db' \
             --exclude='*.gnucash' \
-            --exclude='scripts' \
             --exclude='.idea' \
             --exclude='.vscode' \
+            --exclude='docker-compose.yml' \
+            --exclude='docker-compose.prod.yml' \
             . firej@finfor.me:/opt/finforme/
 
           # Сборка и перезапуск на сервере
@@ -47,8 +48,18 @@ jobs:
 
       - name: Health check
         run: |
+          echo "Waiting for service to start..."
           sleep 5
-          curl -sf https://finfor.me/ > /dev/null && echo "✅ Deploy successful!" || exit 1
+          for i in 1 2 3 4 5; do
+            if curl -sf https://finfor.me/ > /dev/null; then
+              echo "✅ Deploy successful!"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 3s..."
+            sleep 3
+          done
+          echo "❌ Health check failed"
+          exit 1
 
       - name: Cleanup SSH key
         if: always()
