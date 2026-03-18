@@ -1,13 +1,6 @@
 # Этап сборки
 FROM golang:1.21-bookworm AS builder
 
-# Установка необходимых пакетов для сборки
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libc6-dev \
-    libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
 # Копируем файлы зависимостей
@@ -19,8 +12,8 @@ RUN go mod download
 # Копируем исходный код
 COPY . .
 
-# Собираем приложение
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-w -s' -o finforme ./cmd/server/main.go
+# Собираем приложение (CGO отключен, так как не используем SQLite)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o finforme ./cmd/server/main.go
 
 # Финальный образ
 FROM debian:bookworm-slim
@@ -29,7 +22,6 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     tzdata \
-    libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -41,12 +33,9 @@ COPY --from=builder /app/finforme .
 COPY static/ ./static/
 COPY templates/ ./templates/
 
-# Создаём директорию для данных
-RUN mkdir -p /app/data
-
 # Переменные окружения по умолчанию
 ENV PORT=8080
-ENV DATABASE_PATH=/app/data/finforme.db
+ENV DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
 ENV SESSION_SECRET=change-me-in-production
 ENV SECURE_COOKIE=false
 

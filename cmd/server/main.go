@@ -9,21 +9,26 @@ import (
 	"github.com/evbogdanov/finforme/internal/config"
 	"github.com/evbogdanov/finforme/internal/database"
 	"github.com/evbogdanov/finforme/internal/handlers"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
 	// Загрузка конфигурации
 	cfg := config.Load()
 
-	// Подключение к базе данных
-	db, err := sql.Open("sqlite3", cfg.DatabasePath)
+	// Подключение к базе данных MariaDB
+	db, err := sql.Open("mysql", cfg.DatabaseDSN)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
 	defer db.Close()
+
+	// Проверяем соединение
+	if err := db.Ping(); err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
 
 	// Инициализация базы данных
 	if err := database.InitDB(db); err != nil {

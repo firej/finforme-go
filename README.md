@@ -6,8 +6,9 @@
 
 - **Backend**: Go 1.21+
 - **Frontend**: HTML + htmx для динамических обновлений
-- **База данных**: SQLite
+- **База данных**: MariaDB
 - **Стиль**: Bootstrap 5
+- **Контейнеризация**: Docker / Podman
 
 ## Возможности
 
@@ -21,31 +22,49 @@
 
 ## Быстрый старт
 
-### Установка зависимостей
+### Запуск через Docker Compose (рекомендуется)
 
 ```bash
-go mod download
-```
-
-### Запуск приложения
-
-```bash
-# Разработка
-make run
+# Запустить приложение с MariaDB
+make up
 
 # Или напрямую
-go run cmd/server/main.go
+docker-compose up -d
 ```
 
-Приложение будет доступно по адресу: http://localhost:8080
+Приложение будет доступно по адресу: http://localhost:8000
 
-### Сборка
+### Локальная разработка
 
 ```bash
-make build
+# Запустить только MariaDB, приложение запустить локально
+make dev
+
+# Или по шагам:
+make db-only          # Запустить MariaDB
+go run cmd/server/main.go  # Запустить приложение
 ```
 
-Исполняемый файл будет создан в `./bin/finforme`
+### Полезные команды
+
+```bash
+make up        # Запустить всё через docker-compose
+make down      # Остановить
+make logs      # Посмотреть логи
+make db-shell  # Открыть консоль MariaDB
+make rebuild   # Пересобрать и перезапустить контейнеры
+```
+
+## Конфигурация
+
+Приложение настраивается через переменные окружения:
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `PORT` | Порт приложения | `8000` |
+| `DATABASE_DSN` | DSN для подключения к MariaDB | `finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4` |
+| `SESSION_SECRET` | Секрет для сессий | `change-me-in-production` |
+| `SECURE_COOKIE` | Использовать secure cookies | `false` |
 
 ## Структура проекта
 
@@ -54,18 +73,20 @@ make build
 ├── cmd/
 │   └── server/          # Точка входа приложения
 ├── internal/
+│   ├── config/          # Конфигурация
+│   ├── database/        # Инициализация БД
 │   ├── handlers/        # HTTP handlers
-│   ├── middleware/      # Middleware (аутентификация и т.д.)
 │   └── models/          # Модели данных
 ├── static/              # Статические файлы (CSS, JS)
 ├── templates/           # HTML шаблоны
-├── finforme.db          # SQLite база данных
-└── README.md
+├── docker-compose.yml   # Docker Compose конфигурация
+├── Dockerfile           # Сборка образа
+└── Makefile             # Команды для разработки
 ```
 
 ## База данных
 
-Приложение использует SQLite с автоматической инициализацией схемы при первом запуске.
+Приложение использует MariaDB с автоматической инициализацией схемы при первом запуске.
 
 ### Основные таблицы
 
@@ -89,44 +110,45 @@ make build
 ### Требования
 
 - Go 1.21 или выше
-- SQLite3
+- Docker / Podman (для MariaDB)
 
-### Полезные команды
+### Сборка
 
 ```bash
-# Запуск в режиме разработки
-make run
-
-# Сборка
+# Собрать бинарник
 make build
 
-# Очистка
-make clean
-
-# Запуск тестов
-make test
+# Собрать Docker образ
+make docker
 ```
 
 ## API Endpoints
 
 ### Аутентификация
-- `GET /login` - страница входа
-- `POST /login` - вход в систему
-- `GET /logout` - выход из системы
-- `GET /register` - страница регистрации
-- `POST /register` - регистрация нового пользователя
+- `GET /accounts/login/` - страница входа
+- `POST /accounts/login/` - вход в систему
+- `GET /accounts/logout/` - выход из системы
+- `GET /accounts/register/` - страница регистрации
+- `POST /accounts/register/` - регистрация нового пользователя
 
 ### Финансы
-- `GET /finance` - главная страница (список счетов)
-- `GET /finance/accounts/{id}` - просмотр транзакций счета
-- `GET /finance/accounts/edit/{id}` - редактирование счета
+- `GET /finance/` - главная страница (список счетов)
+- `GET /finance/account/{id}` - просмотр транзакций счета
+- `GET /finance/account/{id}/edit` - редактирование счета
 - `GET /finance/transaction/{account_id}/{tx_id}` - просмотр транзакции
 - `GET /finance/settings` - настройки и импорт данных
 
 ### API
-- `POST /api/v1/finance/accounts/save` - сохранение счета
-- `POST /api/v1/finance/transactions/save` - сохранение транзакции
+- `POST /api/v1/finance/account/save` - сохранение счета
+- `POST /api/v1/finance/transaction/save` - сохранение транзакции
 - `POST /api/v1/finance/welcome/import` - импорт из GnuCash
+
+## Деплой
+
+```bash
+# Деплой на сервер finfor.me
+make deploy
+```
 
 ## Лицензия
 

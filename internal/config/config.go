@@ -7,7 +7,7 @@ import (
 // Config содержит конфигурацию приложения
 type Config struct {
 	Port          string
-	DatabasePath  string
+	DatabaseDSN   string // DSN для MariaDB: user:password@tcp(host:port)/dbname?parseTime=true
 	SessionSecret string
 	SecureCookie  bool
 }
@@ -16,7 +16,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Port:          getEnv("PORT", "8000"),
-		DatabasePath:  getEnv("DATABASE_PATH", "finforme.db"),
+		DatabaseDSN:   getEnv("DATABASE_DSN", "finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"),
 		SessionSecret: getEnv("SESSION_SECRET", "change-me-in-production"),
 		SecureCookie:  getEnv("SECURE_COOKIE", "false") == "true",
 	}
