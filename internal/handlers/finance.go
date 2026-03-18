@@ -167,6 +167,12 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Получаем параметр сортировки из URL
+	sortOrder := r.URL.Query().Get("sort")
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc" // По умолчанию - от новых к старым
+	}
+
 	// Получаем информацию о счете
 	var account models.Account
 	var parentID sql.NullInt64
@@ -195,18 +201,26 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		account.Description = description.String
 	}
 
-	// Получаем транзакции счета
-	transactions := h.getAccountTransactions(userID, accountID)
+	// Получаем транзакции счета с учетом сортировки
+	transactions := h.getAccountTransactions(userID, accountID, sortOrder)
 	accounts, _ := h.getAccounts(userID)
 	commodities, _ := h.getCommodities()
 
+	// Определяем противоположный порядок сортировки для ссылки
+	oppositeSortOrder := "asc"
+	if sortOrder == "asc" {
+		oppositeSortOrder = "desc"
+	}
+
 	data := map[string]interface{}{
-		"Title":         account.Name,
-		"Account":       account,
-		"Transactions":  transactions,
-		"Accounts":      accounts,
-		"Commodities":   commodities,
-		"Authenticated": true,
+		"Title":             account.Name,
+		"Account":           account,
+		"Transactions":      transactions,
+		"Accounts":          accounts,
+		"Commodities":       commodities,
+		"Authenticated":     true,
+		"SortOrder":         sortOrder,
+		"OppositeSortOrder": oppositeSortOrder,
 	}
 
 	h.renderTemplate(w, "finance_transactions.html", data)
@@ -487,8 +501,14 @@ func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 	return commodities, nil
 }
 
-func (h *Handler) getAccountTransactions(userID, accountID int64) []map[string]interface{} {
-	rows, err := h.db.Query(`
+func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder string) []map[string]interface{} {
+	// Определяем направление сортировки
+	orderDirection := "DESC"
+	if sortOrder == "asc" {
+		orderDirection = "ASC"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT t.id, t.description, t.post_date, t.tags,
 		       s.id, s.account_id, s.value_num, s.value_denom,
 		       a.name
@@ -498,8 +518,10 @@ func (h *Handler) getAccountTransactions(userID, accountID int64) []map[string]i
 		WHERE t.user_id = ? AND t.id IN (
 			SELECT tx_id FROM splits WHERE account_id = ? AND user_id = ?
 		)
-		ORDER BY t.post_date DESC
-	`, userID, accountID, userID)
+		ORDER BY t.post_date %s, t.id %s
+	`, orderDirection, orderDirection)
+
+	rows, err := h.db.Query(query, userID, accountID, userID)
 
 	if err != nil {
 		return []map[string]interface{}{}
@@ -507,6 +529,7 @@ func (h *Handler) getAccountTransactions(userID, accountID int64) []map[string]i
 	defer rows.Close()
 
 	transactionsMap := make(map[int64]map[string]interface{})
+	transactionOrder := make([]int64, 0) // Сохраняем порядок транзакций
 
 	for rows.Next() {
 		var txID, splitID, splitAccountID, valueNum, valueDenom int64
@@ -518,11 +541,13 @@ func (h *Handler) getAccountTransactions(userID, accountID int64) []map[string]i
 
 		if _, exists := transactionsMap[txID]; !exists {
 			transactionsMap[txID] = map[string]interface{}{
-				"id":          txID,
-				"description": description,
-				"post_date":   postDate.Format("02.01.2006"),
-				"tags":        strings.Split(tags, ","),
+				"id":            txID,
+				"description":   description,
+				"post_date":     postDate.Format("02.01.2006"),
+				"post_date_raw": postDate,
+				"tags":          strings.Split(tags, ","),
 			}
+			transactionOrder = append(transactionOrder, txID)
 		}
 
 		if splitAccountID == accountID {
@@ -534,9 +559,10 @@ func (h *Handler) getAccountTransactions(userID, accountID int64) []map[string]i
 		}
 	}
 
-	transactions := make([]map[string]interface{}, 0, len(transactionsMap))
-	for _, tx := range transactionsMap {
-		transactions = append(transactions, tx)
+	// Сохраняем порядок из SQL запроса
+	transactions := make([]map[string]interface{}, 0, len(transactionOrder))
+	for _, txID := range transactionOrder {
+		transactions = append(transactions, transactionsMap[txID])
 	}
 
 	return transactions
@@ -936,6 +962,69 @@ func (h *Handler) APIExportJSON(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) APIDataDelete(w http.ResponseWriter, r *http.Request) {
+	userID, authenticated := h.getUserID(r)
+	if !authenticated {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Not authenticated"})
+		return
+	}
+
+	// Начинаем транзакцию
+	tx, err := h.db.Begin()
+	if err != nil {
+		fmt.Printf("ERROR starting transaction: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
+	// Удаляем все splits пользователя
+	_, err = tx.Exec("DELETE FROM splits WHERE user_id = ?", userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting splits: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	// Удаляем все транзакции пользователя
+	_, err = tx.Exec("DELETE FROM transactions WHERE user_id = ?", userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting transactions: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	// Сначала обнуляем parent_id у всех счетов, чтобы избежать ошибки foreign key
+	_, err = tx.Exec("UPDATE accounts SET parent_id = NULL WHERE user_id = ?", userID)
+	if err != nil {
+		fmt.Printf("ERROR clearing parent_id: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	// Удаляем все счета пользователя
+	_, err = tx.Exec("DELETE FROM accounts WHERE user_id = ?", userID)
+	if err != nil {
+		fmt.Printf("ERROR deleting accounts: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	// Коммитим транзакцию
+	if err := tx.Commit(); err != nil {
+		fmt.Printf("ERROR committing transaction: %v\n", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	log.Printf("User %d deleted all their data", userID)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
 }

@@ -70,6 +70,7 @@
                 <button
                     hx-delete="/api/v1/finance/delete"
                     hx-confirm="Вы уверены? Все данные будут удалены безвозвратно!"
+                    hx-on::after-request="if(event.detail.successful) { window.location.href = '/finance/'; }"
                     class="btn btn-danger">
                     Удалить все данные
                 </button>

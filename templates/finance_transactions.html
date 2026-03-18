@@ -7,10 +7,34 @@
         <br><small>{{.Account.Description}}</small>
     </h1>
 
+    <div class="mb-3">
+        <span class="me-2">Сортировка по дате:</span>
+        {{if eq .SortOrder "desc"}}
+            <a href="/finance/account/{{.Account.ID}}?sort=asc" class="btn btn-sm btn-outline-primary">
+                ↑ Сначала старые
+            </a>
+            <span class="btn btn-sm btn-primary disabled">
+                ↓ Сначала новые
+            </span>
+        {{else}}
+            <span class="btn btn-sm btn-primary disabled">
+                ↑ Сначала старые
+            </span>
+            <a href="/finance/account/{{.Account.ID}}?sort=desc" class="btn btn-sm btn-outline-primary">
+                ↓ Сначала новые
+            </a>
+        {{end}}
+    </div>
+
     <table class="table table-sm table-hover">
         <thead>
             <tr>
-                <th>Дата</th>
+                <th>
+                    <a href="/finance/account/{{.Account.ID}}?sort={{.OppositeSortOrder}}" class="text-decoration-none text-dark">
+                        Дата
+                        {{if eq .SortOrder "desc"}}↓{{else}}↑{{end}}
+                    </a>
+                </th>
                 <th>Описание</th>
                 <th>Счет-контрагент</th>
                 <th>Приход</th>
