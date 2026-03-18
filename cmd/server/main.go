@@ -93,7 +93,7 @@ func main() {
 
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Starting server on http://localhost:%s", cfg.Port)
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal("Server failed:", err)
 	}

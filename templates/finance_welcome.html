@@ -6,26 +6,128 @@
         <p class="lead">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
 
         <div class="row mt-4">
-            <div class="col-md-6">
-                <div class="card">
+            <div class="col-md-4">
+                <div class="card h-100">
                     <div class="card-body">
-                        <h5 class="card-title">Создать новый счет</h5>
-                        <p class="card-text">Начните с чистого листа и создайте свой первый счет вручную.</p>
+                        <h5 class="card-title">🚀 Быстрый старт</h5>
+                        <p class="card-text">Создайте базовый набор счетов как в GnuCash: Активы, Обязательства, Доходы, Расходы и Капитал с готовой иерархией подсчетов.</p>
+                        <button id="createBaseBtn" class="btn btn-success" onclick="createBaseAccounts()">
+                            Создать базовый набор
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">📝 Создать вручную</h5>
+                        <p class="card-text">Начните с чистого листа и создайте свой первый счет вручную. Подходит для опытных пользователей.</p>
                         <a href="/finance/account/new" class="btn btn-primary">Создать счет</a>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="card">
+            <div class="col-md-4">
+                <div class="card h-100">
                     <div class="card-body">
-                        <h5 class="card-title">Импортировать из GnuCash</h5>
-                        <p class="card-text">Импортируйте существующие счета и транзакции из базы данных GnuCash.</p>
+                        <h5 class="card-title">📥 Импорт из GnuCash</h5>
+                        <p class="card-text">Импортируйте существующие счета и транзакции из базы данных GnuCash (SQLite формат).</p>
                         <a href="/finance/settings" class="btn btn-info">Перейти к настройкам</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">📊 Что включает базовый набор счетов?</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <h6><strong>Активы</strong></h6>
+                                <ul class="list-unstyled ms-3">
+                                    <li>└ Текущие активы</li>
+                                    <li class="ms-3">├ Наличные</li>
+                                    <li class="ms-3">├ Расчетный счет</li>
+                                    <li class="ms-3">└ Сберегательный счет</li>
+                                </ul>
+
+                                <h6 class="mt-3"><strong>Обязательства</strong></h6>
+                                <ul class="list-unstyled ms-3">
+                                    <li>├ Кредитная карта</li>
+                                    <li>└ Займы</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><strong>Доходы</strong></h6>
+                                <ul class="list-unstyled ms-3">
+                                    <li>├ Зарплата</li>
+                                    <li>├ Проценты</li>
+                                    <li>└ Прочие доходы</li>
+                                </ul>
+
+                                <h6 class="mt-3"><strong>Капитал</strong></h6>
+                                <ul class="list-unstyled ms-3">
+                                    <li>└ Начальный баланс</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-4">
+                                <h6><strong>Расходы</strong></h6>
+                                <ul class="list-unstyled ms-3">
+                                    <li>├ Продукты</li>
+                                    <li>├ Транспорт</li>
+                                    <li>├ Коммунальные услуги</li>
+                                    <li class="ms-3">├ Электричество</li>
+                                    <li class="ms-3">├ Газ</li>
+                                    <li class="ms-3">├ Вода</li>
+                                    <li class="ms-3">├ Интернет</li>
+                                    <li class="ms-3">└ Телефон</li>
+                                    <li>├ Развлечения</li>
+                                    <li>├ Одежда</li>
+                                    <li>├ Здоровье</li>
+                                    <li>├ Образование</li>
+                                    <li>├ Подарки</li>
+                                    <li>└ Прочие расходы</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+function createBaseAccounts() {
+    const btn = document.getElementById('createBaseBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Создание...';
+
+    fetch('/api/v1/finance/welcome/createbase', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.result === 'ok') {
+            window.location.href = '/finance/';
+        } else {
+            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+            btn.disabled = false;
+            btn.innerHTML = 'Создать базовый набор';
+        }
+    })
+    .catch(error => {
+        alert('Ошибка: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = 'Создать базовый набор';
+    });
+}
+</script>
 {{template "footer" .}}
 {{end}}

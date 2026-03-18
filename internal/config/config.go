@@ -15,7 +15,7 @@ type Config struct {
 // Load загружает конфигурацию из переменных окружения
 func Load() *Config {
 	return &Config{
-		Port:          getEnv("PORT", "8000"),
+		Port:          getEnv("PORT", "8080"),
 		DatabaseDSN:   getEnv("DATABASE_DSN", "finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"),
 		SessionSecret: getEnv("SESSION_SECRET", "change-me-in-production"),
 		SecureCookie:  getEnv("SECURE_COOKIE", "false") == "true",

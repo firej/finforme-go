@@ -58,7 +58,7 @@ COMPOSE_ENGINE ?= $(shell command -v podman-compose 2>/dev/null || command -v do
 up: ## Запустить приложение с MariaDB через docker-compose
 	@echo "$(GREEN)Запуск через docker-compose...$(NC)"
 	@$(COMPOSE_ENGINE) up -d
-	@echo "$(GREEN)✓ Приложение запущено: http://localhost:8000$(NC)"
+	@echo "$(GREEN)✓ Приложение запущено: http://localhost:8080$(NC)"
 
 down: ## Остановить docker-compose
 	@echo "$(GREEN)Остановка docker-compose...$(NC)"
@@ -77,6 +77,8 @@ db-shell: ## Открыть shell MariaDB
 db-only: ## Запустить только MariaDB (для локальной разработки)
 	@echo "$(GREEN)Запуск MariaDB...$(NC)"
 	@$(COMPOSE_ENGINE) up -d mariadb
+	@echo "$(GREEN)Ожидание готовности MariaDB...$(NC)"
+	@sleep 3
 	@echo "$(GREEN)✓ MariaDB запущена на localhost:3306$(NC)"
 
 dev: db-only run ## Запустить MariaDB и приложение локально

@@ -944,9 +944,295 @@ func (h *Handler) APIWelcomeCreateEmpty(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
 }
 
+// APIWelcomeCreateBase создает базовый набор счетов как в GnuCash
 func (h *Handler) APIWelcomeCreateBase(w http.ResponseWriter, r *http.Request) {
+	userID, authenticated := h.getUserID(r)
+	if !authenticated {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "Not authenticated"})
+		return
+	}
+
+	// Проверяем, есть ли уже счета у пользователя
+	var count int
+	err := h.db.QueryRow("SELECT COUNT(*) FROM accounts WHERE user_id = ?", userID).Scan(&count)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
+	if count > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": "У вас уже есть счета"})
+		return
+	}
+
+	// Создаем базовый набор счетов
+	if err := h.createBaseAccounts(userID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
+}
+
+// createBaseAccounts создает базовый набор счетов для пользователя
+func (h *Handler) createBaseAccounts(userID int64) error {
+	// Начинаем транзакцию
+	tx, err := h.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Получаем ID валюты RUB (по умолчанию 1)
+	commodityID := int64(1)
+
+	// Структура для описания счета
+	type accountDef struct {
+		name        string
+		accountType string
+		description string
+		placeholder int
+		children    []accountDef
+	}
+
+	// Базовая структура счетов как в GnuCash
+	baseAccounts := []accountDef{
+		{
+			name:        "Активы",
+			accountType: models.AccountTypeAsset,
+			description: "Все активы",
+			placeholder: 1,
+			children: []accountDef{
+				{
+					name:        "Текущие активы",
+					accountType: models.AccountTypeAsset,
+					description: "Текущие активы",
+					placeholder: 1,
+					children: []accountDef{
+						{
+							name:        "Наличные",
+							accountType: models.AccountTypeCash,
+							description: "Наличные деньги",
+							placeholder: 0,
+						},
+						{
+							name:        "Расчетный счет",
+							accountType: models.AccountTypeBank,
+							description: "Основной банковский счет",
+							placeholder: 0,
+						},
+						{
+							name:        "Сберегательный счет",
+							accountType: models.AccountTypeBank,
+							description: "Сберегательный счет",
+							placeholder: 0,
+						},
+					},
+				},
+			},
+		},
+		{
+			name:        "Обязательства",
+			accountType: models.AccountTypeLiability,
+			description: "Все обязательства",
+			placeholder: 1,
+			children: []accountDef{
+				{
+					name:        "Кредитная карта",
+					accountType: models.AccountTypeLiability,
+					description: "Задолженность по кредитной карте",
+					placeholder: 0,
+				},
+				{
+					name:        "Займы",
+					accountType: models.AccountTypeLiability,
+					description: "Займы и кредиты",
+					placeholder: 0,
+				},
+			},
+		},
+		{
+			name:        "Доходы",
+			accountType: models.AccountTypeIncome,
+			description: "Все доходы",
+			placeholder: 1,
+			children: []accountDef{
+				{
+					name:        "Зарплата",
+					accountType: models.AccountTypeIncome,
+					description: "Заработная плата",
+					placeholder: 0,
+				},
+				{
+					name:        "Проценты",
+					accountType: models.AccountTypeIncome,
+					description: "Процентные доходы",
+					placeholder: 0,
+				},
+				{
+					name:        "Прочие доходы",
+					accountType: models.AccountTypeIncome,
+					description: "Прочие доходы",
+					placeholder: 0,
+				},
+			},
+		},
+		{
+			name:        "Расходы",
+			accountType: models.AccountTypeExpense,
+			description: "Все расходы",
+			placeholder: 1,
+			children: []accountDef{
+				{
+					name:        "Продукты",
+					accountType: models.AccountTypeExpense,
+					description: "Продукты питания",
+					placeholder: 0,
+				},
+				{
+					name:        "Транспорт",
+					accountType: models.AccountTypeExpense,
+					description: "Транспортные расходы",
+					placeholder: 0,
+				},
+				{
+					name:        "Коммунальные услуги",
+					accountType: models.AccountTypeExpense,
+					description: "Коммунальные платежи",
+					placeholder: 1,
+					children: []accountDef{
+						{
+							name:        "Электричество",
+							accountType: models.AccountTypeExpense,
+							description: "Оплата электроэнергии",
+							placeholder: 0,
+						},
+						{
+							name:        "Газ",
+							accountType: models.AccountTypeExpense,
+							description: "Оплата газа",
+							placeholder: 0,
+						},
+						{
+							name:        "Вода",
+							accountType: models.AccountTypeExpense,
+							description: "Оплата воды",
+							placeholder: 0,
+						},
+						{
+							name:        "Интернет",
+							accountType: models.AccountTypeExpense,
+							description: "Оплата интернета",
+							placeholder: 0,
+						},
+						{
+							name:        "Телефон",
+							accountType: models.AccountTypeExpense,
+							description: "Оплата телефона",
+							placeholder: 0,
+						},
+					},
+				},
+				{
+					name:        "Развлечения",
+					accountType: models.AccountTypeExpense,
+					description: "Развлечения и отдых",
+					placeholder: 0,
+				},
+				{
+					name:        "Одежда",
+					accountType: models.AccountTypeExpense,
+					description: "Одежда и обувь",
+					placeholder: 0,
+				},
+				{
+					name:        "Здоровье",
+					accountType: models.AccountTypeExpense,
+					description: "Медицина и здоровье",
+					placeholder: 0,
+				},
+				{
+					name:        "Образование",
+					accountType: models.AccountTypeExpense,
+					description: "Образование и обучение",
+					placeholder: 0,
+				},
+				{
+					name:        "Подарки",
+					accountType: models.AccountTypeExpense,
+					description: "Подарки",
+					placeholder: 0,
+				},
+				{
+					name:        "Прочие расходы",
+					accountType: models.AccountTypeExpense,
+					description: "Прочие расходы",
+					placeholder: 0,
+				},
+			},
+		},
+		{
+			name:        "Капитал",
+			accountType: models.AccountTypeEquity,
+			description: "Собственный капитал",
+			placeholder: 1,
+			children: []accountDef{
+				{
+					name:        "Начальный баланс",
+					accountType: models.AccountTypeEquity,
+					description: "Начальные остатки",
+					placeholder: 0,
+				},
+			},
+		},
+	}
+
+	// Рекурсивная функция для создания счетов
+	var createAccount func(acc accountDef, parentID *int64) error
+	createAccount = func(acc accountDef, parentID *int64) error {
+		result, err := tx.Exec(`
+			INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
+			                      non_std_scu, parent_id, description, hidden, placeholder)
+			VALUES (?, ?, ?, ?, 100, 0, ?, ?, 0, ?)
+		`, userID, acc.name, acc.accountType, commodityID, parentID, acc.description, acc.placeholder)
+
+		if err != nil {
+			return fmt.Errorf("failed to create account %s: %w", acc.name, err)
+		}
+
+		accountID, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get account ID for %s: %w", acc.name, err)
+		}
+
+		// Создаем дочерние счета
+		for _, child := range acc.children {
+			if err := createAccount(child, &accountID); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	// Создаем все счета
+	for _, acc := range baseAccounts {
+		if err := createAccount(acc, nil); err != nil {
+			return err
+		}
+	}
+
+	// Коммитим транзакцию
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 func (h *Handler) APIImportJSON(w http.ResponseWriter, r *http.Request) {
