@@ -502,13 +502,8 @@ func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 }
 
 func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder string) []map[string]interface{} {
-	// Определяем направление сортировки
-	orderDirection := "DESC"
-	if sortOrder == "asc" {
-		orderDirection = "ASC"
-	}
-
-	query := fmt.Sprintf(`
+	// Всегда получаем транзакции в хронологическом порядке для расчета баланса
+	rows, err := h.db.Query(`
 		SELECT t.id, t.description, t.post_date, t.tags,
 		       s.id, s.account_id, s.value_num, s.value_denom,
 		       a.name
@@ -518,10 +513,8 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 		WHERE t.user_id = ? AND t.id IN (
 			SELECT tx_id FROM splits WHERE account_id = ? AND user_id = ?
 		)
-		ORDER BY t.post_date %s, t.id %s
-	`, orderDirection, orderDirection)
-
-	rows, err := h.db.Query(query, userID, accountID, userID)
+		ORDER BY t.post_date ASC, t.id ASC
+	`, userID, accountID, userID)
 
 	if err != nil {
 		return []map[string]interface{}{}
@@ -552,17 +545,40 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 
 		if splitAccountID == accountID {
 			value := float64(valueNum) / float64(valueDenom)
-			transactionsMap[txID]["balance_changing"] = value
+			// Разделяем на приход (положительное) и расход (отрицательное)
+			if value > 0 {
+				transactionsMap[txID]["plus_balance_changing"] = value
+			} else {
+				transactionsMap[txID]["balance_changing"] = -value // Показываем расход как положительное число
+			}
+			transactionsMap[txID]["value_change"] = value // Сохраняем оригинальное значение для расчета баланса
 		} else {
 			transactionsMap[txID]["account_name"] = accountName
 			transactionsMap[txID]["account_id"] = splitAccountID
 		}
 	}
 
-	// Сохраняем порядок из SQL запроса
-	transactions := make([]map[string]interface{}, 0, len(transactionOrder))
+	// Рассчитываем накопительный баланс (в хронологическом порядке)
+	var runningBalance float64 = 0
 	for _, txID := range transactionOrder {
-		transactions = append(transactions, transactionsMap[txID])
+		if valueChange, ok := transactionsMap[txID]["value_change"].(float64); ok {
+			runningBalance += valueChange
+		}
+		transactionsMap[txID]["account_balance"] = runningBalance
+	}
+
+	// Формируем результат в нужном порядке
+	transactions := make([]map[string]interface{}, 0, len(transactionOrder))
+	if sortOrder == "desc" {
+		// Обратный порядок (от новых к старым)
+		for i := len(transactionOrder) - 1; i >= 0; i-- {
+			transactions = append(transactions, transactionsMap[transactionOrder[i]])
+		}
+	} else {
+		// Прямой порядок (от старых к новым)
+		for _, txID := range transactionOrder {
+			transactions = append(transactions, transactionsMap[txID])
+		}
 	}
 
 	return transactions

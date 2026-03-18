@@ -58,7 +58,7 @@
                     <span class="badge bg-success">{{.}}</span>
                     {{end}}
                 </td>
-                <td>
+                <td style="white-space: nowrap;">
                     <a href="/finance/transaction/{{$.Account.ID}}/{{.id}}" class="btn btn-sm btn-primary">Просмотр</a>
                     <button
                         hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
