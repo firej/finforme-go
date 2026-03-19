@@ -30,23 +30,28 @@
 
             <div class="mb-3">
                 <label for="value" class="form-label">Сумма</label>
-                <input type="number" step="0.01" class="form-control" id="value" name="value" required>
+                <input type="number" step="0.01" class="form-control" id="value" name="value"
+                       value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}" required>
             </div>
 
             <div class="mb-3">
-                <label for="debit_account" class="form-label">Счет дебета</label>
-                <select class="form-control" id="debit_account" name="debit_account" required>
+                <label for="debit_account" class="form-label">Счет зачисления</label>
+                <select class="form-control" id="debit_account" name="debit_account" required style="font-family: monospace;">
+                    {{$debitAccountID := 0}}
+                    {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
                     {{range .Accounts}}
-                    <option value="{{.ID}}">{{.Name}}</option>
+                    <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
                     {{end}}
                 </select>
             </div>
 
             <div class="mb-3">
-                <label for="credit_account" class="form-label">Счет кредита</label>
-                <select class="form-control" id="credit_account" name="credit_account" required>
+                <label for="credit_account" class="form-label">Счет списания</label>
+                <select class="form-control" id="credit_account" name="credit_account" required style="font-family: monospace;">
+                    {{$creditAccountID := 0}}
+                    {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
                     {{range .Accounts}}
-                    <option value="{{.ID}}">{{.Name}}</option>
+                    <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
                     {{end}}
                 </select>
             </div>

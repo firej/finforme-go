@@ -427,7 +427,8 @@ func (h *Handler) getAccounts(userID int64) ([]*models.Account, error) {
 	}
 	defer rows.Close()
 
-	accounts := make([]*models.Account, 0)
+	allAccounts := make([]*models.Account, 0)
+	accountsMap := make(map[int64]*models.Account)
 
 	for rows.Next() {
 		var acc models.Account
@@ -453,10 +454,93 @@ func (h *Handler) getAccounts(userID int64) ([]*models.Account, error) {
 			acc.Description = description.String
 		}
 
-		accounts = append(accounts, &acc)
+		allAccounts = append(allAccounts, &acc)
+		accountsMap[acc.ID] = &acc
 	}
 
-	return accounts, nil
+	// Строим дерево и получаем плоский список в правильном порядке
+	result := h.flattenAccountsHierarchy(allAccounts, accountsMap)
+
+	return result, nil
+}
+
+// flattenAccountsHierarchy возвращает плоский список счетов с правильной иерархией
+func (h *Handler) flattenAccountsHierarchy(accounts []*models.Account, accountsMap map[int64]*models.Account) []*models.Account {
+	// Находим ID корневого ROOT счета (если есть)
+	var rootID *int64
+	for _, acc := range accounts {
+		if acc.AccountType == models.AccountTypeRoot {
+			rootID = &acc.ID
+			break
+		}
+	}
+
+	// Находим счета верхнего уровня (дочерние ROOT или без родителя, исключая сам ROOT)
+	topLevelAccounts := make([]*models.Account, 0)
+	for _, acc := range accounts {
+		// Пропускаем ROOT счет
+		if acc.AccountType == models.AccountTypeRoot {
+			continue
+		}
+		// Счет верхнего уровня: без родителя или родитель - ROOT
+		isTopLevel := acc.ParentID == nil ||
+			(rootID != nil && *acc.ParentID == *rootID)
+		if isTopLevel {
+			topLevelAccounts = append(topLevelAccounts, acc)
+		}
+	}
+
+	// Сортируем счета верхнего уровня по имени
+	h.sortAccountsByName(topLevelAccounts)
+
+	// Рекурсивно добавляем счета в плоский список
+	result := make([]*models.Account, 0, len(accounts))
+	var addAccountWithChildren func(acc *models.Account, level int)
+	addAccountWithChildren = func(acc *models.Account, level int) {
+		// Пропускаем ROOT счета
+		if acc.AccountType == models.AccountTypeRoot {
+			return
+		}
+
+		acc.Level = level
+		// Создаем отступы с помощью неразрывных пробелов (4 пробела на уровень)
+		indent := strings.Repeat("    ", level)
+		acc.DisplayName = indent + acc.Name
+		result = append(result, acc)
+
+		// Находим дочерние счета
+		children := make([]*models.Account, 0)
+		for _, child := range accounts {
+			if child.ParentID != nil && *child.ParentID == acc.ID && child.AccountType != models.AccountTypeRoot {
+				children = append(children, child)
+			}
+		}
+
+		// Сортируем дочерние счета по имени
+		h.sortAccountsByName(children)
+
+		// Рекурсивно добавляем дочерние счета
+		for _, child := range children {
+			addAccountWithChildren(child, level+1)
+		}
+	}
+
+	for _, topLevel := range topLevelAccounts {
+		addAccountWithChildren(topLevel, 0)
+	}
+
+	return result
+}
+
+// sortAccountsByName сортирует счета по имени
+func (h *Handler) sortAccountsByName(accounts []*models.Account) {
+	for i := 0; i < len(accounts)-1; i++ {
+		for j := i + 1; j < len(accounts); j++ {
+			if accounts[i].Name > accounts[j].Name {
+				accounts[i], accounts[j] = accounts[j], accounts[i]
+			}
+		}
+	}
 }
 
 func (h *Handler) getCommodities() ([]*models.Commodity, error) {

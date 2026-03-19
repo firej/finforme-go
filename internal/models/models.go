@@ -33,6 +33,8 @@ type Account struct {
 	Placeholder  int        `json:"placeholder"`
 	Balance      float64    `json:"balance,omitempty"`
 	Childs       []*Account `json:"childs,omitempty"`
+	Level        int        `json:"level,omitempty"`        // Уровень вложенности для отображения
+	DisplayName  string     `json:"display_name,omitempty"` // Имя с отступами для select
 }
 
 // Transaction представляет транзакцию
