@@ -1,102 +1,92 @@
 {{define "finance_welcome.html"}}
 {{template "header" .}}
-<div class="row">
-    <div class="col-md-12">
-        <h1>Добро пожаловать в систему учета финансов!</h1>
-        <p class="lead">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
 
-        <div class="row mt-4">
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">🚀 Быстрый старт</h5>
-                        <p class="card-text">Создайте базовый набор счетов как в GnuCash: Активы, Обязательства, Доходы, Расходы и Капитал с готовой иерархией подсчетов.</p>
-                        <button id="createBaseBtn" class="btn btn-success" onclick="createBaseAccounts()">
-                            Создать базовый набор
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">📝 Создать вручную</h5>
-                        <p class="card-text">Начните с чистого листа и создайте свой первый счет вручную. Подходит для опытных пользователей.</p>
-                        <a href="/finance/account/new" class="btn btn-primary">Создать счет</a>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h5 class="card-title">📥 Импорт из GnuCash</h5>
-                        <p class="card-text">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash - сжатый XML).</p>
-                        <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" style="display: none;" onchange="importGnuCashXML(this)">
-                        <button id="importXmlBtn" class="btn btn-info" onclick="document.getElementById('gnucashFile').click()">
-                            <i class="bi bi-upload"></i> Выбрать файл .gnucash
-                        </button>
-                    </div>
-                </div>
-            </div>
+<div>
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">Добро пожаловать в систему учета финансов!</h1>
+    <p class="text-lg text-gray-500 mb-8">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">🚀 Быстрый старт</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Создайте базовый набор счетов как в GnuCash: Активы, Обязательства, Доходы, Расходы и Капитал с готовой иерархией подсчетов.</p>
+            <button id="createBaseBtn" onclick="createBaseAccounts()"
+                    class="w-full px-4 py-2.5 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm">
+                Создать базовый набор
+            </button>
         </div>
 
-        <div class="row mt-4">
-            <div class="col-md-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">📊 Что включает базовый набор счетов?</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <h6><strong>Активы</strong></h6>
-                                <ul class="list-unstyled ms-3">
-                                    <li>└ Текущие активы</li>
-                                    <li class="ms-3">├ Наличные</li>
-                                    <li class="ms-3">├ Расчетный счет</li>
-                                    <li class="ms-3">└ Сберегательный счет</li>
-                                </ul>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">📝 Создать вручную</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Начните с чистого листа и создайте свой первый счет вручную. Подходит для опытных пользователей.</p>
+            <a href="/finance/account/new"
+               class="w-full inline-flex justify-center px-4 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors text-sm">
+                Создать счет
+            </a>
+        </div>
 
-                                <h6 class="mt-3"><strong>Обязательства</strong></h6>
-                                <ul class="list-unstyled ms-3">
-                                    <li>├ Кредитная карта</li>
-                                    <li>└ Займы</li>
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6><strong>Доходы</strong></h6>
-                                <ul class="list-unstyled ms-3">
-                                    <li>├ Зарплата</li>
-                                    <li>├ Проценты</li>
-                                    <li>└ Прочие доходы</li>
-                                </ul>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">📥 Импорт из GnuCash</h3>
+            <p class="text-sm text-gray-600 mb-4 flex-1">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash - сжатый XML).</p>
+            <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" class="hidden" onchange="importGnuCashXML(this)">
+            <button id="importXmlBtn" onclick="document.getElementById('gnucashFile').click()"
+                    class="w-full px-4 py-2.5 bg-sky-600 text-white font-medium rounded-lg shadow hover:bg-sky-700 transition-colors text-sm">
+                Выбрать файл .gnucash
+            </button>
+        </div>
+    </div>
 
-                                <h6 class="mt-3"><strong>Капитал</strong></h6>
-                                <ul class="list-unstyled ms-3">
-                                    <li>└ Начальный баланс</li>
-                                </ul>
-                            </div>
-                            <div class="col-md-4">
-                                <h6><strong>Расходы</strong></h6>
-                                <ul class="list-unstyled ms-3">
-                                    <li>├ Продукты</li>
-                                    <li>├ Транспорт</li>
-                                    <li>├ Коммунальные услуги</li>
-                                    <li class="ms-3">├ Электричество</li>
-                                    <li class="ms-3">├ Газ</li>
-                                    <li class="ms-3">├ Вода</li>
-                                    <li class="ms-3">├ Интернет</li>
-                                    <li class="ms-3">└ Телефон</li>
-                                    <li>├ Развлечения</li>
-                                    <li>├ Одежда</li>
-                                    <li>├ Здоровье</li>
-                                    <li>├ Образование</li>
-                                    <li>├ Подарки</li>
-                                    <li>└ Прочие расходы</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h3 class="text-lg font-semibold text-gray-900">📊 Что включает базовый набор счетов?</h3>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <h4 class="font-semibold text-gray-900 mb-2">Активы</h4>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
+                        <li>└ Текущие активы</li>
+                        <li class="ml-4">├ Наличные</li>
+                        <li class="ml-4">├ Расчетный счет</li>
+                        <li class="ml-4">└ Сберегательный счет</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-gray-900 mt-4 mb-2">Обязательства</h4>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
+                        <li>├ Кредитная карта</li>
+                        <li>└ Займы</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 mb-2">Доходы</h4>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
+                        <li>├ Зарплата</li>
+                        <li>├ Проценты</li>
+                        <li>└ Прочие доходы</li>
+                    </ul>
+
+                    <h4 class="font-semibold text-gray-900 mt-4 mb-2">Капитал</h4>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
+                        <li>└ Начальный баланс</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-900 mb-2">Расходы</h4>
+                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
+                        <li>├ Продукты</li>
+                        <li>├ Транспорт</li>
+                        <li>├ Коммунальные услуги</li>
+                        <li class="ml-4">├ Электричество</li>
+                        <li class="ml-4">├ Газ</li>
+                        <li class="ml-4">├ Вода</li>
+                        <li class="ml-4">├ Интернет</li>
+                        <li class="ml-4">└ Телефон</li>
+                        <li>├ Развлечения</li>
+                        <li>├ Одежда</li>
+                        <li>├ Здоровье</li>
+                        <li>├ Образование</li>
+                        <li>├ Подарки</li>
+                        <li>└ Прочие расходы</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -107,7 +97,8 @@
 function createBaseAccounts() {
     const btn = document.getElementById('createBaseBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Создание...';
+    btn.innerHTML = '<span class="spinner"></span> Создание...';
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
 
     fetch('/api/v1/finance/welcome/createbase', {
         method: 'POST',
@@ -123,12 +114,14 @@ function createBaseAccounts() {
             alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
             btn.disabled = false;
             btn.innerHTML = 'Создать базовый набор';
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     })
     .catch(error => {
         alert('Ошибка: ' + error.message);
         btn.disabled = false;
         btn.innerHTML = 'Создать базовый набор';
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
     });
 }
 
@@ -142,7 +135,8 @@ function importGnuCashXML(input) {
     const originalText = btn.innerHTML;
 
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Импорт...';
+    btn.innerHTML = '<span class="spinner"></span> Импорт...';
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
 
     const formData = new FormData();
     formData.append('file', file);
@@ -167,17 +161,19 @@ function importGnuCashXML(input) {
             alert('Ошибка импорта: ' + (data.message || 'Неизвестная ошибка'));
             btn.disabled = false;
             btn.innerHTML = originalText;
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     })
     .catch(error => {
         alert('Ошибка: ' + error.message);
         btn.disabled = false;
         btn.innerHTML = originalText;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
     });
 
-    // Сбрасываем input для возможности повторного выбора того же файла
     input.value = '';
 }
 </script>
+
 {{template "footer" .}}
 {{end}}

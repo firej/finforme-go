@@ -1,23 +1,25 @@
 {{define "index.html"}}
 {{template "header" .}}
 
-<div class="row">
-    <div class="col-md-12">
-        <h1>Добро пожаловать в finfor.me</h1>
-        <p class="lead">Система учета личных финансов</p>
+<div class="flex flex-col items-center justify-center py-16 text-center">
+    <h1 class="text-4xl font-bold text-gray-900 mb-4">Добро пожаловать в finfor.me</h1>
+    <p class="text-xl text-gray-500 mb-8">Система учета личных финансов</p>
 
-        {{if .Authenticated}}
-        <div class="mt-4">
-            <a href="/finance/" class="btn btn-primary btn-lg">Перейти к финансам</a>
-        </div>
-        {{else}}
-        <div class="mt-4">
-            <p>Для начала работы необходимо войти в систему или зарегистрироваться.</p>
-            <a href="/accounts/login/" class="btn btn-primary">Вход</a>
-            <a href="/accounts/register/" class="btn btn-secondary">Регистрация</a>
-        </div>
-        {{end}}
+    {{if .Authenticated}}
+    <div>
+        <a href="/finance/" class="inline-flex items-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow hover:bg-primary-700 transition-colors text-lg">
+            Перейти к финансам
+        </a>
     </div>
+    {{else}}
+    <div>
+        <p class="text-gray-600 mb-6">Для начала работы необходимо войти в систему или зарегистрироваться.</p>
+        <div class="flex gap-3 justify-center">
+            <a href="/accounts/login/" class="inline-flex items-center px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors">Вход</a>
+            <a href="/accounts/register/" class="inline-flex items-center px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">Регистрация</a>
+        </div>
+    </div>
+    {{end}}
 </div>
 
 {{template "footer" .}}

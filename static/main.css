@@ -1,47 +1,4 @@
-/* Основные стили для finfor.me */
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    background-color: #f8f9fa;
-    margin: 0;
-    padding: 0 !important;
-}
-
-/* Переопределяем все возможные стили Bootstrap которые могут добавлять отступы */
-body, html {
-    padding-top: 0 !important;
-    margin-top: 0 !important;
-}
-
-/* Убираем отступы у navbar */
-.navbar {
-    margin-bottom: 0;
-}
-
-/* Добавляем небольшой отступ для контента */
-.container {
-    padding-top: 1rem;
-}
-
-.navbar-brand {
-    font-weight: bold;
-    font-size: 1.5rem;
-}
-
-.finance-main {
-    background: white;
-    padding: 2rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
-}
-
-.table {
-    background: white;
-}
-
-.badge {
-    margin-right: 0.25rem;
-}
+/* Tailwind-совместимые стили для finfor.me */
 
 /* Анимации для htmx */
 .htmx-swapping {
@@ -54,15 +11,14 @@ body, html {
     opacity: 1;
 }
 
-/* Специальная анимация для удаления строк таблицы */
+/* Анимация для удаления строк таблицы */
 tr.htmx-swapping {
     opacity: 0;
     transform: translateX(-100%) scale(0.8);
     transition: all 0.5s ease-out;
-    background-color: #fff3cd;
+    background-color: #fef3c7;
 }
 
-/* Анимация для пустых строк после удаления */
 tr:empty {
     display: none;
 }
@@ -81,58 +37,40 @@ tr.htmx-added {
     }
 }
 
-/* Улучшенная анимация для таблиц */
-.table tbody tr {
-    transition: all 0.3s ease;
+/* Спиннер для загрузки */
+@keyframes spin {
+    to { transform: rotate(360deg); }
 }
 
-.table tbody tr:hover {
-    background-color: rgba(0,0,0,0.02);
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.25rem;
 }
 
-/* Стили для форм */
-.form-label {
-    font-weight: 500;
+/* Прогресс-бар */
+@keyframes progress-stripe {
+    0% { background-position: 1rem 0; }
+    100% { background-position: 0 0; }
 }
 
-.btn {
-    transition: all 0.2s ease-in-out;
-}
-
-.btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.15);
-}
-
-/* Карточки */
-.card {
-    border: none;
-    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
-}
-
-.card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-}
-
-/* Таблицы */
-.table-hover tbody tr:hover {
-    background-color: #f8f9fa;
-    cursor: pointer;
-}
-
-/* Алерты */
-.alert {
-    border-radius: 0.5rem;
-}
-
-/* Адаптивность */
-@media (max-width: 768px) {
-    .finance-main {
-        padding: 1rem;
-    }
-
-    .table {
-        font-size: 0.875rem;
-    }
+.progress-bar-animated {
+    background-image: linear-gradient(
+        45deg,
+        rgba(255,255,255,.15) 25%,
+        transparent 25%,
+        transparent 50%,
+        rgba(255,255,255,.15) 50%,
+        rgba(255,255,255,.15) 75%,
+        transparent 75%,
+        transparent
+    );
+    background-size: 1rem 1rem;
+    animation: progress-stripe 1s linear infinite;
 }
