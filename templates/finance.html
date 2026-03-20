@@ -53,9 +53,9 @@
             {{end}}
         </td>
         <td class="py-2.5 px-3 text-right font-mono text-sm">
-            {{if gt .Balance 0.01}}<span class="text-emerald-600 font-medium">{{printf "%.2f" .Balance}}</span>
-            {{else if lt .Balance -0.01}}<span class="text-red-600 font-medium">{{printf "%.2f" .Balance}}</span>
-            {{else}}<span class="text-gray-400">{{printf "%.2f" .Balance}}</span>
+            {{if gt .Balance 0.01}}<span class="text-emerald-600 font-medium">{{formatMoney .Balance}}</span>
+            {{else if lt .Balance -0.01}}<span class="text-red-600 font-medium">{{formatMoney .Balance}}</span>
+            {{else}}<span class="text-gray-400">{{formatMoney .Balance}}</span>
             {{end}}
         </td>
         <td class="py-2.5 px-3">
@@ -109,9 +109,9 @@
             {{end}}
         </td>
         <td class="py-2.5 px-3 text-right font-mono text-sm">
-            {{if gt $account.Balance 0.01}}<span class="text-emerald-600 font-medium">{{printf "%.2f" $account.Balance}}</span>
-            {{else if lt $account.Balance -0.01}}<span class="text-red-600 font-medium">{{printf "%.2f" $account.Balance}}</span>
-            {{else}}<span class="text-gray-400">{{printf "%.2f" $account.Balance}}</span>
+            {{if gt $account.Balance 0.01}}<span class="text-emerald-600 font-medium">{{formatMoney $account.Balance}}</span>
+            {{else if lt $account.Balance -0.01}}<span class="text-red-600 font-medium">{{formatMoney $account.Balance}}</span>
+            {{else}}<span class="text-gray-400">{{formatMoney $account.Balance}}</span>
             {{end}}
         </td>
         <td class="py-2.5 px-3">

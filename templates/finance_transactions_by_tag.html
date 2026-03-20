@@ -24,10 +24,10 @@
                     <td class="py-2.5 px-3 text-gray-900">{{.description}}</td>
                     <td class="py-2.5 px-3">
                         {{range .splits}}
-                        <div class="text-sm text-gray-600">{{.account_name}}: <span class="font-mono">{{printf "%.2f" .value}}</span></div>
+                        <div class="text-sm text-gray-600">{{.account_name}}: <span class="font-mono">{{formatMoney .value}}</span></div>
                         {{end}}
                     </td>
-                    <td class="py-2.5 px-3 text-right font-mono font-medium">{{printf "%.2f" .value}}</td>
+                    <td class="py-2.5 px-3 text-right font-mono font-medium">{{formatMoney .value}}</td>
                     <td class="py-2.5 px-3">
                         <a href="/finance/transaction/0/{{.id}}"
                            class="px-2.5 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded hover:bg-primary-100 transition-colors">

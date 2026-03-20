@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"database/sql"
+	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"path/filepath"
 
@@ -46,6 +48,12 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 				result[i] = i
 			}
 			return result
+		},
+		"formatMoney": func(value float64) string {
+			if math.Abs(value) < 0.005 {
+				return "0.00"
+			}
+			return fmt.Sprintf("%.2f", value)
 		},
 	}
 

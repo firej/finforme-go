@@ -62,12 +62,12 @@
                         <a href="/finance/account/{{.account_id}}" class="text-primary-600 hover:text-primary-700 transition-colors">{{.account_name}}</a>
                     </td>
                     <td class="py-2.5 px-3 text-right font-mono">
-                        {{if .plus_balance_changing}}<span class="text-emerald-600">{{printf "%.2f" .plus_balance_changing}}</span>{{end}}
+                        {{if .plus_balance_changing}}<span class="text-emerald-600">{{formatMoney .plus_balance_changing}}</span>{{end}}
                     </td>
                     <td class="py-2.5 px-3 text-right font-mono">
-                        {{if .balance_changing}}<span class="text-red-600">{{printf "%.2f" .balance_changing}}</span>{{end}}
+                        {{if .balance_changing}}<span class="text-red-600">{{formatMoney .balance_changing}}</span>{{end}}
                     </td>
-                    <td class="py-2.5 px-3 text-right font-mono font-medium">{{printf "%.2f" .account_balance}}</td>
+                    <td class="py-2.5 px-3 text-right font-mono font-medium">{{formatMoney .account_balance}}</td>
                     <td class="py-2.5 px-3">
                         {{range .tags}}
                         <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800 mr-1">{{.}}</span>
