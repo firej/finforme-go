@@ -16,13 +16,31 @@ function formatMoney(value) {
 
 function formatNumberInput(input) {
     const pos = input.selectionStart;
-    const raw = input.value.replace(/[^\d]/g, '');
+    const oldVal = input.value;
+    const raw = oldVal.replace(/[^\d]/g, '');
     if (!raw) { input.value = ''; return; }
     const formatted = parseInt(raw, 10).toLocaleString('ru-RU');
+    if (oldVal === formatted) return;
+
+    // Считаем сколько цифр было до курсора в старом значении
+    const digitsBeforeCursor = oldVal.slice(0, pos).replace(/[^\d]/g, '').length;
+
     input.value = formatted;
-    // Пытаемся сохранить позицию курсора
-    const diff = formatted.length - raw.length;
-    const newPos = Math.max(0, pos + diff - (input.value.length - formatted.length));
+
+    // Находим позицию в новой строке, где столько же цифр слева
+    let newPos = 0;
+    let digitCount = 0;
+    for (let i = 0; i < formatted.length; i++) {
+        if (/\d/.test(formatted[i])) {
+            digitCount++;
+        }
+        if (digitCount === digitsBeforeCursor) {
+            newPos = i + 1;
+            break;
+        }
+    }
+    if (digitCount < digitsBeforeCursor) newPos = formatted.length;
+
     requestAnimationFrame(() => input.setSelectionRange(newPos, newPos));
 }
 
