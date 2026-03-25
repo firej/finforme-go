@@ -17,6 +17,30 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// MortgageCalculator - страница ипотечного калькулятора
+func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
+	_, authenticated := h.getUserID(r)
+
+	data := map[string]interface{}{
+		"Title":         "Ипотечный калькулятор",
+		"Authenticated": authenticated,
+	}
+
+	if authenticated {
+		userID, _ := h.getUserID(r)
+		var user models.User
+		err := h.db.QueryRow(`
+			SELECT id, username, email, first_name, last_name
+			FROM users WHERE id = ?
+		`, userID).Scan(&user.ID, &user.Username, &user.Email, &user.FirstName, &user.LastName)
+		if err == nil {
+			data["User"] = user
+		}
+	}
+
+	h.renderTemplate(w, "mortgage_calculator.html", data)
+}
+
 // FinanceIndex - главная страница финансов
 func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)

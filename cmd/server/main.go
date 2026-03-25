@@ -56,6 +56,7 @@ func main() {
 
 	// Главная страница
 	r.HandleFunc("/", h.Index).Methods("GET")
+	r.HandleFunc("/mortgage/", h.MortgageCalculator).Methods("GET")
 
 	// Аутентификация
 	r.HandleFunc("/accounts/login/", h.Login).Methods("GET", "POST")

@@ -30,12 +30,13 @@
             <div class="flex items-center justify-between h-14">
                 <div class="flex items-center space-x-6">
                     <a href="/" class="text-white font-bold text-xl tracking-tight hover:text-gray-200 transition-colors">finfor.me</a>
-                    {{if .Authenticated}}
                     <div class="hidden sm:flex items-center space-x-1">
+                        {{if .Authenticated}}
                         <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
                         <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
+                        {{end}}
+                        <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
                     </div>
-                    {{end}}
                 </div>
                 <div class="flex items-center space-x-1">
                     {{if .Authenticated}}
@@ -47,12 +48,13 @@
                     {{end}}
                 </div>
             </div>
-            {{if .Authenticated}}
             <div class="sm:hidden pb-2 flex space-x-1">
+                {{if .Authenticated}}
                 <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
                 <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
+                {{end}}
+                <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
             </div>
-            {{end}}
         </div>
     </nav>
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
