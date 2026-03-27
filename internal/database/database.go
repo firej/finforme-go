@@ -91,6 +91,21 @@ func InitDB(db *sql.DB) error {
 		}
 	}
 
+	// Создаём индексы для ускорения запросов
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_splits_account_user ON splits (account_id, user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_splits_tx_id ON splits (tx_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_splits_user_id ON splits (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions (user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_transactions_post_date ON transactions (user_id, post_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts (user_id)`,
+	}
+
+	for _, idx := range indexes {
+		// Игнорируем ошибки если индекс уже существует (для совместимости с разными версиями MariaDB)
+		db.Exec(idx)
+	}
+
 	// Добавляем базовые валюты, если их нет
 	if err := seedCommodities(db); err != nil {
 		return fmt.Errorf("failed to seed commodities: %w", err)

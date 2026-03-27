@@ -611,18 +611,18 @@ func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 
 func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder string) []map[string]interface{} {
 	// Всегда получаем транзакции в хронологическом порядке для расчета баланса
+	// Используем JOIN вместо IN (SELECT ...) для лучшей производительности
 	rows, err := h.db.Query(`
 		SELECT t.id, t.description, t.post_date, t.tags,
 		       s.id, s.account_id, s.value_num, s.value_denom,
 		       a.name
 		FROM transactions t
+		JOIN splits acc_split ON t.id = acc_split.tx_id AND acc_split.account_id = ? AND acc_split.user_id = ?
 		JOIN splits s ON t.id = s.tx_id
 		LEFT JOIN accounts a ON s.account_id = a.id
-		WHERE t.user_id = ? AND t.id IN (
-			SELECT tx_id FROM splits WHERE account_id = ? AND user_id = ?
-		)
+		WHERE t.user_id = ?
 		ORDER BY t.post_date ASC, t.id ASC
-	`, userID, accountID, userID)
+	`, accountID, userID, userID)
 
 	if err != nil {
 		return []map[string]interface{}{}
@@ -916,6 +916,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Получаем данные из формы
+	idStr := r.FormValue("id")
 	description := r.FormValue("description")
 	postDateStr := r.FormValue("post_date")
 	tags := r.FormValue("tags")
@@ -957,68 +958,137 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Начинаем транзакцию
-	tx, err := h.db.Begin()
-	if err != nil {
-		fmt.Printf("ERROR starting transaction: %v\n", err)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-	defer tx.Rollback()
-
-	// Создаем транзакцию
-	result, err := tx.Exec(`
-		INSERT INTO transactions (user_id, currency_id, post_date, enter_date, description, tags)
-		VALUES (?, 1, ?, ?, ?, ?)
-	`, userID, postDate, time.Now(), description, tags)
-
-	if err != nil {
-		fmt.Printf("ERROR creating transaction: %v\n", err)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	txID, _ := result.LastInsertId()
-
 	// Конвертируем сумму в целые числа (value_num / value_denom)
 	valueNum := int64(value * 100)
 	valueDenom := int64(100)
 
-	// Создаем split для дебета (положительное значение)
-	_, err = tx.Exec(`
-		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-		VALUES (?, ?, ?, ?, ?)
-	`, userID, txID, debitAccountID, valueNum, valueDenom)
+	// Проверяем, это обновление или создание
+	if idStr != "" && idStr != "0" {
+		// Обновление существующей транзакции
+		txID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid transaction ID"})
+			return
+		}
 
-	if err != nil {
-		fmt.Printf("ERROR creating debit split: %v\n", err)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
+		// Начинаем транзакцию БД
+		tx, err := h.db.Begin()
+		if err != nil {
+			fmt.Printf("ERROR starting transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		defer tx.Rollback()
+
+		// Обновляем транзакцию
+		_, err = tx.Exec(`
+			UPDATE transactions SET description = ?, post_date = ?, tags = ?
+			WHERE id = ? AND user_id = ?
+		`, description, postDate, tags, txID, userID)
+
+		if err != nil {
+			fmt.Printf("ERROR updating transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		// Удаляем старые splits
+		_, err = tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID)
+		if err != nil {
+			fmt.Printf("ERROR deleting old splits: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		// Создаем новые splits
+		_, err = tx.Exec(`
+			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, debitAccountID, valueNum, valueDenom)
+
+		if err != nil {
+			fmt.Printf("ERROR creating debit split: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, creditAccountID, -valueNum, valueDenom)
+
+		if err != nil {
+			fmt.Printf("ERROR creating credit split: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			fmt.Printf("ERROR committing transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": "ok",
+			"id":     txID,
+		})
+	} else {
+		// Создание новой транзакции
+		tx, err := h.db.Begin()
+		if err != nil {
+			fmt.Printf("ERROR starting transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		defer tx.Rollback()
+
+		result, err := tx.Exec(`
+			INSERT INTO transactions (user_id, currency_id, post_date, enter_date, description, tags)
+			VALUES (?, 1, ?, ?, ?, ?)
+		`, userID, postDate, time.Now(), description, tags)
+
+		if err != nil {
+			fmt.Printf("ERROR creating transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		txID, _ := result.LastInsertId()
+
+		_, err = tx.Exec(`
+			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, debitAccountID, valueNum, valueDenom)
+
+		if err != nil {
+			fmt.Printf("ERROR creating debit split: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		_, err = tx.Exec(`
+			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, creditAccountID, -valueNum, valueDenom)
+
+		if err != nil {
+			fmt.Printf("ERROR creating credit split: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		if err := tx.Commit(); err != nil {
+			fmt.Printf("ERROR committing transaction: %v\n", err)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"result": "ok",
+			"id":     txID,
+		})
 	}
-
-	// Создаем split для кредита (отрицательное значение)
-	_, err = tx.Exec(`
-		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-		VALUES (?, ?, ?, ?, ?)
-	`, userID, txID, creditAccountID, -valueNum, valueDenom)
-
-	if err != nil {
-		fmt.Printf("ERROR creating credit split: %v\n", err)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	// Коммитим транзакцию
-	if err := tx.Commit(); err != nil {
-		fmt.Printf("ERROR committing transaction: %v\n", err)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"result": "ok",
-		"id":     txID,
-	})
 }
 
 func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
@@ -2032,4 +2102,62 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 	}
 
 	return nil
+}
+
+// APITransactionFormGet - возвращает HTML-фрагмент формы для модального окна редактирования/создания транзакции
+func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
+
+	txIDStr := r.URL.Query().Get("tx_id")
+	accountIDStr := r.URL.Query().Get("account_id")
+
+	accountID, _ := strconv.ParseInt(accountIDStr, 10, 64)
+
+	var transaction *models.Transaction
+	var debit, credit []map[string]interface{}
+
+	if txIDStr != "" && txIDStr != "0" {
+		txID, _ := strconv.ParseInt(txIDStr, 10, 64)
+		transaction, debit, credit = h.getTransaction(userID, txID)
+	}
+
+	accounts, _ := h.getAccounts(userID)
+
+	data := map[string]interface{}{
+		"Transaction": transaction,
+		"Debit":       debit,
+		"Credit":      credit,
+		"AccountID":   accountID,
+		"Accounts":    accounts,
+		"Today":       time.Now().Format("2006-01-02"),
+	}
+
+	h.renderTemplate(w, "finance_transaction_modal_form.html", data)
+}
+
+// APITransactionTableGet - возвращает HTML-фрагмент тела таблицы транзакций для обновления без перезагрузки
+func (h *Handler) APITransactionTableGet(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
+
+	accountIDStr := r.URL.Query().Get("account_id")
+	sortOrder := r.URL.Query().Get("sort")
+
+	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		return
+	}
+
+	if sortOrder != "asc" && sortOrder != "desc" {
+		sortOrder = "desc"
+	}
+
+	transactions := h.getAccountTransactions(userID, accountID, sortOrder)
+
+	data := map[string]interface{}{
+		"Transactions": transactions,
+		"Account":      map[string]interface{}{"ID": accountID},
+	}
+
+	h.renderTemplate(w, "finance_transactions_tbody.html", data)
 }

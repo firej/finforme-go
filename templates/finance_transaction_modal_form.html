@@ -1,0 +1,72 @@
+{{define "finance_transaction_modal_form.html"}}
+<form id="modal-transaction-form" onsubmit="return submitTransactionForm(event)">
+    {{if .Transaction}}
+    <input type="hidden" name="id" value="{{.Transaction.ID}}">
+    {{end}}
+    <input type="hidden" name="account_id" value="{{.AccountID}}">
+
+    <div class="mb-4">
+        <label for="modal-post_date" class="block text-sm font-medium text-gray-700 mb-1">Дата</label>
+        <input type="date" id="modal-post_date" name="post_date"
+               value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{else}}{{.Today}}{{end}}" required
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+    </div>
+
+    <div class="mb-4">
+        <label for="modal-description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
+        <input type="text" id="modal-description" name="description" autofocus
+               value="{{if .Transaction}}{{.Transaction.Description}}{{end}}" required
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+    </div>
+
+    <div class="mb-4">
+        <label for="modal-value" class="block text-sm font-medium text-gray-700 mb-1">Сумма</label>
+        <input type="number" step="0.01" id="modal-value" name="value"
+               value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}" required
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+            <label for="modal-credit_account" class="block text-sm font-medium text-gray-700 mb-1">Счёт списания</label>
+            <select id="modal-credit_account" name="credit_account" required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm">
+                {{$creditAccountID := .AccountID}}
+                {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
+                {{range .Accounts}}
+                <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div>
+            <label for="modal-debit_account" class="block text-sm font-medium text-gray-700 mb-1">Счёт зачисления</label>
+            <select id="modal-debit_account" name="debit_account" required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm">
+                {{$debitAccountID := 0}}
+                {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
+                {{range .Accounts}}
+                <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
+                {{end}}
+            </select>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <label for="modal-tags" class="block text-sm font-medium text-gray-700 mb-1">Теги (через запятую)</label>
+        <input type="text" id="modal-tags" name="tags"
+               value="{{if .Transaction}}{{.Transaction.Tags}}{{end}}"
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+    </div>
+
+    <div id="modal-result"></div>
+
+    <div class="flex gap-3 mt-4">
+        <button type="submit" id="modal-submit-btn" class="px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors">
+            Сохранить
+        </button>
+        <button type="button" onclick="closeTransactionModal()" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
+            Отмена
+        </button>
+    </div>
+</form>
+{{end}}

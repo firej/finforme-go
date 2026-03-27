@@ -1,6 +1,9 @@
 {{define "finance_transactions.html"}}
 {{template "header" .}}
 
+<!-- Контейнер для toast-нотификаций -->
+<div id="toast-container" class="toast-container"></div>
+
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
     {{if .Account}}
     <div class="flex items-start justify-between mb-4">
@@ -8,10 +11,10 @@
             <h1 class="text-2xl font-bold text-gray-900">{{.Account.Name}}</h1>
             {{if .Account.Description}}<p class="text-sm text-gray-500 mt-1">{{.Account.Description}}</p>{{end}}
         </div>
-        <a href="/finance/transaction/{{.Account.ID}}/"
+        <button onclick="openTransactionModal(0, {{.Account.ID}})"
            class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm shrink-0">
             + Добавить
-        </a>
+        </button>
     </div>
 
     <div class="flex items-center gap-2 mb-4">
@@ -53,13 +56,13 @@
                     <th class="text-left py-3 px-3 font-semibold text-gray-600">Действия</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100">
+            <tbody id="transactions-tbody" class="divide-y divide-gray-100">
                 {{range .Transactions}}
-                <tr class="hover:bg-gray-50 transition-colors">
+                <tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="openTransactionModal({{.id}}, {{$.Account.ID}})">
                     <td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">{{.post_date}}</td>
                     <td class="py-2.5 px-3 text-gray-900">{{.description}}</td>
                     <td class="py-2.5 px-3">
-                        <a href="/finance/account/{{.account_id}}" class="text-primary-600 hover:text-primary-700 transition-colors">{{.account_name}}</a>
+                        <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()" class="text-primary-600 hover:text-primary-700 transition-colors">{{.account_name}}</a>
                     </td>
                     <td class="py-2.5 px-3 text-right font-mono">
                         {{if .plus_balance_changing}}<span class="text-emerald-600">{{formatMoney .plus_balance_changing}}</span>{{end}}
@@ -73,12 +76,12 @@
                         <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800 mr-1">{{.}}</span>
                         {{end}}
                     </td>
-                    <td class="py-2.5 px-3 whitespace-nowrap">
+                    <td class="py-2.5 px-3 whitespace-nowrap" onclick="event.stopPropagation()">
                         <div class="flex gap-1.5">
-                            <a href="/finance/transaction/{{$.Account.ID}}/{{.id}}"
+                            <button onclick="openTransactionModal({{.id}}, {{$.Account.ID}})"
                                class="px-2.5 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded hover:bg-primary-100 transition-colors">
-                                Просмотр
-                            </a>
+                                Редактировать
+                            </button>
                             <button
                                 hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
                                 hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
@@ -97,6 +100,182 @@
     </div>
     {{end}}
 </div>
+
+<!-- Модальное окно для редактирования/создания транзакции -->
+<div id="transaction-modal" class="modal-overlay hidden" onclick="handleModalOverlayClick(event)">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h2 id="modal-title" class="text-xl font-bold text-gray-900">Транзакция</h2>
+            <button onclick="closeTransactionModal()" class="modal-close-btn" aria-label="Закрыть">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="modal-body" class="modal-body">
+            <div class="flex items-center justify-center py-8">
+                <div class="spinner"></div>
+                <span class="text-gray-500 ml-2">Загрузка...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Текущий порядок сортировки (берём из URL или по умолчанию desc)
+    var currentSortOrder = new URLSearchParams(window.location.search).get('sort') || 'desc';
+    var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
+
+    // === Toast-нотификации ===
+    function showToast(message, type) {
+        var container = document.getElementById('toast-container');
+
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+
+        var iconSvg = '';
+        if (type === 'success') {
+            iconSvg = '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+        } else {
+            iconSvg = '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        }
+
+        toast.innerHTML = iconSvg +
+            '<span>' + message + '</span>' +
+            '<button class="toast-close" onclick="dismissToast(this.parentElement)">&times;</button>';
+
+        container.appendChild(toast);
+
+        // Автоматическое скрытие через 4 секунды
+        setTimeout(function() {
+            dismissToast(toast);
+        }, 4000);
+    }
+
+    function dismissToast(toast) {
+        if (toast.classList.contains('toast-hiding')) return;
+        toast.classList.add('toast-hiding');
+        setTimeout(function() {
+            if (toast.parentElement) {
+                toast.parentElement.removeChild(toast);
+            }
+        }, 300);
+    }
+
+    // === Модальное окно ===
+    function openTransactionModal(txId, accountId) {
+        var modal = document.getElementById('transaction-modal');
+        var modalTitle = document.getElementById('modal-title');
+        var modalBody = document.getElementById('modal-body');
+
+        modalTitle.textContent = txId ? 'Редактирование транзакции' : 'Новая транзакция';
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+
+        modalBody.innerHTML = '<div class="flex items-center justify-center py-8"><div class="spinner"></div><span class="text-gray-500 ml-2">Загрузка...</span></div>';
+
+        var url = '/api/v1/finance/transaction/form?tx_id=' + txId + '&account_id=' + accountId;
+        fetch(url)
+            .then(function(response) { return response.text(); })
+            .then(function(html) {
+                modalBody.innerHTML = html;
+                htmx.process(modalBody);
+
+                var descInput = document.getElementById('modal-description');
+                if (descInput) descInput.focus();
+            })
+            .catch(function(err) {
+                modalBody.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">Ошибка загрузки формы</div>';
+            });
+    }
+
+    function closeTransactionModal() {
+        var modal = document.getElementById('transaction-modal');
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function handleModalOverlayClick(event) {
+        if (event.target === event.currentTarget) {
+            closeTransactionModal();
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var modal = document.getElementById('transaction-modal');
+            if (!modal.classList.contains('hidden')) {
+                closeTransactionModal();
+            }
+        }
+    });
+
+    // === Обновление таблицы без перезагрузки ===
+    function refreshTransactionsTable() {
+        var tbody = document.getElementById('transactions-tbody');
+        // Показываем индикатор загрузки поверх таблицы
+        tbody.style.opacity = '0.5';
+
+        var url = '/api/v1/finance/transaction/table?account_id=' + currentAccountId + '&sort=' + currentSortOrder;
+        fetch(url)
+            .then(function(response) { return response.text(); })
+            .then(function(html) {
+                tbody.innerHTML = html;
+                tbody.style.opacity = '1';
+                // Переинициализируем HTMX для новых элементов
+                htmx.process(tbody);
+            })
+            .catch(function(err) {
+                tbody.style.opacity = '1';
+                console.error('Error refreshing table:', err);
+            });
+    }
+
+    // === Отправка формы транзакции через fetch ===
+    function submitTransactionForm(event) {
+        event.preventDefault();
+
+        var form = document.getElementById('modal-transaction-form');
+        var submitBtn = document.getElementById('modal-submit-btn');
+        var formData = new URLSearchParams(new FormData(form));
+
+        // Блокируем кнопку на время отправки
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Сохранение...';
+
+        fetch('/api/v1/finance/transaction/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.result === 'ok') {
+                // Закрываем модальное окно и показываем нотификацию сразу
+                closeTransactionModal();
+                showToast('Транзакция сохранена. Обновляем список...', 'success');
+                // Обновляем таблицу в фоне
+                refreshTransactionsTable();
+            } else if (data.error) {
+                var resultEl = document.getElementById('modal-result');
+                if (resultEl) {
+                    resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm mt-3">Ошибка: ' + data.error + '</div>';
+                }
+                showToast('Ошибка: ' + data.error, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Сохранить';
+            }
+        })
+        .catch(function(err) {
+            showToast('Ошибка соединения с сервером', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Сохранить';
+        });
+
+        return false;
+    }
+</script>
 
 {{template "footer" .}}
 {{end}}
