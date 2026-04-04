@@ -1,5 +1,5 @@
 # Этап сборки
-FROM golang:1.21-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /app
 
@@ -12,8 +12,10 @@ RUN go mod download
 # Копируем исходный код
 COPY . .
 
-# Собираем приложение (CGO отключен, так как не используем SQLite)
+# Собираем основное приложение и скрипты импорта
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o finforme ./cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates ./cmd/import-rates/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates-history ./cmd/import-rates-history/
 
 # Финальный образ
 FROM debian:bookworm-slim
@@ -26,8 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Копируем бинарник из этапа сборки
+# Копируем бинарники из этапа сборки
 COPY --from=builder /app/finforme .
+COPY --from=builder /app/import-rates .
+COPY --from=builder /app/import-rates-history .
 
 # Копируем статические файлы и шаблоны
 COPY static/ ./static/

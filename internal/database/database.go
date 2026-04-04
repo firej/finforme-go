@@ -83,6 +83,16 @@ func InitDB(db *sql.DB) error {
 			FOREIGN KEY (tx_id) REFERENCES transactions(id) ON DELETE CASCADE,
 			FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
+		`CREATE TABLE IF NOT EXISTS currency_rates (
+			code VARCHAR(20) NOT NULL COMMENT 'Например: USD/RUB, EUR/RUB, USDT/RUB',
+			name VARCHAR(255) NOT NULL COMMENT 'Название валюты',
+			rate DECIMAL(18,6) NOT NULL COMMENT 'Курс к рублю',
+			source VARCHAR(50) NOT NULL COMMENT 'Источник: cbr, binance, bybit и т.д.',
+			rate_date DATE NOT NULL COMMENT 'Дата курса',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (code, source, rate_date)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 	}
 
 	for _, table := range tables {

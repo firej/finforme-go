@@ -1,0 +1,187 @@
+{{define "currency.html"}}
+{{template "header" .}}
+
+<div class="max-w-2xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Курсы валют</h1>
+        {{if .UpdatedAt}}
+        <p class="text-sm text-gray-500 mt-1">Страница загружена: {{.UpdatedAt}}</p>
+        {{end}}
+    </div>
+
+    {{if .Rates}}
+    <div class="space-y-6">
+        {{range .Rates}}
+        <div class="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors overflow-hidden">
+            <!-- Заголовок карточки -->
+            <div class="flex items-center justify-between p-5">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-lg select-none font-bold text-gray-600">
+                        {{if eq .Code "USD/RUB"}}$
+                        {{else if eq .Code "EUR/RUB"}}€
+                        {{else if eq .Code "USDT/RUB"}}₮
+                        {{else}}?{{end}}
+                    </div>
+                    <div>
+                        <div class="font-semibold text-gray-900 text-base">{{.Code}}</div>
+                        <div class="text-sm text-gray-500">{{.Name}}</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-xl font-bold text-gray-900">{{formatMoney .Rate}} <span class="text-base font-normal text-gray-500">₽</span></div>
+                    {{if ne .Change 0.0}}
+                    <div class="text-sm font-medium {{if gt .Change 0.0}}text-green-600{{else}}text-red-500{{end}}">
+                        {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} ₽
+                    </div>
+                    {{else}}
+                    <div class="text-sm text-gray-400">— нет данных за пред. день</div>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- График -->
+            <div class="px-4 pb-4" id="chart-wrap-{{.Code}}-{{.Source}}">
+                <canvas id="chart-{{.Code}}-{{.Source}}" height="80"></canvas>
+            </div>
+
+            <!-- Подвал карточки -->
+            <div class="px-5 pb-4 flex items-center justify-between text-xs text-gray-400 border-t border-gray-100 pt-3">
+                <span>Источник: {{.Source}}</span>
+                <span>{{.RateDate}}</span>
+            </div>
+        </div>
+        {{end}}
+    </div>
+    {{else}}
+    <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-center">
+        <p class="text-yellow-800 font-medium">Данные о курсах валют пока не загружены</p>
+        <p class="text-yellow-600 text-sm mt-1">Запустите скрипт импорта: <code class="bg-yellow-100 px-1 rounded">import-rates</code></p>
+    </div>
+    {{end}}
+
+    <p class="text-xs text-gray-400 mt-6 text-center">
+        Курсы USD/RUB и EUR/RUB — официальный курс ЦБ РФ.<br>
+        График показывает данные за последние 14 дней.
+    </p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const chartsData = {{.ChartsJSON}};
+
+    if (!chartsData || chartsData.length === 0) return;
+
+    // Плагин: вертикальная пунктирная линия под курсором
+    const crosshairPlugin = {
+        id: 'crosshair',
+        afterDraw(chart) {
+            if (!chart._crosshairX) return;
+            const ctx = chart.ctx;
+            const x = chart._crosshairX;
+            const yAxis = chart.scales.y;
+            const xAxis = chart.scales.x;
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x, yAxis.top);
+            ctx.lineTo(x, yAxis.bottom);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(107,114,128,0.4)';
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.restore();
+        },
+        afterEvent(chart, args) {
+            const event = args.event;
+            if (event.type === 'mousemove') {
+                chart._crosshairX = event.x;
+                chart.draw();
+            } else if (event.type === 'mouseout') {
+                chart._crosshairX = null;
+                chart.draw();
+            }
+        }
+    };
+
+    // Цвета для разных валют
+    const colorMap = {
+        'USD/RUB': { line: '#3b82f6', fill: 'rgba(59,130,246,0.08)' },
+        'EUR/RUB': { line: '#8b5cf6', fill: 'rgba(139,92,246,0.08)' },
+        'USDT/RUB': { line: '#10b981', fill: 'rgba(16,185,129,0.08)' },
+    };
+
+    chartsData.forEach(function(chart) {
+        if (!chart.points || chart.points.length < 2) return;
+
+        const canvases = document.querySelectorAll('[id^="chart-' + chart.code + '-"]');
+        canvases.forEach(function(canvas) {
+            const labels = chart.points.map(p => p.date);
+            const values = chart.points.map(p => p.rate);
+            const colors = colorMap[chart.code] || { line: '#6b7280', fill: 'rgba(107,114,128,0.08)' };
+
+            new Chart(canvas, {
+                type: 'line',
+                plugins: [crosshairPlugin],
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        borderColor: colors.line,
+                        backgroundColor: colors.fill,
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: colors.line,
+                        fill: true,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    interaction: {
+                        mode: 'index',      // ловим ближайшую точку по оси X
+                        intersect: false,   // не нужно попадать точно в точку
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            displayColors: false,
+                            callbacks: {
+                                title: function(items) {
+                                    return items[0]?.label || '';
+                                },
+                                label: function(ctx) {
+                                    return ctx.parsed.y.toFixed(2) + ' ₽';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                font: { size: 11 },
+                                color: '#9ca3af',
+                                maxRotation: 0,
+                                autoSkip: true,
+                                maxTicksLimit: 7,
+                            }
+                        },
+                        y: {
+                            grid: { color: '#f3f4f6' },
+                            ticks: {
+                                font: { size: 11 },
+                                color: '#9ca3af',
+                                callback: function(v) { return v.toFixed(0) + ' ₽'; }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    });
+})();
+</script>
+
+{{template "footer" .}}
+{{end}}

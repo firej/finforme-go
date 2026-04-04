@@ -50,6 +50,7 @@
                         <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
                         {{end}}
                         <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
+                        <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>
                     </div>
                 </div>
                 <div class="flex items-center space-x-1">
@@ -62,12 +63,13 @@
                     {{end}}
                 </div>
             </div>
-            <div class="sm:hidden pb-2 flex space-x-1">
+            <div class="sm:hidden pb-2 flex space-x-1 flex-wrap gap-y-1">
                 {{if .Authenticated}}
                 <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
                 <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
                 {{end}}
                 <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
+                <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>
             </div>
         </div>
     </nav>
