@@ -167,7 +167,7 @@ func loadCurrencyCharts(db *sql.DB, days int) ([]CurrencyChartData, error) {
 		SELECT
 			code,
 			source,
-			DATE_FORMAT(rate_date, '%d.%m') AS label,
+			DATE_FORMAT(rate_date, '%Y-%m-%d') AS label,
 			CAST(rate AS DOUBLE)
 		FROM currency_rates
 		WHERE rate_date >= ?

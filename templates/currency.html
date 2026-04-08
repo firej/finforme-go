@@ -126,6 +126,18 @@
         }
     };
 
+    // Форматирование даты "YYYY-MM-DD":
+    // - текущий год → "08.04"
+    // - другой год  → "08.04.2024"
+    const currentYear = String(new Date().getFullYear());
+    function formatDate(label, withYear) {
+        const parts = label.split('-');
+        if (parts.length !== 3) return label;
+        const base = parts[2] + '.' + parts[1];
+        const showYear = (withYear !== undefined) ? withYear : (parts[0] !== currentYear);
+        return showYear ? base + '.' + parts[0] : base;
+    }
+
     // Цвета для разных валют
     const colorMap = {
         'USD/RUB':  { line: '#3b82f6', fill: 'rgba(59,130,246,0.08)',  unit: '₽' },
@@ -150,20 +162,7 @@
                 tooltip: {
                     displayColors: false,
                     callbacks: {
-                        title: function(items) {
-                            const label = items[0]?.label || '';
-                            // label формат: "YYYY-MM-DD"
-                            const parts = label.split('-');
-                            if (parts.length !== 3) return label;
-                            const year = parts[0];
-                            const currentYear = String(new Date().getFullYear());
-                            if (year !== currentYear) {
-                                // Не текущий год — показываем полную дату: "08.04.2024"
-                                return parts[2] + '.' + parts[1] + '.' + parts[0];
-                            }
-                            // Текущий год — только день и месяц: "08.04"
-                            return parts[2] + '.' + parts[1];
-                        },
+                        title: function(items) { return formatDate(items[0]?.label || ''); },
                         label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' ' + colors.unit; }
                     }
                 }
@@ -177,6 +176,11 @@
                         maxRotation: 0,
                         autoSkip: true,
                         maxTicksLimit: 7,
+                        callback: function(val, idx, ticks) {
+                            // val — числовой индекс, получаем label через this.getLabelForValue
+                            const label = this.getLabelForValue(val);
+                            return formatDate(label, false); // на оси всегда без года
+                        }
                     }
                 },
                 y: {
