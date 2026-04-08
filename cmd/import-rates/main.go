@@ -46,10 +46,9 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	today := time.Now().Format("2006-01-02")
-	log.Printf("Importing currency rates for %s", today)
+	log.Println("Importing currency rates from CBR...")
 
-	if err := importCBR(db, today); err != nil {
+	if err := importCBR(db); err != nil {
 		log.Printf("ERROR importing CBR rates: %v", err)
 		os.Exit(1)
 	}
@@ -72,7 +71,7 @@ type cbrValute struct {
 	VunitRate string `xml:"VunitRate"`
 }
 
-func importCBR(db *sql.DB, dateStr string) error {
+func importCBR(db *sql.DB) error {
 	client := &http.Client{Timeout: 15 * time.Second}
 	req, err := http.NewRequest("GET", "https://www.cbr.ru/scripts/XML_daily.asp", nil)
 	if err != nil {
@@ -110,6 +109,14 @@ func importCBR(db *sql.DB, dateStr string) error {
 		return fmt.Errorf("xml parse failed: %w", err)
 	}
 
+	// Дата в ответе ЦБ РФ: DD.MM.YYYY → конвертируем в YYYY-MM-DD
+	cbrDate, err := time.Parse("02.01.2006", valCurs.Date)
+	if err != nil {
+		return fmt.Errorf("CBR: failed to parse date %q: %w", valCurs.Date, err)
+	}
+	dateStr := cbrDate.Format("2006-01-02")
+	log.Printf("CBR date from response: %s", dateStr)
+
 	imported := 0
 	for _, v := range valCurs.Valutes {
 		if v.CharCode != "USD" && v.CharCode != "EUR" {
@@ -140,7 +147,7 @@ func importCBR(db *sql.DB, dateStr string) error {
 			continue
 		}
 
-		log.Printf("CBR: %s = %.4f RUB (CBR date: %s)", code, rate, valCurs.Date)
+		log.Printf("CBR: %s = %.4f RUB", code, rate)
 		imported++
 	}
 
