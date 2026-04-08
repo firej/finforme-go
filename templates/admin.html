@@ -1,0 +1,302 @@
+{{define "admin.html"}}
+{{template "header" .}}
+
+<div class="mb-6 flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Администрирование</h1>
+</div>
+
+<!-- Вкладки -->
+<div class="flex space-x-1 mb-6 border-b border-gray-200">
+    <a href="/admin/users/"
+       class="px-4 py-2 text-sm font-medium rounded-t-md transition-colors
+              {{if eq .Tab "users"}}bg-white border border-b-white border-gray-200 text-primary-600 -mb-px{{else}}text-gray-500 hover:text-gray-700 hover:bg-gray-100{{end}}">
+        👤 Пользователи
+    </a>
+    <a href="/admin/rates/"
+       class="px-4 py-2 text-sm font-medium rounded-t-md transition-colors
+              {{if eq .Tab "rates"}}bg-white border border-b-white border-gray-200 text-primary-600 -mb-px{{else}}text-gray-500 hover:text-gray-700 hover:bg-gray-100{{end}}">
+        💱 Курсы валют
+    </a>
+</div>
+
+<!-- Уведомления -->
+{{$msg := .}}
+{{with .Msg}}
+<div class="mb-4 px-4 py-3 rounded-lg
+    {{if eq . "deleted"}}bg-green-50 border border-green-200 text-green-800
+    {{else if eq . "bulk_deleted"}}bg-green-50 border border-green-200 text-green-800
+    {{else if eq . "updated"}}bg-blue-50 border border-blue-200 text-blue-800
+    {{else if eq . "password_reset"}}bg-yellow-50 border border-yellow-200 text-yellow-800
+    {{else}}bg-gray-50 border border-gray-200 text-gray-800{{end}}">
+    {{if eq . "deleted"}}✅ Запись удалена
+    {{else if eq . "bulk_deleted"}}✅ Записи удалены
+    {{else if eq . "updated"}}✅ Запись обновлена
+    {{else if eq . "password_reset"}}🔑 Пароль сброшен на временный: <code class="font-mono bg-yellow-100 px-1 rounded">ChangeMe123!</code>
+    {{else}}{{.}}{{end}}
+</div>
+{{end}}
+
+{{with .Error}}
+<div class="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-red-800">
+    {{if eq . "self_delete"}}❌ Нельзя удалить собственный аккаунт
+    {{else if eq . "empty_filter"}}❌ Укажите хотя бы один фильтр для массового удаления
+    {{else}}❌ {{.}}{{end}}
+</div>
+{{end}}
+
+<!-- ===== ВКЛАДКА: ПОЛЬЗОВАТЕЛИ ===== -->
+{{if eq .Tab "users"}}
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Список пользователей</h2>
+        <span class="text-sm text-gray-400">{{len .Users}} чел.</span>
+    </div>
+    {{if .Users}}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="px-4 py-3 text-left">ID</th>
+                    <th class="px-4 py-3 text-left">Логин</th>
+                    <th class="px-4 py-3 text-left">Email</th>
+                    <th class="px-4 py-3 text-left">Имя</th>
+                    <th class="px-4 py-3 text-center">Активен</th>
+                    <th class="px-4 py-3 text-center">Админ</th>
+                    <th class="px-4 py-3 text-left">Создан</th>
+                    <th class="px-4 py-3 text-center">Действия</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {{range .Users}}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-3 text-gray-400 font-mono text-xs">{{.ID}}</td>
+                    <td class="px-4 py-3 font-medium text-gray-900">{{.Username}}</td>
+                    <td class="px-4 py-3 text-gray-600">{{.Email}}</td>
+                    <td class="px-4 py-3 text-gray-600">{{.FirstName}} {{.LastName}}</td>
+                    <td class="px-4 py-3 text-center">
+                        {{if .IsActive}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">да</span>
+                        {{else}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">нет</span>
+                        {{end}}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        {{if .IsAdmin}}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">да</span>
+                        {{else}}
+                        <span class="text-gray-300">—</span>
+                        {{end}}
+                    </td>
+                    <td class="px-4 py-3 text-gray-400 text-xs">{{.CreatedAt.Format "02.01.2006"}}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center justify-center gap-2">
+                            <!-- Сброс пароля -->
+                            <form method="POST" action="/admin/users/{{.ID}}/reset-password/"
+                                  onsubmit="return confirm('Сбросить пароль пользователя {{.Username}}?')">
+                                <button type="submit"
+                                        class="px-2 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors font-medium">
+                                    🔑 Сброс пароля
+                                </button>
+                            </form>
+                            <!-- Удалить -->
+                            <form method="POST" action="/admin/users/{{.ID}}/delete/"
+                                  onsubmit="return confirm('Удалить пользователя {{.Username}}? Все его данные будут удалены!')">
+                                <button type="submit"
+                                        class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors font-medium">
+                                    🗑 Удалить
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="px-5 py-10 text-center text-gray-400">Пользователей нет</div>
+    {{end}}
+</div>
+{{end}}
+
+<!-- ===== ВКЛАДКА: КУРСЫ ВАЛЮТ ===== -->
+{{if eq .Tab "rates"}}
+
+{{if .EditRate}}
+<!-- Форма редактирования -->
+<div class="bg-white rounded-xl border border-gray-200 p-6 max-w-lg">
+    <h2 class="font-semibold text-gray-800 mb-4">Редактировать курс</h2>
+    <form method="POST" action="/admin/rates/edit/">
+        <input type="hidden" name="code" value="{{.EditRate.Code}}">
+        <input type="hidden" name="source" value="{{.EditRate.Source}}">
+        <input type="hidden" name="rate_date" value="{{.EditRate.RateDate}}">
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Код</label>
+                <input type="text" value="{{.EditRate.Code}}" disabled
+                       class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+                <input type="text" name="name" value="{{.EditRate.Name}}" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Курс</label>
+                <input type="number" name="rate" value="{{.EditRate.Rate}}" step="0.000001" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Источник</label>
+                <input type="text" value="{{.EditRate.Source}}" disabled
+                       class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Дата</label>
+                <input type="text" value="{{.EditRate.RateDate}}" disabled
+                       class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 text-sm">
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+            <button type="submit"
+                    class="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors">
+                Сохранить
+            </button>
+            <a href="/admin/rates/?code={{.EditRate.Code}}&source={{.EditRate.Source}}"
+               class="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+                Отмена
+            </a>
+        </div>
+    </form>
+</div>
+
+{{else}}
+<!-- Фильтры и массовое удаление -->
+<div class="bg-white rounded-xl border border-gray-200 p-4 mb-4">
+    <form method="GET" action="/admin/rates/" class="flex flex-wrap gap-3 items-end">
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Код валюты</label>
+            <select name="code" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">— все —</option>
+                {{range .Codes}}
+                <option value="{{.}}" {{if eq . $.FilterCode}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Источник</label>
+            <select name="source" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">— все —</option>
+                {{range .Sources}}
+                <option value="{{.}}" {{if eq . $.FilterSource}}selected{{end}}>{{.}}</option>
+                {{end}}
+            </select>
+        </div>
+        <button type="submit"
+                class="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors">
+            Фильтр
+        </button>
+        <a href="/admin/rates/"
+           class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            Сбросить
+        </a>
+    </form>
+
+    <!-- Массовое удаление -->
+    <div class="mt-3 pt-3 border-t border-gray-100">
+        <form method="POST" action="/admin/rates/delete-bulk/"
+              onsubmit="return confirm('Удалить ВСЕ записи по выбранным фильтрам? Это действие необратимо!')"
+              class="flex flex-wrap gap-3 items-end">
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Код (для удаления)</label>
+                <select name="code" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <option value="">— не выбрано —</option>
+                    {{range .Codes}}
+                    <option value="{{.}}">{{.}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Источник (для удаления)</label>
+                <select name="source" class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                    <option value="">— не выбрано —</option>
+                    {{range .Sources}}
+                    <option value="{{.}}">{{.}}</option>
+                    {{end}}
+                </select>
+            </div>
+            <button type="submit"
+                    class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors">
+                🗑 Удалить всё по фильтру
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Таблица курсов -->
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800">Записи курсов валют</h2>
+        <span class="text-sm text-gray-400">{{len .Rates}} записей (макс. 500)</span>
+    </div>
+    {{if .Rates}}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="px-4 py-3 text-left">Код</th>
+                    <th class="px-4 py-3 text-left">Название</th>
+                    <th class="px-4 py-3 text-right">Курс</th>
+                    <th class="px-4 py-3 text-left">Источник</th>
+                    <th class="px-4 py-3 text-left">Дата</th>
+                    <th class="px-4 py-3 text-left">Обновлено</th>
+                    <th class="px-4 py-3 text-center">Действия</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {{range .Rates}}
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-2 font-medium text-gray-900 font-mono text-xs">{{.Code}}</td>
+                    <td class="px-4 py-2 text-gray-600">{{.Name}}</td>
+                    <td class="px-4 py-2 text-right font-mono text-gray-800">{{formatMoney .Rate}}</td>
+                    <td class="px-4 py-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{.Source}}</span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500 text-xs font-mono">{{.RateDate}}</td>
+                    <td class="px-4 py-2 text-gray-400 text-xs">{{.CreatedAt}}</td>
+                    <td class="px-4 py-2">
+                        <div class="flex items-center justify-center gap-2">
+                            <!-- Редактировать -->
+                            <a href="/admin/rates/edit/?code={{.Code}}&source={{.Source}}&rate_date={{.RateDate}}"
+                               class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors font-medium">
+                                ✏️ Изменить
+                            </a>
+                            <!-- Удалить -->
+                            <form method="POST" action="/admin/rates/delete/"
+                                  onsubmit="return confirm('Удалить запись {{.Code}} / {{.Source}} / {{.RateDate}}?')">
+                                <input type="hidden" name="code" value="{{.Code}}">
+                                <input type="hidden" name="source" value="{{.Source}}">
+                                <input type="hidden" name="rate_date" value="{{.RateDate}}">
+                                <button type="submit"
+                                        class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200 transition-colors font-medium">
+                                    🗑 Удалить
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+    </div>
+    {{else}}
+    <div class="px-5 py-10 text-center text-gray-400">Нет данных по выбранным фильтрам</div>
+    {{end}}
+</div>
+{{end}}
+{{end}}
+
+{{template "footer" .}}
+{{end}}

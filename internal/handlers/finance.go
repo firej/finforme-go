@@ -19,7 +19,7 @@ import (
 
 // MortgageCalculator - страница ипотечного калькулятора
 func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
-	_, authenticated := h.getUserID(r)
+	userID, authenticated := h.getUserID(r)
 
 	data := map[string]interface{}{
 		"Title":         "Ипотечный калькулятор",
@@ -27,7 +27,6 @@ func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if authenticated {
-		userID, _ := h.getUserID(r)
 		var user models.User
 		err := h.db.QueryRow(`
 			SELECT id, username, email, first_name, last_name
@@ -36,6 +35,7 @@ func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			data["User"] = user
 		}
+		data["IsAdmin"] = h.getIsAdmin(userID)
 	}
 
 	h.renderTemplate(w, "mortgage_calculator.html", data)
@@ -106,6 +106,7 @@ func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
 			"Title":         "finfor.me",
 			"Authenticated": true,
+			"IsAdmin":       h.getIsAdmin(userID),
 		}
 		h.renderTemplate(w, "finance_welcome.html", data)
 		return
@@ -122,6 +123,7 @@ func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 		"AccountTree":   accountTree,
 		"Commodities":   commodities,
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "finance.html", data)
@@ -243,6 +245,7 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		"Accounts":          accounts,
 		"Commodities":       commodities,
 		"Authenticated":     true,
+		"IsAdmin":           h.getIsAdmin(userID),
 		"SortOrder":         sortOrder,
 		"OppositeSortOrder": oppositeSortOrder,
 	}
@@ -275,6 +278,7 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 			"Accounts":      accounts,
 			"Commodities":   commodities,
 			"Authenticated": true,
+			"IsAdmin":       h.getIsAdmin(userID),
 		}
 		h.renderTemplate(w, "finance_account.html", data)
 		return
@@ -320,6 +324,7 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 		"Accounts":      accounts,
 		"Commodities":   commodities,
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "finance_account.html", data)
@@ -352,6 +357,7 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 		"AccountID":     accountID,
 		"Accounts":      accounts,
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "finance_transaction.html", data)
@@ -421,6 +427,7 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 		"Tag":           tag,
 		"Transactions":  transactions,
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "finance_transactions_by_tag.html", data)
@@ -428,9 +435,11 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 
 // FinanceSettings - настройки
 func (h *Handler) FinanceSettings(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
 	data := map[string]interface{}{
 		"Title":         "Настройки",
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "finance_settings.html", data)

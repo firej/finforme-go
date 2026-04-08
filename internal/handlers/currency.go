@@ -35,7 +35,7 @@ type CurrencyChartData struct {
 
 // CurrencyPage — страница курсов валют
 func (h *Handler) CurrencyPage(w http.ResponseWriter, r *http.Request) {
-	_, authenticated := h.getUserID(r)
+	userID, authenticated := h.getUserID(r)
 
 	data := map[string]interface{}{
 		"Title":         "Курсы валют",
@@ -43,7 +43,6 @@ func (h *Handler) CurrencyPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if authenticated {
-		userID, _ := h.getUserID(r)
 		var user models.User
 		err := h.db.QueryRow(`
 			SELECT id, username, email, first_name, last_name
@@ -52,6 +51,7 @@ func (h *Handler) CurrencyPage(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			data["User"] = user
 		}
+		data["IsAdmin"] = h.getIsAdmin(userID)
 	}
 
 	rates, updatedAt, err := loadCurrencyRates(h.db)

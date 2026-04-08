@@ -48,6 +48,7 @@
                         {{if .Authenticated}}
                         <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
                         <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
+                        {{if .IsAdmin}}<a href="/admin/" class="text-yellow-300 hover:text-yellow-100 hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">⚙ Админка</a>{{end}}
                         {{end}}
                         <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
                         <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>
@@ -67,6 +68,7 @@
                 {{if .Authenticated}}
                 <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
                 <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
+                {{if .IsAdmin}}<a href="/admin/" class="text-yellow-300 hover:text-yellow-100 hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">⚙ Админка</a>{{end}}
                 {{end}}
                 <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
                 <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>

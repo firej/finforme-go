@@ -26,6 +26,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			data["User"] = user
 		}
+		data["IsAdmin"] = h.getIsAdmin(userID)
 	}
 
 	h.renderTemplate(w, "index.html", data)
@@ -195,6 +196,7 @@ func (h *Handler) AccountInfo(w http.ResponseWriter, r *http.Request) {
 		"Title":         "Информация об аккаунте",
 		"User":          user,
 		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
 	}
 
 	h.renderTemplate(w, "account_info.html", data)
@@ -208,6 +210,7 @@ func (h *Handler) PasswordChange(w http.ResponseWriter, r *http.Request) {
 		data := map[string]interface{}{
 			"Title":         "Смена пароля",
 			"Authenticated": true,
+			"IsAdmin":       h.getIsAdmin(userID),
 		}
 		h.renderTemplate(w, "password_change_form.html", data)
 		return
@@ -269,6 +272,7 @@ func (h *Handler) ChangeInfo(w http.ResponseWriter, r *http.Request) {
 			"Title":         "Изменение информации",
 			"User":          user,
 			"Authenticated": true,
+			"IsAdmin":       h.getIsAdmin(userID),
 		}
 		h.renderTemplate(w, "change_info_form.html", data)
 		return

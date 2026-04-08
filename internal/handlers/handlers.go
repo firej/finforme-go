@@ -67,6 +67,16 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 	}
 }
 
+// getIsAdmin проверяет флаг is_admin для пользователя по ID
+func (h *Handler) getIsAdmin(userID int64) bool {
+	var isAdmin bool
+	err := h.db.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin)
+	if err != nil {
+		return false
+	}
+	return isAdmin
+}
+
 // getUserID получает ID пользователя из сессии
 func (h *Handler) getUserID(r *http.Request) (int64, bool) {
 	session, err := h.store.Get(r, "session")

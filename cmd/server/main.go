@@ -77,6 +77,16 @@ func main() {
 	r.HandleFunc("/finance/tag/{tag}", h.RequireAuth(h.FinanceTransactionsByTag)).Methods("GET")
 	r.HandleFunc("/finance/settings", h.RequireAuth(h.FinanceSettings)).Methods("GET")
 
+	// Админка
+	r.HandleFunc("/admin/", h.RequireAdmin(h.AdminIndex)).Methods("GET")
+	r.HandleFunc("/admin/users/", h.RequireAdmin(h.AdminUsers)).Methods("GET")
+	r.HandleFunc("/admin/users/{id}/reset-password/", h.RequireAdmin(h.AdminUserRequestPasswordChange)).Methods("POST")
+	r.HandleFunc("/admin/users/{id}/delete/", h.RequireAdmin(h.AdminUserDelete)).Methods("POST")
+	r.HandleFunc("/admin/rates/", h.RequireAdmin(h.AdminRates)).Methods("GET")
+	r.HandleFunc("/admin/rates/edit/", h.RequireAdmin(h.AdminRateEdit)).Methods("GET", "POST")
+	r.HandleFunc("/admin/rates/delete/", h.RequireAdmin(h.AdminRateDelete)).Methods("POST")
+	r.HandleFunc("/admin/rates/delete-bulk/", h.RequireAdmin(h.AdminRateDeleteBulk)).Methods("POST")
+
 	// API
 	api := r.PathPrefix("/api/v1").Subrouter()
 	api.Use(h.RequireAuthMiddleware)

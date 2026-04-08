@@ -69,7 +69,18 @@ type User struct {
 	FirstName    string    `json:"first_name"`
 	LastName     string    `json:"last_name"`
 	IsActive     bool      `json:"is_active"`
+	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
+}
+
+// CurrencyRate представляет запись курса валюты
+type CurrencyRate struct {
+	Code      string  `json:"code"`
+	Name      string  `json:"name"`
+	Rate      float64 `json:"rate"`
+	Source    string  `json:"source"`
+	RateDate  string  `json:"rate_date"`
+	CreatedAt string  `json:"created_at"`
 }
 
 // Book представляет книгу учета

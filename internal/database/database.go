@@ -17,6 +17,7 @@ func InitDB(db *sql.DB) error {
 			first_name VARCHAR(255),
 			last_name VARCHAR(255),
 			is_active TINYINT DEFAULT 1,
+			is_admin TINYINT DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
@@ -99,6 +100,14 @@ func InitDB(db *sql.DB) error {
 		if _, err := db.Exec(table); err != nil {
 			return fmt.Errorf("failed to create table: %w", err)
 		}
+	}
+
+	// Миграции: добавляем новые колонки если их нет (для существующих БД)
+	migrations := []string{
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin TINYINT DEFAULT 0`,
+	}
+	for _, m := range migrations {
+		db.Exec(m) // игнорируем ошибки (колонка уже может существовать)
 	}
 
 	// Создаём индексы для ускорения запросов
