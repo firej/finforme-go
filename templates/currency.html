@@ -150,7 +150,20 @@
                 tooltip: {
                     displayColors: false,
                     callbacks: {
-                        title: function(items) { return items[0]?.label || ''; },
+                        title: function(items) {
+                            const label = items[0]?.label || '';
+                            // label формат: "YYYY-MM-DD"
+                            const parts = label.split('-');
+                            if (parts.length !== 3) return label;
+                            const year = parts[0];
+                            const currentYear = String(new Date().getFullYear());
+                            if (year !== currentYear) {
+                                // Не текущий год — показываем полную дату: "08.04.2024"
+                                return parts[2] + '.' + parts[1] + '.' + parts[0];
+                            }
+                            // Текущий год — только день и месяц: "08.04"
+                            return parts[2] + '.' + parts[1];
+                        },
                         label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' ' + colors.unit; }
                     }
                 }
