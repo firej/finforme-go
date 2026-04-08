@@ -34,9 +34,11 @@ func TestParseCBRXML(t *testing.T) {
 
 	t.Logf("Parsed date: %s, valutes count: %d", valCurs.Date, len(valCurs.Valutes))
 
+	wantedCodes := map[string]bool{"USD": true, "EUR": true}
+
 	found := 0
 	for _, v := range valCurs.Valutes {
-		if v.CharCode != "USD" && v.CharCode != "EUR" {
+		if !wantedCodes[v.CharCode] {
 			continue
 		}
 		t.Logf("%s: VunitRate=%q Nominal=%q Name=%q", v.CharCode, v.VunitRate, v.Nominal, v.Name)

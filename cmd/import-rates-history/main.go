@@ -1,4 +1,4 @@
-// Скрипт для однократного импорта исторических курсов валют с сайта ЦБ РФ.
+// Скрипт для однократного импорта исторических курсов валют с сайта ЦБ РФ и BCRA.
 // Загружает данные по месяцам за указанный период.
 //
 // Использование:
@@ -11,6 +11,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -29,7 +30,7 @@ import (
 )
 
 // Коды валют на сайте ЦБ РФ
-var currencies = []struct {
+var cbrCurrencies = []struct {
 	code    string // код в нашей БД, например USD/RUB
 	name    string
 	cbrCode string // код на сайте ЦБ РФ
@@ -87,7 +88,8 @@ func main() {
 	totalImported := 0
 	totalErrors := 0
 
-	for _, cur := range currencies {
+	// --- ЦБ РФ: USD/RUB и EUR/RUB ---
+	for _, cur := range cbrCurrencies {
 		log.Printf("--- Importing %s (CBR code: %s) ---", cur.code, cur.cbrCode)
 
 		// Разбиваем на месячные чанки — ЦБ РФ лучше работает с небольшими диапазонами
@@ -98,7 +100,7 @@ func main() {
 				chunkEnd = toDate
 			}
 
-			imported, err := importHistoricalChunk(db, client, cur.code, cur.name, cur.cbrCode, chunkStart, chunkEnd)
+			imported, err := importCBRHistoricalChunk(db, client, cur.code, cur.name, cur.cbrCode, chunkStart, chunkEnd)
 			if err != nil {
 				log.Printf("ERROR %s [%s - %s]: %v",
 					cur.code,
@@ -117,8 +119,45 @@ func main() {
 		}
 	}
 
+	// --- BCRA: USD/ARS ---
+	log.Printf("--- Importing USD/ARS from BCRA ---")
+	chunkStart := fromDate
+	for chunkStart.Before(toDate) {
+		chunkEnd := chunkStart.AddDate(0, 1, 0)
+		if chunkEnd.After(toDate) {
+			chunkEnd = toDate
+		}
+
+		imported, err := importBCRAHistoricalChunk(db, client, chunkStart, chunkEnd)
+		if err != nil {
+			log.Printf("ERROR USD/ARS [%s - %s]: %v",
+				chunkStart.Format("2006-01-02"),
+				chunkEnd.Format("2006-01-02"),
+				err)
+			totalErrors++
+		} else {
+			totalImported += imported
+		}
+
+		time.Sleep(200 * time.Millisecond)
+		chunkStart = chunkEnd.AddDate(0, 0, 1)
+	}
+
+	// --- Кросс-курс RUB/ARS = USD/ARS / USD/RUB ---
+	log.Printf("--- Computing cross-rate RUB/ARS ---")
+	crossImported, err := importCrossRateRUBARS(db, fromDate, toDate)
+	if err != nil {
+		log.Printf("ERROR computing RUB/ARS cross-rate: %v", err)
+		totalErrors++
+	} else {
+		log.Printf("RUB/ARS cross-rate: %d records", crossImported)
+		totalImported += crossImported
+	}
+
 	log.Printf("Done: imported %d records, errors: %d", totalImported, totalErrors)
 }
+
+// --- ЦБ РФ ---
 
 // cbrDynamicValCurs — структура XML-ответа динамики курсов ЦБ РФ
 type cbrDynamicValCurs struct {
@@ -132,7 +171,7 @@ type cbrDynamicRecord struct {
 	VunitRate string `xml:"VunitRate"`
 }
 
-func importHistoricalChunk(
+func importCBRHistoricalChunk(
 	db *sql.DB,
 	client *http.Client,
 	code, name, cbrCode string,
@@ -220,4 +259,148 @@ func importHistoricalChunk(
 
 	log.Printf("  %s [%s - %s]: %d records", code, fromStr, toStr, imported)
 	return imported, nil
+}
+
+// --- BCRA (Banco Central de la República Argentina) ---
+
+// bcraHistoryResponse — ответ API BCRA с историческими данными
+type bcraHistoryResponse struct {
+	Status  int `json:"status"`
+	Results []struct {
+		Fecha   string `json:"fecha"`
+		Detalle []struct {
+			CodigoMoneda   string  `json:"codigoMoneda"`
+			TipoCotizacion float64 `json:"tipoCotizacion"`
+		} `json:"detalle"`
+	} `json:"results"`
+}
+
+// importBCRAHistoricalChunk загружает исторические курсы ARS/USD из BCRA за период [from, to].
+// tipoCotizacion — количество песо за 1 USD, поэтому ARS/USD = 1 / tipoCotizacion.
+func importBCRAHistoricalChunk(
+	db *sql.DB,
+	client *http.Client,
+	from, to time.Time,
+) (int, error) {
+	fromStr := from.Format("2006-01-02")
+	toStr := to.Format("2006-01-02")
+
+	url := fmt.Sprintf(
+		"https://api.bcra.gob.ar/estadisticascambiarias/v1.0/Cotizaciones/USD?fechadesde=%s&fechahasta=%s",
+		fromStr, toStr,
+	)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; finforme-history/1.0)")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("BCRA returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("read body: %w", err)
+	}
+
+	var bcra bcraHistoryResponse
+	if err := json.Unmarshal(body, &bcra); err != nil {
+		return 0, fmt.Errorf("json parse: %w", err)
+	}
+
+	if len(bcra.Results) == 0 {
+		return 0, nil
+	}
+
+	imported := 0
+	for _, day := range bcra.Results {
+		if len(day.Detalle) == 0 {
+			continue
+		}
+		cotizacion := day.Detalle[0].TipoCotizacion
+		if cotizacion == 0 {
+			continue
+		}
+		// USD/ARS = tipoCotizacion (сколько песо за 1 доллар, например 1392.5)
+		usdARS := cotizacion
+
+		// BCRA возвращает дату в формате "2026-04-07T00:00:00Z" или "2026-04-07"
+		// Обрезаем до первых 10 символов: "2026-04-07"
+		dateStr := day.Fecha
+		if len(dateStr) > 10 {
+			dateStr = dateStr[:10]
+		}
+
+		_, err := db.Exec(`
+			INSERT INTO currency_rates (code, name, rate, source, rate_date)
+			VALUES ('USD/ARS', 'Аргентинский песо', ?, 'bcra', ?)
+			ON DUPLICATE KEY UPDATE rate = VALUES(rate), name = VALUES(name), created_at = CURRENT_TIMESTAMP
+		`, usdARS, dateStr)
+		if err != nil {
+			log.Printf("  BCRA: db insert failed for %s: %v", dateStr, err)
+			continue
+		}
+		imported++
+	}
+
+	log.Printf("  USD/ARS [%s - %s]: %d records", fromStr, toStr, imported)
+	return imported, nil
+}
+
+// importCrossRateRUBARS вычисляет кросс-курс RUB/ARS = USD/ARS / USD/RUB
+// (сколько песо за 1 рубль) по всем датам в диапазоне [from, to].
+func importCrossRateRUBARS(db *sql.DB, from, to time.Time) (int, error) {
+	rows, err := db.Query(`
+		SELECT usdars.rate_date, CAST(usdars.rate AS DOUBLE), CAST(usdrub.rate AS DOUBLE)
+		FROM currency_rates usdars
+		INNER JOIN currency_rates usdrub
+			ON usdrub.code = 'USD/RUB' AND usdrub.source = 'cbr' AND usdrub.rate_date = usdars.rate_date
+		WHERE usdars.code = 'USD/ARS' AND usdars.source = 'bcra'
+		  AND usdars.rate_date >= ? AND usdars.rate_date <= ?
+		ORDER BY usdars.rate_date
+	`, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	if err != nil {
+		return 0, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	imported := 0
+	for rows.Next() {
+		var dateStr string
+		var usdARS, usdRUB float64
+		if err := rows.Scan(&dateStr, &usdARS, &usdRUB); err != nil {
+			log.Printf("  RUB/ARS: scan error: %v", err)
+			continue
+		}
+		if usdRUB == 0 {
+			continue
+		}
+		// MariaDB может вернуть дату как "2026-03-03T00:00:00Z" — обрезаем до YYYY-MM-DD
+		if len(dateStr) > 10 {
+			dateStr = dateStr[:10]
+		}
+		// RUB/ARS = USD/ARS / USD/RUB (сколько песо за 1 рубль)
+		rubARS := usdARS / usdRUB
+
+		_, err := db.Exec(`
+			INSERT INTO currency_rates (code, name, rate, source, rate_date)
+			VALUES ('RUB/ARS', 'Аргентинский песо', ?, 'cross', ?)
+			ON DUPLICATE KEY UPDATE rate = VALUES(rate), created_at = CURRENT_TIMESTAMP
+		`, rubARS, dateStr)
+		if err != nil {
+			log.Printf("  RUB/ARS: db insert failed for %s: %v", dateStr, err)
+			continue
+		}
+		imported++
+	}
+	return imported, rows.Err()
 }
