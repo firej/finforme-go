@@ -72,10 +72,20 @@
     </div>
     {{end}}
 
-    <p class="text-xs text-gray-400 mt-6 text-center">
+    <!-- Контролы выбора периода -->
+    {{if .Rates}}
+    <div class="mt-4 flex items-center justify-center gap-2">
+        <span class="text-xs text-gray-400 mr-1">Период:</span>
+        <button data-days="14"  class="period-btn px-3 py-1 rounded-full text-xs font-medium border transition-colors border-blue-500 bg-blue-500 text-white">2 недели</button>
+        <button data-days="30"  class="period-btn px-3 py-1 rounded-full text-xs font-medium border transition-colors border-gray-200 bg-white text-gray-600 hover:border-gray-300">Месяц</button>
+        <button data-days="365" class="period-btn px-3 py-1 rounded-full text-xs font-medium border transition-colors border-gray-200 bg-white text-gray-600 hover:border-gray-300">Год</button>
+        <span id="period-loading" class="hidden ml-2 text-xs text-gray-400">Загрузка…</span>
+    </div>
+    {{end}}
+
+    <p class="text-xs text-gray-400 mt-4 text-center">
         USD/RUB, EUR/RUB — официальный курс ЦБ РФ.<br>
-        USD/ARS — официальный курс ЦБ Аргентины (BCRA). RUB/ARS — кросс-курс.<br>
-        График показывает данные за последние 14 дней.
+        USD/ARS — официальный курс ЦБ Аргентины (BCRA). RUB/ARS — кросс-курс.
     </p>
 </div>
 
@@ -94,7 +104,6 @@
             const ctx = chart.ctx;
             const x = chart._crosshairX;
             const yAxis = chart.scales.y;
-            const xAxis = chart.scales.x;
             ctx.save();
             ctx.beginPath();
             ctx.moveTo(x, yAxis.top);
@@ -126,74 +135,132 @@
         'RUB/ARS':  { line: '#ef4444', fill: 'rgba(239,68,68,0.08)',   unit: 'ARS' },
     };
 
-    chartsData.forEach(function(chart) {
-        if (!chart.points || chart.points.length < 2) return;
+    // Реестр экземпляров Chart.js: ключ = id canvas
+    const chartInstances = {};
 
-        const canvases = document.querySelectorAll('[id^="chart-' + chart.code + '-"]');
-        canvases.forEach(function(canvas) {
-            const labels = chart.points.map(p => p.date);
-            const values = chart.points.map(p => p.rate);
-            const colors = colorMap[chart.code] || { line: '#6b7280', fill: 'rgba(107,114,128,0.08)' };
-
-            new Chart(canvas, {
-                type: 'line',
-                plugins: [crosshairPlugin],
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: values,
-                        borderColor: colors.line,
-                        backgroundColor: colors.fill,
-                        borderWidth: 2,
-                        pointRadius: 3,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: colors.line,
-                        fill: true,
-                        tension: 0.3,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    interaction: {
-                        mode: 'index',      // ловим ближайшую точку по оси X
-                        intersect: false,   // не нужно попадать точно в точку
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            displayColors: false,
-                            callbacks: {
-                                    title: function(items) {
-                                        return items[0]?.label || '';
-                                    },
-                                    label: function(ctx) {
-                                        return ctx.parsed.y.toFixed(2) + ' ' + colors.unit;
-                                    }
-                                }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: { display: false },
-                            ticks: {
-                                font: { size: 11 },
-                                color: '#9ca3af',
-                                maxRotation: 0,
-                                autoSkip: true,
-                                maxTicksLimit: 7,
-                            }
-                        },
-                        y: {
-                            grid: { color: '#f3f4f6' },
-                            ticks: {
-                                font: { size: 11 },
-                                color: '#9ca3af',
-                                callback: function(v) { return v.toFixed(0) + ' ' + colors.unit; }
-                            }
-                        }
+    function buildChartOptions(colors) {
+        return {
+            responsive: true,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    displayColors: false,
+                    callbacks: {
+                        title: function(items) { return items[0]?.label || ''; },
+                        label: function(ctx) { return ctx.parsed.y.toFixed(2) + ' ' + colors.unit; }
                     }
                 }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        font: { size: 11 },
+                        color: '#9ca3af',
+                        maxRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 7,
+                    }
+                },
+                y: {
+                    grid: { color: '#f3f4f6' },
+                    ticks: {
+                        font: { size: 11 },
+                        color: '#9ca3af',
+                        callback: function(v) { return v.toFixed(0) + ' ' + colors.unit; }
+                    }
+                }
+            }
+        };
+    }
+
+    function renderCharts(data) {
+        data.forEach(function(item) {
+            if (!item.points || item.points.length < 2) return;
+
+            const canvases = document.querySelectorAll('[id^="chart-' + item.code + '-"]');
+            canvases.forEach(function(canvas) {
+                const labels = item.points.map(p => p.date);
+                const values = item.points.map(p => p.rate);
+                const colors = colorMap[item.code] || { line: '#6b7280', fill: 'rgba(107,114,128,0.08)', unit: '' };
+
+                // Скрываем точки если данных много (более 30)
+                const pointRadius = values.length > 30 ? 0 : 3;
+                const pointHoverRadius = values.length > 30 ? 3 : 5;
+
+                if (chartInstances[canvas.id]) {
+                    // Обновляем существующий график без пересоздания
+                    const ch = chartInstances[canvas.id];
+                    ch.data.labels = labels;
+                    ch.data.datasets[0].data = values;
+                    ch.data.datasets[0].pointRadius = pointRadius;
+                    ch.data.datasets[0].pointHoverRadius = pointHoverRadius;
+                    ch.update();
+                } else {
+                    // Создаём новый
+                    chartInstances[canvas.id] = new Chart(canvas, {
+                        type: 'line',
+                        plugins: [crosshairPlugin],
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: values,
+                                borderColor: colors.line,
+                                backgroundColor: colors.fill,
+                                borderWidth: 2,
+                                pointRadius: pointRadius,
+                                pointHoverRadius: pointHoverRadius,
+                                pointBackgroundColor: colors.line,
+                                fill: true,
+                                tension: 0.3,
+                            }]
+                        },
+                        options: buildChartOptions(colors),
+                    });
+                }
             });
+        });
+    }
+
+    // Первичная отрисовка с данными из шаблона (14 дней)
+    renderCharts(chartsData);
+
+    // Кнопки выбора периода
+    const periodBtns = document.querySelectorAll('.period-btn');
+    const loadingEl  = document.getElementById('period-loading');
+
+    periodBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const days = btn.dataset.days;
+
+            // Визуальное переключение активной кнопки
+            periodBtns.forEach(function(b) {
+                b.classList.remove('border-blue-500', 'bg-blue-500', 'text-white');
+                b.classList.add('border-gray-200', 'bg-white', 'text-gray-600');
+            });
+            btn.classList.remove('border-gray-200', 'bg-white', 'text-gray-600');
+            btn.classList.add('border-blue-500', 'bg-blue-500', 'text-white');
+
+            if (loadingEl) loadingEl.classList.remove('hidden');
+
+            fetch('/api/currency/charts?days=' + days)
+                .then(function(res) {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(function(data) {
+                    renderCharts(data);
+                })
+                .catch(function(err) {
+                    console.error('Ошибка загрузки данных графика:', err);
+                })
+                .finally(function() {
+                    if (loadingEl) loadingEl.classList.add('hidden');
+                });
         });
     });
 })();

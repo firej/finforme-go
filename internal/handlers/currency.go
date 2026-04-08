@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/evbogdanov/finforme/internal/models"
@@ -78,6 +79,28 @@ func (h *Handler) CurrencyPage(w http.ResponseWriter, r *http.Request) {
 	h.renderTemplate(w, "currency.html", data)
 }
 
+// CurrencyChartsAPI возвращает JSON с историческими данными за указанный период
+// GET /api/currency/charts?days=N (публичный эндпоинт)
+func (h *Handler) CurrencyChartsAPI(w http.ResponseWriter, r *http.Request) {
+	daysStr := r.URL.Query().Get("days")
+	days, err := strconv.Atoi(daysStr)
+	if err != nil || days <= 0 || days > 366 {
+		days = 14
+	}
+
+	charts, err := loadCurrencyCharts(h.db, days)
+	if err != nil {
+		log.Printf("CurrencyChartsAPI loadCurrencyCharts error: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(charts); err != nil {
+		log.Printf("CurrencyChartsAPI encode error: %v", err)
+	}
+}
+
 // loadCurrencyRates загружает последние курсы из БД и считает изменение за день
 func loadCurrencyRates(db *sql.DB) ([]CurrencyRateRow, string, error) {
 	rows, err := db.Query(`
@@ -101,7 +124,16 @@ func loadCurrencyRates(db *sql.DB) ([]CurrencyRateRow, string, error) {
 				FROM currency_rates
 				WHERE code = cr.code AND source = cr.source AND rate_date < cr.rate_date
 			)
-		ORDER BY cr.code, cr.source
+		ORDER BY
+			CASE cr.code
+				WHEN 'USD/RUB'  THEN 1
+				WHEN 'EUR/RUB'  THEN 2
+				WHEN 'USDT/RUB' THEN 3
+				WHEN 'USD/ARS'  THEN 4
+				WHEN 'RUB/ARS'  THEN 5
+				ELSE 6
+			END,
+			cr.source
 	`)
 	if err != nil {
 		return nil, "", err
@@ -139,7 +171,17 @@ func loadCurrencyCharts(db *sql.DB, days int) ([]CurrencyChartData, error) {
 			CAST(rate AS DOUBLE)
 		FROM currency_rates
 		WHERE rate_date >= ?
-		ORDER BY code, source, rate_date ASC
+		ORDER BY
+			CASE code
+				WHEN 'USD/RUB'  THEN 1
+				WHEN 'EUR/RUB'  THEN 2
+				WHEN 'USDT/RUB' THEN 3
+				WHEN 'USD/ARS'  THEN 4
+				WHEN 'RUB/ARS'  THEN 5
+				ELSE 6
+			END,
+			source,
+			rate_date ASC
 	`, since)
 	if err != nil {
 		return nil, err
