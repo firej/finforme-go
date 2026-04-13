@@ -51,13 +51,13 @@ func importBitcoin(db *sql.DB) error {
 
 	_, err = db.Exec(`
 		INSERT INTO currency_rates (code, name, rate, source, rate_date)
-		VALUES ('BTC', 'Bitcoin', ?, 'coinbase', ?)
+		VALUES ('BTC/USD', 'Bitcoin', ?, 'coinbase', ?)
 		ON DUPLICATE KEY UPDATE rate = VALUES(rate), name = VALUES(name), created_at = CURRENT_TIMESTAMP
 	`, price, now)
 	if err != nil {
 		return fmt.Errorf("db insert failed: %w", err)
 	}
 
-	log.Printf("Coinbase: BTC = %.2f USD (date: %s)", price, now)
+	log.Printf("Coinbase: BTC/USD = %.2f (date: %s)", price, now)
 	return nil
 }

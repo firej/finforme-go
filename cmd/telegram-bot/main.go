@@ -84,20 +84,20 @@ func main() {
 				bot.Send(msg)
 				log.Printf("Ошибка получения курсов: %v", err)
 			} else {
-				message := "Котировки: "
-				btc := 0.0
-				usd := 0.0
-				eur := 0.0
-				for code, rate := range rates {
-					if code == "BTC" {
-						btc = rate
-					} else if code == "USD" {
-						usd = rate
-					} else if code == "EUR" {
-						eur = rate
-					}
+				var parts []string
+				if btc, ok := rates["BTC/USD"]; ok && btc > 0 {
+					parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
 				}
-				message += fmt.Sprintf("₿ $%.2f  💵 %.2f₽  💶 %.2f₽", btc, usd, eur)
+				if usd, ok := rates["USD/RUB"]; ok && usd > 0 {
+					parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
+				}
+				if eur, ok := rates["EUR/RUB"]; ok && eur > 0 {
+					parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
+				}
+				message := "Котировки: " + strings.Join(parts, "  ")
+				if len(parts) == 0 {
+					message = "Нет данных о курсах валют"
+				}
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
 				bot.Send(msg)
 			}
