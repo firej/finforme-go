@@ -41,3 +41,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Go binaries
+telegram-bot
+import-rates
