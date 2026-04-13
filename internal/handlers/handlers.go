@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"math"
 	"net/http"
-	"path/filepath"
 
 	"github.com/gorilla/sessions"
 )
@@ -55,10 +54,19 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 			}
 			return fmt.Sprintf("%.2f", value)
 		},
+		"derefInt64": func(ptr *int64) int64 {
+			if ptr != nil {
+				return *ptr
+			}
+			return 0
+		},
+		"eqStr": func(a, b string) bool {
+			return a == b
+		},
 	}
 
 	// Загружаем все шаблоны с функциями
-	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join("templates", "*.html")))
+	templates := template.Must(template.New("").Funcs(funcMap).ParseGlob("templates/*.html"))
 
 	return &Handler{
 		db:        db,

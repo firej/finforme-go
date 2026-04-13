@@ -35,6 +35,8 @@ type Account struct {
 	Childs       []*Account `json:"childs,omitempty"`
 	Level        int        `json:"level,omitempty"`        // Уровень вложенности для отображения
 	DisplayName  string     `json:"display_name,omitempty"` // Имя с отступами для select
+	IsLast       bool       `json:"-"`                      // Является ли последним дочерним элементом
+	TreeLines    []string   `json:"-"`                      // Линии дерева для каждого уровня: "pipe", "tee", "corner", "blank"
 }
 
 // Transaction представляет транзакцию

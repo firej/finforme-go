@@ -13,9 +13,9 @@ import (
 )
 
 func TestParseCBRXML(t *testing.T) {
-	f, err := os.Open("testdata_cbr.xml")
+	f, err := os.Open("testdata/cbr.xml")
 	if err != nil {
-		t.Fatalf("cannot open testdata_cbr.xml: %v", err)
+		t.Fatalf("cannot open testdata/cbr.xml: %v", err)
 	}
 	defer f.Close()
 

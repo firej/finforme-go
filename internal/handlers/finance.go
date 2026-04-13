@@ -145,14 +145,14 @@ func (h *Handler) buildAccountTree(accounts []*models.Account, accountsMap map[i
 
 	// Рекурсивно строим дерево для каждого корневого счета
 	for _, root := range rootAccounts {
-		h.buildAccountChildren(root, accountsMap)
+		h.buildAccountChildren(root, accountsMap, []string{})
 	}
 
 	return rootAccounts
 }
 
-// buildAccountChildren рекурсивно строит дочерние счета
-func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[int64]*models.Account) {
+// buildAccountChildren рекурсивно строит дочерние счета и вычисляет TreeLines
+func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[int64]*models.Account, parentLines []string) {
 	parent.Childs = make([]*models.Account, 0)
 
 	for _, acc := range accountsMap {
@@ -164,9 +164,50 @@ func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[i
 	// Сортируем дочерние счета по ID для стабильности
 	h.sortAccountsByID(parent.Childs)
 
-	// Рекурсивно обрабатываем дочерние счета
+	// Считаем видимые дочерние счета для определения последнего
+	visibleChilds := make([]*models.Account, 0)
 	for _, child := range parent.Childs {
-		h.buildAccountChildren(child, accountsMap)
+		if child.AccountType != models.AccountTypeRoot && child.Hidden == 0 {
+			visibleChilds = append(visibleChilds, child)
+		}
+	}
+
+	// Рекурсивно обрабатываем дочерние счета с вычислением TreeLines
+	visibleIdx := 0
+	for _, child := range parent.Childs {
+		isVisible := child.AccountType != models.AccountTypeRoot && child.Hidden == 0
+		if isVisible {
+			isLast := visibleIdx == len(visibleChilds)-1
+			child.IsLast = isLast
+
+			// Строим TreeLines для этого дочернего элемента
+			child.TreeLines = make([]string, len(parentLines)+1)
+			copy(child.TreeLines, parentLines)
+
+			if isLast {
+				child.TreeLines[len(parentLines)] = "corner" // └
+			} else {
+				child.TreeLines[len(parentLines)] = "tee" // ├
+			}
+
+			// Отладочный вывод
+			log.Printf("Account: %s, TreeLines: %v", child.Name, child.TreeLines)
+
+			// Для дочерних элементов этого узла: если текущий не последний, рисуем вертикальную линию
+			childParentLines := make([]string, len(parentLines)+1)
+			copy(childParentLines, parentLines)
+			if isLast {
+				childParentLines[len(parentLines)] = "blank" // пустое место
+			} else {
+				childParentLines[len(parentLines)] = "pipe" // │
+			}
+
+			h.buildAccountChildren(child, accountsMap, childParentLines)
+			visibleIdx++
+		} else {
+			// Для скрытых/ROOT счетов тоже строим дерево (на случай если у них есть видимые потомки)
+			h.buildAccountChildren(child, accountsMap, parentLines)
+		}
 	}
 }
 
@@ -2169,4 +2210,53 @@ func (h *Handler) APITransactionTableGet(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.renderTemplate(w, "finance_transactions_tbody.html", data)
+}
+
+// APIAccountFormGet - возвращает HTML-фрагмент формы для модального окна редактирования/создания счёта
+func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
+
+	accountIDStr := r.URL.Query().Get("account_id")
+
+	var account *models.Account
+
+	if accountIDStr != "" && accountIDStr != "0" {
+		accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+		if err == nil {
+			var acc models.Account
+			var parentID sql.NullInt64
+			var code, description sql.NullString
+			err = h.db.QueryRow(`
+				SELECT id, name, account_type, commodity_id, commodity_scu, non_std_scu,
+				       parent_id, code, description, hidden, placeholder
+				FROM accounts WHERE id = ? AND user_id = ?
+			`, accountID, userID).Scan(&acc.ID, &acc.Name, &acc.AccountType,
+				&acc.CommodityID, &acc.CommoditySCU, &acc.NonStdSCU,
+				&parentID, &code, &description, &acc.Hidden, &acc.Placeholder)
+
+			if err == nil {
+				if parentID.Valid {
+					acc.ParentID = &parentID.Int64
+				}
+				if code.Valid {
+					acc.Code = code.String
+				}
+				if description.Valid {
+					acc.Description = description.String
+				}
+				account = &acc
+			}
+		}
+	}
+
+	accounts, _ := h.getAccounts(userID)
+	commodities, _ := h.getCommodities()
+
+	data := map[string]interface{}{
+		"Account":     account,
+		"Accounts":    accounts,
+		"Commodities": commodities,
+	}
+
+	h.renderTemplate(w, "finance_account_modal_form.html", data)
 }

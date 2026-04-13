@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )

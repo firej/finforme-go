@@ -16,6 +16,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o finforme ./cmd/server/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates ./cmd/import-rates/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates-history ./cmd/import-rates-history/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o telegram-bot ./cmd/telegram-bot/
 
 # Финальный образ
 FROM debian:bookworm-slim
@@ -32,6 +33,7 @@ WORKDIR /app
 COPY --from=builder /app/finforme .
 COPY --from=builder /app/import-rates .
 COPY --from=builder /app/import-rates-history .
+COPY --from=builder /app/telegram-bot .
 
 # Копируем статические файлы и шаблоны
 COPY static/ ./static/

@@ -4,9 +4,9 @@
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-2xl font-bold text-gray-900">Список счетов</h1>
-        <a href="/finance/account/new" class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm">
+        <button onclick="openAccountModal(0)" class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm">
             + Добавить счет
-        </a>
+        </button>
     </div>
 
     <div class="overflow-x-auto">
@@ -28,6 +28,121 @@
     </div>
 </div>
 
+<!-- Модальное окно для редактирования/создания счёта -->
+<div id="account-modal" class="modal-overlay hidden" onclick="handleAccountModalOverlayClick(event)">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h2 id="account-modal-title" class="text-xl font-bold text-gray-900">Счёт</h2>
+            <button onclick="closeAccountModal()" class="modal-close-btn" aria-label="Закрыть">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        <div id="account-modal-body" class="modal-body">
+            <div class="flex items-center justify-center py-8">
+                <div class="spinner"></div>
+                <span class="text-gray-500 ml-2">Загрузка...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // === Модальное окно для счетов ===
+    function openAccountModal(accountId) {
+        var modal = document.getElementById('account-modal');
+        var modalTitle = document.getElementById('account-modal-title');
+        var modalBody = document.getElementById('account-modal-body');
+
+        modalTitle.textContent = accountId ? 'Редактирование счёта' : 'Новый счёт';
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+
+        modalBody.innerHTML = '<div class="flex items-center justify-center py-8"><div class="spinner"></div><span class="text-gray-500 ml-2">Загрузка...</span></div>';
+
+        var url = '/api/v1/finance/account/form?account_id=' + accountId;
+        fetch(url)
+            .then(function(response) { return response.text(); })
+            .then(function(html) {
+                modalBody.innerHTML = html;
+                htmx.process(modalBody);
+
+                var nameInput = document.getElementById('modal-account_name');
+                if (nameInput) nameInput.focus();
+            })
+            .catch(function(err) {
+                modalBody.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">Ошибка загрузки формы</div>';
+            });
+    }
+
+    function closeAccountModal() {
+        var modal = document.getElementById('account-modal');
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function handleAccountModalOverlayClick(event) {
+        if (event.target === event.currentTarget) {
+            closeAccountModal();
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            var modal = document.getElementById('account-modal');
+            if (!modal.classList.contains('hidden')) {
+                closeAccountModal();
+            }
+        }
+    });
+
+    // === Отправка формы счёта через fetch ===
+    function submitAccountForm(event) {
+        event.preventDefault();
+
+        var form = document.getElementById('modal-account-form');
+        var submitBtn = document.getElementById('modal-account-submit-btn');
+        var formData = new URLSearchParams(new FormData(form));
+
+        // Блокируем кнопку на время отправки
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Сохранение...';
+
+        fetch('/api/v1/finance/account/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.result === 'ok') {
+                // Закрываем модальное окно и перезагружаем страницу
+                closeAccountModal();
+                window.location.reload();
+            } else if (data.error) {
+                var resultEl = document.getElementById('modal-account-result');
+                if (resultEl) {
+                    resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm mt-3">Ошибка: ' + data.error + '</div>';
+                }
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Сохранить';
+            }
+        })
+        .catch(function(err) {
+            var resultEl = document.getElementById('modal-account-result');
+            if (resultEl) {
+                resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm mt-3">Ошибка соединения с сервером</div>';
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Сохранить';
+        });
+
+        return false;
+    }
+</script>
+
 {{template "footer" .}}
 {{end}}
 
@@ -37,8 +152,7 @@
     <tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="window.location='/finance/account/{{.ID}}'">
         <td class="py-2.5 px-3">
             <div class="flex items-center">
-                <span class="mr-1.5 text-gray-400">📁</span>
-                <span class="text-gray-900 font-medium">{{.Name}}</span>
+                <span class="account-name" style="padding-left: {{mul .Level 24}}px">{{.Name}}</span>
             </div>
         </td>
         <td class="py-2.5 px-3">
@@ -60,7 +174,7 @@
         </td>
         <td class="py-2.5 px-3" onclick="event.stopPropagation()">
             <div class="flex gap-1.5">
-                <a href="/finance/account/{{.ID}}/edit" class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">Изменить</a>
+                <button onclick="openAccountModal({{.ID}})" class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">Изменить</button>
                 <button
                     hx-delete="/api/v1/finance/account/delete?id={{.ID}}"
                     hx-confirm="Вы уверены?"
@@ -76,62 +190,7 @@
     {{end}}
     {{if .Childs}}
         {{range .Childs}}
-            {{template "account_row_child" (dict "Account" . "Level" 1)}}
-        {{end}}
-    {{end}}
-{{end}}
-
-{{define "account_row_child"}}
-    {{$account := .Account}}
-    {{$level := .Level}}
-    {{if ne $account.AccountType "ROOT"}}
-    {{if eq $account.Hidden 0}}
-    <tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="window.location='/finance/account/{{$account.ID}}'">
-        <td class="py-2.5 px-3">
-            <div class="flex items-center">
-                {{range $i := iterate $level}}
-                    <span class="inline-block w-5"></span>
-                {{end}}
-                <span class="mr-1.5 text-gray-300">└</span>
-                <span class="text-gray-700">{{$account.Name}}</span>
-            </div>
-        </td>
-        <td class="py-2.5 px-3">
-            {{if eq $account.AccountType "ASSET"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-cyan-100 text-cyan-800">ASSET</span>
-            {{else if eq $account.AccountType "BANK"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">BANK</span>
-            {{else if eq $account.AccountType "CASH"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">CASH</span>
-            {{else if eq $account.AccountType "LIABILITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800">LIABILITY</span>
-            {{else if eq $account.AccountType "INCOME"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-cyan-100 text-cyan-800">INCOME</span>
-            {{else if eq $account.AccountType "EXPENSE"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800">EXPENSE</span>
-            {{else if eq $account.AccountType "EQUITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">EQUITY</span>
-            {{else}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600">{{$account.AccountType}}</span>
-            {{end}}
-        </td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm">
-            {{if gt $account.Balance 0.01}}<span class="text-emerald-600 font-medium">{{formatMoney $account.Balance}}</span>
-            {{else if lt $account.Balance -0.01}}<span class="text-red-600 font-medium">{{formatMoney $account.Balance}}</span>
-            {{else}}<span class="text-gray-400">{{formatMoney $account.Balance}}</span>
-            {{end}}
-        </td>
-        <td class="py-2.5 px-3" onclick="event.stopPropagation()">
-            <div class="flex gap-1.5">
-                <a href="/finance/account/{{$account.ID}}/edit" class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">Изменить</a>
-                <button
-                    hx-delete="/api/v1/finance/account/delete?id={{$account.ID}}"
-                    hx-confirm="Вы уверены?"
-                    hx-target="closest tr"
-                    hx-swap="outerHTML swap:1s"
-                    class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors">
-                    Удалить
-                </button>
-            </div>
-        </td>
-    </tr>
-    {{end}}
-    {{end}}
-    {{if $account.Childs}}
-        {{range $account.Childs}}
-            {{template "account_row_child" (dict "Account" . "Level" (add $level 1))}}
+            {{template "account_row" .}}
         {{end}}
     {{end}}
 {{end}}

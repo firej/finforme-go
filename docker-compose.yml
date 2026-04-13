@@ -13,6 +13,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  telegram-bot:
+    build: .
+    command: ["./telegram-bot"]
+    environment:
+      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+
   mariadb:
     image: mariadb:11
     environment:

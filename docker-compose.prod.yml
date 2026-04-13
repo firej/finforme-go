@@ -1,0 +1,36 @@
+# Продакшен конфигурация для сервера finfor.me
+# Используется совместно с Traefik
+services:
+  finforme:
+    image: finforme:latest
+    container_name: finforme
+    restart: unless-stopped
+    networks:
+      - traefik
+    environment:
+      - PORT=8080
+      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      - SESSION_SECRET=change-me-in-production
+      - SECURE_COOKIE=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.finforme.rule=Host(`finfor.me`)"
+      - "traefik.http.routers.finforme.entrypoints=websecure"
+      - "traefik.http.routers.finforme.tls.certresolver=letsencrypt"
+      - "traefik.http.services.finforme.loadbalancer.server.port=8080"
+
+  finforme-bot:
+    image: finforme:latest
+    container_name: finforme-bot
+    restart: unless-stopped
+    command: ["./telegram-bot"]
+    networks:
+      - traefik
+    env_file:
+      - .env
+    environment:
+      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+
+networks:
+  traefik:
+    external: true

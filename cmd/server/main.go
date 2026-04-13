@@ -93,6 +93,7 @@ func main() {
 	api.Use(h.RequireAuthMiddleware)
 	api.HandleFunc("/finance/accounts/get", h.APIAccountsGet).Methods("GET")
 	api.HandleFunc("/finance/account/save", h.APIAccountSave).Methods("POST")
+	api.HandleFunc("/finance/account/form", h.APIAccountFormGet).Methods("GET")
 	api.HandleFunc("/finance/account/delete", h.APIAccountDelete).Methods("DELETE")
 	api.HandleFunc("/finance/transactions/get", h.APITransactionsGet).Methods("GET")
 	api.HandleFunc("/finance/transaction/save", h.APITransactionSave).Methods("POST")

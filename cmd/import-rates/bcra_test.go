@@ -8,9 +8,9 @@ import (
 )
 
 func TestParseBCRAJSON(t *testing.T) {
-	f, err := os.Open("testdata_bcra.json")
+	f, err := os.Open("testdata/bcra.json")
 	if err != nil {
-		t.Fatalf("cannot open testdata_bcra.json: %v", err)
+		t.Fatalf("cannot open testdata/bcra.json: %v", err)
 	}
 	defer f.Close()
 

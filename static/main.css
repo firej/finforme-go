@@ -1,5 +1,71 @@
 /* Tailwind-совместимые стили для finfor.me */
 
+/* === Древовидная структура счетов === */
+.tree-line {
+    display: inline-block;
+    width: 1.5rem;
+    height: 2.5rem;
+    position: relative;
+    flex-shrink: 0;
+    vertical-align: middle;
+}
+
+/* Вертикальная линия — продолжение ветки от предыдущего уровня */
+.tree-pipe::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #e5e7eb;
+}
+
+/* Тройник — элемент с продолжением ветки ниже */
+.tree-tee::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #e5e7eb;
+}
+.tree-tee::after {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    width: 0.75rem;
+    height: 1px;
+    background-color: #e5e7eb;
+}
+
+/* Угол — последний элемент ветки */
+.tree-corner::before {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 0;
+    height: 50%;
+    width: 1px;
+    background-color: #e5e7eb;
+}
+.tree-corner::after {
+    content: '';
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    width: 0.75rem;
+    height: 1px;
+    background-color: #e5e7eb;
+}
+
+/* Пустое место — нет линии на этом уровне */
+.tree-blank {
+    /* Просто занимает место, без линий */
+}
+
 /* Анимации для htmx */
 .htmx-swapping {
     opacity: 0;
