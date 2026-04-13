@@ -20,6 +20,7 @@
                         {{if eq .Code "USD/RUB"}}$
                         {{else if eq .Code "EUR/RUB"}}€
                         {{else if eq .Code "USDT/RUB"}}₮
+                        {{else if eq .Code "BTC/USD"}}₿
                         {{else if eq .Code "USD/ARS"}}🇦🇷
                         {{else if eq .Code "RUB/ARS"}}🇦🇷
                         {{else}}?{{end}}
@@ -35,6 +36,15 @@
                     {{if ne .Change 0.0}}
                     <div class="text-sm font-medium {{if gt .Change 0.0}}text-green-600{{else}}text-red-500{{end}}">
                         {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} ARS
+                    </div>
+                    {{else}}
+                    <div class="text-sm text-gray-400">— нет данных за пред. день</div>
+                    {{end}}
+                    {{else if eq .Code "BTC/USD"}}
+                    <div class="text-xl font-bold text-gray-900">{{formatMoney .Rate}} <span class="text-base font-normal text-gray-500">$</span></div>
+                    {{if ne .Change 0.0}}
+                    <div class="text-sm font-medium {{if gt .Change 0.0}}text-green-600{{else}}text-red-500{{end}}">
+                        {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} $
                     </div>
                     {{else}}
                     <div class="text-sm text-gray-400">— нет данных за пред. день</div>
@@ -85,6 +95,7 @@
 
     <p class="text-xs text-gray-400 mt-4 text-center">
         USD/RUB, EUR/RUB — официальный курс ЦБ РФ.<br>
+        BTC/USD — курс биткоина (Coinbase).<br>
         USD/ARS — официальный курс ЦБ Аргентины (BCRA). RUB/ARS — кросс-курс.
     </p>
 </div>
@@ -143,6 +154,7 @@
         'USD/RUB':  { line: '#3b82f6', fill: 'rgba(59,130,246,0.08)',  unit: '₽' },
         'EUR/RUB':  { line: '#8b5cf6', fill: 'rgba(139,92,246,0.08)', unit: '₽' },
         'USDT/RUB': { line: '#10b981', fill: 'rgba(16,185,129,0.08)', unit: '₽' },
+        'BTC/USD':  { line: '#f97316', fill: 'rgba(249,115,22,0.08)',  unit: '$' },
         'USD/ARS':  { line: '#f59e0b', fill: 'rgba(245,158,11,0.08)',  unit: 'ARS' },
         'RUB/ARS':  { line: '#ef4444', fill: 'rgba(239,68,68,0.08)',   unit: 'ARS' },
     };

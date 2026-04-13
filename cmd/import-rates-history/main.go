@@ -1,4 +1,4 @@
-// Скрипт для однократного импорта исторических курсов валют с сайта ЦБ РФ и BCRA.
+// Скрипт для однократного импорта исторических курсов валют с сайта ЦБ РФ, BCRA и Coinbase.
 // Загружает данные по месяцам за указанный период.
 //
 // Использование:
@@ -44,6 +44,7 @@ var xmlDeclRe = regexp.MustCompile(`<\?xml[^?]*\?>`)
 func main() {
 	fromStr := flag.String("from", "", "Начальная дата (YYYY-MM-DD), по умолчанию 3 года назад")
 	toStr := flag.String("to", "", "Конечная дата (YYYY-MM-DD), по умолчанию сегодня")
+	onlyStr := flag.String("only", "", "Импортировать только указанный источник: cbr, bcra, btc")
 	flag.Parse()
 
 	now := time.Now()
@@ -88,11 +89,44 @@ func main() {
 	totalImported := 0
 	totalErrors := 0
 
-	// --- ЦБ РФ: USD/RUB и EUR/RUB ---
-	for _, cur := range cbrCurrencies {
-		log.Printf("--- Importing %s (CBR code: %s) ---", cur.code, cur.cbrCode)
+	only := *onlyStr
 
-		// Разбиваем на месячные чанки — ЦБ РФ лучше работает с небольшими диапазонами
+	// --- ЦБ РФ: USD/RUB и EUR/RUB ---
+	if only == "" || only == "cbr" {
+		for _, cur := range cbrCurrencies {
+			log.Printf("--- Importing %s (CBR code: %s) ---", cur.code, cur.cbrCode)
+
+			// Разбиваем на месячные чанки — ЦБ РФ лучше работает с небольшими диапазонами
+			chunkStart := fromDate
+			for chunkStart.Before(toDate) {
+				chunkEnd := chunkStart.AddDate(0, 1, 0)
+				if chunkEnd.After(toDate) {
+					chunkEnd = toDate
+				}
+
+				imported, err := importCBRHistoricalChunk(db, client, cur.code, cur.name, cur.cbrCode, chunkStart, chunkEnd)
+				if err != nil {
+					log.Printf("ERROR %s [%s - %s]: %v",
+						cur.code,
+						chunkStart.Format("2006-01-02"),
+						chunkEnd.Format("2006-01-02"),
+						err)
+					totalErrors++
+				} else {
+					totalImported += imported
+				}
+
+				// Небольшая пауза чтобы не перегружать ЦБ РФ
+				time.Sleep(200 * time.Millisecond)
+
+				chunkStart = chunkEnd.AddDate(0, 0, 1)
+			}
+		}
+	} // end cbr
+
+	// --- BCRA: USD/ARS ---
+	if only == "" || only == "bcra" {
+		log.Printf("--- Importing USD/ARS from BCRA ---")
 		chunkStart := fromDate
 		for chunkStart.Before(toDate) {
 			chunkEnd := chunkStart.AddDate(0, 1, 0)
@@ -100,10 +134,9 @@ func main() {
 				chunkEnd = toDate
 			}
 
-			imported, err := importCBRHistoricalChunk(db, client, cur.code, cur.name, cur.cbrCode, chunkStart, chunkEnd)
+			imported, err := importBCRAHistoricalChunk(db, client, chunkStart, chunkEnd)
 			if err != nil {
-				log.Printf("ERROR %s [%s - %s]: %v",
-					cur.code,
+				log.Printf("ERROR USD/ARS [%s - %s]: %v",
 					chunkStart.Format("2006-01-02"),
 					chunkEnd.Format("2006-01-02"),
 					err)
@@ -112,47 +145,37 @@ func main() {
 				totalImported += imported
 			}
 
-			// Небольшая пауза чтобы не перегружать ЦБ РФ
 			time.Sleep(200 * time.Millisecond)
-
 			chunkStart = chunkEnd.AddDate(0, 0, 1)
 		}
-	}
+	} // end bcra
 
-	// --- BCRA: USD/ARS ---
-	log.Printf("--- Importing USD/ARS from BCRA ---")
-	chunkStart := fromDate
-	for chunkStart.Before(toDate) {
-		chunkEnd := chunkStart.AddDate(0, 1, 0)
-		if chunkEnd.After(toDate) {
-			chunkEnd = toDate
-		}
-
-		imported, err := importBCRAHistoricalChunk(db, client, chunkStart, chunkEnd)
-		if err != nil {
-			log.Printf("ERROR USD/ARS [%s - %s]: %v",
-				chunkStart.Format("2006-01-02"),
-				chunkEnd.Format("2006-01-02"),
-				err)
+	// --- BTC/USD ---
+	if only == "" || only == "btc" {
+		log.Printf("--- Importing BTC/USD ---")
+		btcImported, btcErr := importBTCUSDHistory(db, client, fromDate, toDate)
+		if btcErr != nil {
+			log.Printf("ERROR BTC/USD: %v", btcErr)
 			totalErrors++
 		} else {
-			totalImported += imported
+			log.Printf("BTC/USD: %d records", btcImported)
+			totalImported += btcImported
 		}
-
-		time.Sleep(200 * time.Millisecond)
-		chunkStart = chunkEnd.AddDate(0, 0, 1)
-	}
+	} // end btc
 
 	// --- Кросс-курс RUB/ARS = USD/ARS / USD/RUB ---
-	log.Printf("--- Computing cross-rate RUB/ARS ---")
-	crossImported, err := importCrossRateRUBARS(db, fromDate, toDate)
-	if err != nil {
-		log.Printf("ERROR computing RUB/ARS cross-rate: %v", err)
-		totalErrors++
-	} else {
-		log.Printf("RUB/ARS cross-rate: %d records", crossImported)
-		totalImported += crossImported
-	}
+	if only == "" || only == "bcra" {
+		log.Printf("--- Computing cross-rate RUB/ARS ---")
+		crossImported, err := importCrossRateRUBARS(db, fromDate, toDate)
+		if err != nil {
+			log.Printf("ERROR computing RUB/ARS cross-rate: %v", err)
+			totalErrors++
+		} else {
+			log.Printf("RUB/ARS cross-rate: %d records", crossImported)
+			totalImported += crossImported
+		}
+
+	} // end cross
 
 	log.Printf("Done: imported %d records, errors: %d", totalImported, totalErrors)
 }
@@ -353,6 +376,97 @@ func importBCRAHistoricalChunk(
 	}
 
 	log.Printf("  USD/ARS [%s - %s]: %d records", fromStr, toStr, imported)
+	return imported, nil
+}
+
+// --- BTC/USD ---
+
+// importBTCUSDHistory загружает исторические курсы BTC/USD через Coinbase API.
+// Coinbase поддерживает параметр ?date=YYYY-MM-DD без ограничений по глубине истории.
+// Данные сохраняются с source='coinbase' для совместимости с ежедневным импортом.
+func importBTCUSDHistory(
+	db *sql.DB,
+	client *http.Client,
+	from, to time.Time,
+) (int, error) {
+	imported := 0
+	errCount := 0
+
+	for d := from; !d.After(to); d = d.AddDate(0, 0, 1) {
+		dateStr := d.Format("2006-01-02")
+
+		url := fmt.Sprintf("https://api.coinbase.com/v2/prices/BTC-USD/spot?date=%s", dateStr)
+
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			log.Printf("  BTC/USD: create request failed for %s: %v", dateStr, err)
+			errCount++
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; finforme-history/1.0)")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("  BTC/USD: request failed for %s: %v", dateStr, err)
+			errCount++
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			log.Printf("  BTC/USD: status %d for %s: %s", resp.StatusCode, dateStr, string(body))
+			errCount++
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		var result struct {
+			Data struct {
+				Amount string `json:"amount"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			resp.Body.Close()
+			log.Printf("  BTC/USD: json parse failed for %s: %v", dateStr, err)
+			errCount++
+			continue
+		}
+		resp.Body.Close()
+
+		var price float64
+		if _, err := fmt.Sscanf(result.Data.Amount, "%f", &price); err != nil || price == 0 {
+			log.Printf("  BTC/USD: parse price failed for %s: amount=%q", dateStr, result.Data.Amount)
+			errCount++
+			continue
+		}
+
+		_, err = db.Exec(`
+			INSERT INTO currency_rates (code, name, rate, source, rate_date)
+			VALUES ('BTC/USD', 'Bitcoin', ?, 'coinbase', ?)
+			ON DUPLICATE KEY UPDATE rate = VALUES(rate), name = VALUES(name), created_at = CURRENT_TIMESTAMP
+		`, price, dateStr)
+		if err != nil {
+			log.Printf("  BTC/USD: db insert failed for %s: %v", dateStr, err)
+			errCount++
+			continue
+		}
+		imported++
+
+		// Логируем прогресс каждые 30 дней
+		if imported%30 == 0 {
+			log.Printf("  BTC/USD: %d records so far (current: %s, price: %.2f)", imported, dateStr, price)
+		}
+
+		// Пауза между запросами
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	if errCount > 0 {
+		log.Printf("  BTC/USD: %d errors during import", errCount)
+	}
+	log.Printf("  BTC/USD [%s - %s]: %d records", from.Format("2006-01-02"), to.Format("2006-01-02"), imported)
 	return imported, nil
 }
 

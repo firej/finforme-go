@@ -129,9 +129,10 @@ func loadCurrencyRates(db *sql.DB) ([]CurrencyRateRow, string, error) {
 				WHEN 'USD/RUB'  THEN 1
 				WHEN 'EUR/RUB'  THEN 2
 				WHEN 'USDT/RUB' THEN 3
-				WHEN 'USD/ARS'  THEN 4
-				WHEN 'RUB/ARS'  THEN 5
-				ELSE 6
+				WHEN 'BTC/USD'  THEN 4
+				WHEN 'USD/ARS'  THEN 5
+				WHEN 'RUB/ARS'  THEN 6
+				ELSE 7
 			END,
 			cr.source
 	`)
@@ -176,9 +177,10 @@ func loadCurrencyCharts(db *sql.DB, days int) ([]CurrencyChartData, error) {
 				WHEN 'USD/RUB'  THEN 1
 				WHEN 'EUR/RUB'  THEN 2
 				WHEN 'USDT/RUB' THEN 3
-				WHEN 'USD/ARS'  THEN 4
-				WHEN 'RUB/ARS'  THEN 5
-				ELSE 6
+				WHEN 'BTC/USD'  THEN 4
+				WHEN 'USD/ARS'  THEN 5
+				WHEN 'RUB/ARS'  THEN 6
+				ELSE 7
 			END,
 			source,
 			rate_date ASC
