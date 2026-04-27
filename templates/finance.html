@@ -10,16 +10,16 @@
     </div>
 
     <div class="overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="w-full text-sm border-collapse">
             <thead>
                 <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600 w-1/2">Название</th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600 w-[12%]">Тип</th>
-                    <th class="text-right py-3 px-3 font-semibold text-gray-600 w-[13%]">Баланс</th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600 w-1/4">Действия</th>
+                    <th class="text-left py-2 px-3 font-semibold text-xs text-gray-500 uppercase tracking-wide">Название</th>
+                    <th class="text-center py-2 px-3 font-semibold text-xs text-gray-500 uppercase tracking-wide w-24">Тип</th>
+                    <th class="text-right py-2 px-3 font-semibold text-xs text-gray-500 uppercase tracking-wide w-36">Баланс</th>
+                    <th class="text-right py-2 px-3 font-semibold text-xs text-gray-500 uppercase tracking-wide w-36">Действия</th>
                 </tr>
             </thead>
-            <tbody class="divide-y divide-gray-100">
+            <tbody id="accounts-tree">
                 {{range .AccountTree}}
                     {{template "account_row" .}}
                 {{end}}
@@ -106,7 +106,6 @@
         var submitBtn = document.getElementById('modal-account-submit-btn');
         var formData = new URLSearchParams(new FormData(form));
 
-        // Блокируем кнопку на время отправки
         submitBtn.disabled = true;
         submitBtn.textContent = 'Сохранение...';
 
@@ -118,7 +117,6 @@
         .then(function(response) { return response.json(); })
         .then(function(data) {
             if (data.result === 'ok') {
-                // Закрываем модальное окно и перезагружаем страницу
                 closeAccountModal();
                 window.location.reload();
             } else if (data.error) {
@@ -141,56 +139,144 @@
 
         return false;
     }
+
+    // === Дерево счетов ===
+
+    // Переход на страницу счёта (клик по строке, но не по кнопкам)
+    function handleAccountRowClick(event, accountId) {
+        window.location = '/finance/account/' + accountId;
+    }
+
+    // Свернуть / развернуть дочерние счета
+    function toggleAccount(event, accountId) {
+        event.stopPropagation();
+
+        var btn = event.currentTarget;
+        var icon = btn.querySelector('.toggle-icon');
+        var isExpanded = btn.dataset.expanded !== 'false';
+
+        // Находим все строки-потомки (рекурсивно по data-parent-id)
+        function setDescendantsVisible(parentId, visible) {
+            document.querySelectorAll('tr.account-row[data-parent-id="' + parentId + '"]').forEach(function(row) {
+                row.style.display = visible ? '' : 'none';
+                // Если сворачиваем — рекурсивно скрываем и потомков потомков
+                // Если разворачиваем — показываем только прямых детей (их кнопки управляют своими потомками)
+                if (!visible) {
+                    setDescendantsVisible(row.dataset.id, false);
+                }
+            });
+        }
+
+        if (isExpanded) {
+            setDescendantsVisible(accountId, false);
+            icon.style.transform = 'rotate(0deg)';
+            btn.dataset.expanded = 'false';
+        } else {
+            // Показываем только прямых детей
+            document.querySelectorAll('tr.account-row[data-parent-id="' + accountId + '"]').forEach(function(row) {
+                row.style.display = '';
+            });
+            icon.style.transform = 'rotate(90deg)';
+            btn.dataset.expanded = 'true';
+        }
+    }
+
+    // Удаление счёта
+    function deleteAccount(event, accountId) {
+        event.stopPropagation();
+        if (!confirm('Вы уверены?')) return;
+
+        fetch('/api/v1/finance/account/delete?id=' + accountId, { method: 'DELETE' })
+            .then(function(resp) {
+                if (resp.ok) {
+                    window.location.reload();
+                    return;
+                }
+                return resp.json().then(function(data) {
+                    alert('Ошибка удаления: ' + (data.error || 'неизвестная ошибка'));
+                });
+            })
+            .catch(function() {
+                window.location.reload();
+            });
+    }
 </script>
 
 {{template "footer" .}}
 {{end}}
 
 {{define "account_row"}}
-    {{if ne .AccountType "ROOT"}}
-    {{if eq .Hidden 0}}
-    <tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="window.location='/finance/account/{{.ID}}'">
-        <td class="py-2.5 px-3">
-            <div class="flex items-center">
-                <span class="account-name" style="padding-left: {{mul .Level 24}}px">{{.Name}}</span>
-            </div>
-        </td>
-        <td class="py-2.5 px-3">
-            {{if eq .AccountType "ASSET"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-cyan-100 text-cyan-800">ASSET</span>
-            {{else if eq .AccountType "BANK"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">BANK</span>
-            {{else if eq .AccountType "CASH"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">CASH</span>
-            {{else if eq .AccountType "LIABILITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800">LIABILITY</span>
-            {{else if eq .AccountType "INCOME"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-cyan-100 text-cyan-800">INCOME</span>
-            {{else if eq .AccountType "EXPENSE"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800">EXPENSE</span>
-            {{else if eq .AccountType "EQUITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">EQUITY</span>
-            {{else}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600">{{.AccountType}}</span>
+{{if ne .AccountType "ROOT"}}
+{{if eq .Hidden 0}}
+<tr
+    class="account-row border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+    data-id="{{.ID}}"
+    data-level="{{.Level}}"
+    data-parent-id="{{if .ParentID}}{{.ParentID}}{{end}}"
+    onclick="handleAccountRowClick(event, {{.ID}})"
+>
+    <!-- Название с отступом и кнопкой раскрытия -->
+    <td class="py-2.5 px-3">
+        <div class="flex items-center" style="padding-left: {{mul .Level 14}}px">
+            {{if .Childs}}
+            <button
+                class="account-toggle flex-shrink-0 w-5 h-5 mr-1 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors rounded"
+                onclick="toggleAccount(event, {{.ID}})"
+                aria-label="Свернуть/развернуть"
+            >
+                <svg class="toggle-icon w-3 h-3 transition-transform duration-150 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/>
+                </svg>
+            </button>
+            {{else}}
+            <span class="flex-shrink-0 inline-block w-5 h-5 mr-1"></span>
             {{end}}
-        </td>
-        <td class="py-2.5 px-3 text-right font-mono text-sm">
-            {{if gt .Balance 0.01}}<span class="text-emerald-600 font-medium">{{formatMoney .Balance}}</span>
-            {{else if lt .Balance -0.01}}<span class="text-red-600 font-medium">{{formatMoney .Balance}}</span>
-            {{else}}<span class="text-gray-400">{{formatMoney .Balance}}</span>
-            {{end}}
-        </td>
-        <td class="py-2.5 px-3" onclick="event.stopPropagation()">
-            <div class="flex gap-1.5">
-                <button onclick="openAccountModal({{.ID}})" class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors">Изменить</button>
-                <button
-                    hx-delete="/api/v1/finance/account/delete?id={{.ID}}"
-                    hx-confirm="Вы уверены?"
-                    hx-target="closest tr"
-                    hx-swap="outerHTML swap:1s"
-                    class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors">
-                    Удалить
-                </button>
-            </div>
-        </td>
-    </tr>
-    {{end}}
-    {{end}}
-    {{if .Childs}}
-        {{range .Childs}}
-            {{template "account_row" .}}
+            <span class="text-sm text-gray-800">{{.Name}}</span>
+        </div>
+    </td>
+
+    <!-- Тип -->
+    <td class="py-2.5 px-3 text-center w-24">
+        {{if eq .AccountType "ASSET"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-cyan-100 text-cyan-800">Актив</span>
+        {{else if eq .AccountType "BANK"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-800">Банк</span>
+        {{else if eq .AccountType "CASH"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">Нал</span>
+        {{else if eq .AccountType "LIABILITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-red-100 text-red-800">Долг</span>
+        {{else if eq .AccountType "INCOME"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-sky-100 text-sky-800">Доход</span>
+        {{else if eq .AccountType "EXPENSE"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-orange-100 text-orange-800">Расход</span>
+        {{else if eq .AccountType "EQUITY"}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-700">Капитал</span>
+        {{else}}<span class="inline-block px-2 py-0.5 text-xs font-medium rounded bg-gray-100 text-gray-600">{{.AccountType}}</span>
         {{end}}
+    </td>
+
+    <!-- Баланс -->
+    <td class="py-2.5 px-3 text-right font-mono text-sm w-36">
+        {{if gt .Balance 0.01}}<span class="text-emerald-600 font-medium">{{formatMoney .Balance}}</span>
+        {{else if lt .Balance -0.01}}<span class="text-red-600 font-medium">{{formatMoney .Balance}}</span>
+        {{else}}<span class="text-gray-400">{{formatMoney .Balance}}</span>
+        {{end}}
+    </td>
+
+    <!-- Действия -->
+    <td class="py-2.5 px-3 w-36" onclick="event.stopPropagation()">
+        <div class="flex justify-end gap-1.5">
+            <button
+                onclick="openAccountModal({{.ID}})"
+                class="px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors whitespace-nowrap">
+                Изменить
+            </button>
+            <button
+                onclick="deleteAccount(event, {{.ID}})"
+                class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors whitespace-nowrap">
+                Удалить
+            </button>
+        </div>
+    </td>
+</tr>
+{{end}}
+{{end}}
+{{if .Childs}}
+    {{range .Childs}}
+        {{template "account_row" .}}
     {{end}}
+{{end}}
 {{end}}

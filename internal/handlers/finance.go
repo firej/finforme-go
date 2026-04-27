@@ -145,14 +145,14 @@ func (h *Handler) buildAccountTree(accounts []*models.Account, accountsMap map[i
 
 	// Рекурсивно строим дерево для каждого корневого счета
 	for _, root := range rootAccounts {
-		h.buildAccountChildren(root, accountsMap, []string{})
+		h.buildAccountChildren(root, accountsMap, []string{}, 0)
 	}
 
 	return rootAccounts
 }
 
 // buildAccountChildren рекурсивно строит дочерние счета и вычисляет TreeLines
-func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[int64]*models.Account, parentLines []string) {
+func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[int64]*models.Account, parentLines []string, level int) {
 	parent.Childs = make([]*models.Account, 0)
 
 	for _, acc := range accountsMap {
@@ -179,6 +179,7 @@ func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[i
 		if isVisible {
 			isLast := visibleIdx == len(visibleChilds)-1
 			child.IsLast = isLast
+			child.Level = level
 
 			// Строим TreeLines для этого дочернего элемента
 			child.TreeLines = make([]string, len(parentLines)+1)
@@ -190,9 +191,6 @@ func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[i
 				child.TreeLines[len(parentLines)] = "tee" // ├
 			}
 
-			// Отладочный вывод
-			log.Printf("Account: %s, TreeLines: %v", child.Name, child.TreeLines)
-
 			// Для дочерних элементов этого узла: если текущий не последний, рисуем вертикальную линию
 			childParentLines := make([]string, len(parentLines)+1)
 			copy(childParentLines, parentLines)
@@ -202,11 +200,11 @@ func (h *Handler) buildAccountChildren(parent *models.Account, accountsMap map[i
 				childParentLines[len(parentLines)] = "pipe" // │
 			}
 
-			h.buildAccountChildren(child, accountsMap, childParentLines)
+			h.buildAccountChildren(child, accountsMap, childParentLines, level+1)
 			visibleIdx++
 		} else {
 			// Для скрытых/ROOT счетов тоже строим дерево (на случай если у них есть видимые потомки)
-			h.buildAccountChildren(child, accountsMap, parentLines)
+			h.buildAccountChildren(child, accountsMap, parentLines, level)
 		}
 	}
 }
