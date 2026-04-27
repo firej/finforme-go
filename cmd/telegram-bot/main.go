@@ -44,7 +44,21 @@ func main() {
 
 	// Включаем режим отладки
 	bot.Debug = true
-	log.Printf("Авторизован как %s", bot.Self.UserName)
+	log.Printf("Авторизован как @%s (id=%d)", bot.Self.UserName, bot.Self.ID)
+
+	// Регистрируем команды бота в Telegram — они появятся в меню "/"
+	// и будут корректно доставляться в групповых чатах
+	commands := tgbotapi.NewSetMyCommands(
+		tgbotapi.BotCommand{Command: "rate", Description: "Показать последние курсы валют"},
+		tgbotapi.BotCommand{Command: "rates", Description: "Показать последние курсы валют"},
+		tgbotapi.BotCommand{Command: "help", Description: "Показать справку"},
+		tgbotapi.BotCommand{Command: "start", Description: "Начать работу с ботом"},
+	)
+	if _, err := bot.Request(commands); err != nil {
+		log.Printf("Ошибка регистрации команд: %v", err)
+	} else {
+		log.Printf("Команды бота зарегистрированы")
+	}
 
 	// Настраиваем получение обновлений
 	u := tgbotapi.NewUpdate(0)
@@ -53,59 +67,101 @@ func main() {
 
 	// Обрабатываем входящие обновления
 	for update := range updates {
-		if update.Message == nil { // Игнорируем не-сообщения
-			continue
+		// Каждое обновление обрабатываем с защитой от паники,
+		// чтобы одно плохое сообщение не убило весь цикл
+		handleUpdate(bot, db, update)
+	}
+}
+
+// handleUpdate обрабатывает одно обновление от Telegram.
+// Паника внутри перехватывается, чтобы бот продолжал работу.
+func handleUpdate(bot *tgbotapi.BotAPI, db *sql.DB, update tgbotapi.Update) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ПАНИКА при обработке обновления update_id=%d: %v", update.UpdateID, r)
 		}
+	}()
 
-		// Логируем входящее сообщение
-		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+	if update.Message == nil {
+		// Игнорируем не-сообщения (callback, inline и т.д.)
+		return
+	}
 
-		// Обрабатываем команды
-		command := update.Message.Text
-		switch {
-		case strings.HasPrefix(command, "/start"):
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-				"Привет! Я бот для просмотра курсов валют.\n\n"+
-					"Доступные команды:\n"+
-					"/rate - показать последние курсы валют\n"+
-					"/help - показать справку")
-			bot.Send(msg)
-		case strings.HasPrefix(command, "/help"):
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID,
+	msg := update.Message
+
+	// Защита от системных сообщений без отправителя
+	senderName := "<system>"
+	if msg.From != nil {
+		senderName = "@" + msg.From.UserName
+	}
+
+	// Логируем входящее сообщение с информацией о чате
+	log.Printf("update_id=%d chat_id=%d chat_type=%s from=%s text=%q",
+		update.UpdateID, msg.Chat.ID, msg.Chat.Type, senderName, msg.Text)
+
+	// Обрабатываем только команды (сообщения начинающиеся с "/")
+	// В групповых чатах команды приходят как /cmd@botname — msg.Command() обрезает суффикс
+	if !msg.IsCommand() {
+		return
+	}
+
+	// Получаем имя команды без префикса "/" и без "@botname"
+	command := msg.Command()
+	log.Printf("Команда: /%s от %s в чате %d (%s)", command, senderName, msg.Chat.ID, msg.Chat.Type)
+
+	switch command {
+	case "start":
+		reply := tgbotapi.NewMessage(msg.Chat.ID,
+			"Привет! Я бот для просмотра курсов валют.\n\n"+
 				"Доступные команды:\n"+
-					"/start - начать работу с ботом\n"+
-					"/rate - показать последние курсы валют\n"+
-					"/help - показать эту справку")
-			bot.Send(msg)
-		case strings.HasPrefix(command, "/rate"):
-			rates, err := getLatestCurrenciesRate(db)
-			if err != nil {
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Не удалось получить курсы валют")
-				bot.Send(msg)
-				log.Printf("Ошибка получения курсов: %v", err)
-			} else {
-				var parts []string
-				if btc, ok := rates["BTC/USD"]; ok && btc > 0 {
-					parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
-				}
-				if usd, ok := rates["USD/RUB"]; ok && usd > 0 {
-					parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
-				}
-				if eur, ok := rates["EUR/RUB"]; ok && eur > 0 {
-					parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
-				}
-				message := "Котировки: " + strings.Join(parts, "  ")
-				if len(parts) == 0 {
-					message = "Нет данных о курсах валют"
-				}
-				msg := tgbotapi.NewMessage(update.Message.Chat.ID, message)
-				bot.Send(msg)
-			}
-		default:
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID,
-				"Извините, я вас не понимаю. Попробуйте /start или /help.")
-			bot.Send(msg)
+				"/rate — показать последние курсы валют\n"+
+				"/help — показать справку")
+		if _, err := bot.Send(reply); err != nil {
+			log.Printf("Ошибка отправки ответа на /start: %v", err)
 		}
+
+	case "help":
+		reply := tgbotapi.NewMessage(msg.Chat.ID,
+			"Доступные команды:\n"+
+				"/start — начать работу с ботом\n"+
+				"/rate — показать последние курсы валют\n"+
+				"/help — показать эту справку")
+		if _, err := bot.Send(reply); err != nil {
+			log.Printf("Ошибка отправки ответа на /help: %v", err)
+		}
+
+	case "rate", "rates":
+		rates, err := getLatestCurrenciesRate(db)
+		if err != nil {
+			log.Printf("Ошибка получения курсов: %v", err)
+			reply := tgbotapi.NewMessage(msg.Chat.ID, "Не удалось получить курсы валют")
+			if _, sendErr := bot.Send(reply); sendErr != nil {
+				log.Printf("Ошибка отправки сообщения об ошибке: %v", sendErr)
+			}
+		} else {
+			var parts []string
+			if btc, ok := rates["BTC/USD"]; ok && btc > 0 {
+				parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
+			}
+			if usd, ok := rates["USD/RUB"]; ok && usd > 0 {
+				parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
+			}
+			if eur, ok := rates["EUR/RUB"]; ok && eur > 0 {
+				parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
+			}
+			text := "Котировки: " + strings.Join(parts, "  ")
+			if len(parts) == 0 {
+				text = "Нет данных о курсах валют"
+			}
+			reply := tgbotapi.NewMessage(msg.Chat.ID, text)
+			if _, err := bot.Send(reply); err != nil {
+				log.Printf("Ошибка отправки курсов: %v", err)
+			}
+		}
+
+	default:
+		// Неизвестная команда — молча игнорируем
+		log.Printf("Неизвестная команда: /%s от %s", command, senderName)
 	}
 }
 
