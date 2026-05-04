@@ -1,9 +1,9 @@
-{{define "finance_account_modal_form.html"}}
+{{define "finance_account_drawer_form.html"}}
 {{/*
-  Рендерится внутри модального окна account-modal в main.html.
+  Рендерится внутри drawer-а account-drawer в main.html.
   Вызывается через /api/v1/finance/account/form?account_id=N
 */}}
-<form id="modal-account-form" onsubmit="return submitAccountForm(event)">
+<form id="drawer-account-form" onsubmit="return submitAccountForm(event)">
   {{if .Account}}
   <input type="hidden" name="id" value="{{.Account.ID}}">
   {{end}}
@@ -54,27 +54,48 @@
     </div>
   </div>
 
-  <!-- Parent account -->
+  <!-- Parent account: только контейнерные (placeholder) счета и не сам счёт -->
   <div class="form-group">
     <label class="form-label" for="modal-account_parent">Родительский счёт</label>
     <select class="form-select" id="modal-account_parent" name="account_parent">
       <option value="">— корневой —</option>
       {{range .Accounts}}
-      {{if ne .AccountType "ROOT"}}
+      {{if ne .AccountType "ROOT"}}{{if eq .Placeholder 1}}{{if or (not $.Account) (ne .ID $.Account.ID)}}
       <option value="{{.ID}}"
         {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID (derefInt64 $.Account.ParentID)}}selected{{end}}{{end}}{{end}}>
         {{.DisplayName}}
       </option>
-      {{end}}
+      {{end}}{{end}}{{end}}
       {{end}}
     </select>
+    <p class="form-hint">Можно выбрать только контейнерные счета.</p>
   </div>
 
-  <div id="modal-account-result"></div>
+  <!-- Placeholder flag -->
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" name="placeholder" value="1" {{if .Account}}{{if eq .Account.Placeholder 1}}checked{{end}}{{end}}>
+      <span>Контейнерный счёт</span>
+      <span class="form-hint" style="margin:0;">— используется только как группировка, без транзакций</span>
+    </label>
+  </div>
+
+  <!-- Hidden flag -->
+  {{if .Account}}
+  <div class="form-group">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" name="hidden" value="1" {{if eq .Account.Hidden 1}}checked{{end}}>
+      <span>Скрыть счёт</span>
+      <span class="form-hint" style="margin:0;">— не показывать в списках по умолчанию</span>
+    </label>
+  </div>
+  {{end}}
+
+  <div id="drawer-account-result"></div>
 
   <div style="display:flex;gap:8px;margin-top:4px;">
-    <button type="submit" id="modal-account-submit-btn" class="btn btn-primary">Сохранить</button>
-    <button type="button" class="btn btn-ghost" onclick="closeAccountModal()">Отмена</button>
+    <button type="submit" id="drawer-account-submit-btn" class="btn btn-primary">Сохранить</button>
+    <button type="button" class="btn btn-ghost" onclick="closeAccountDrawer()">Отмена</button>
   </div>
 </form>
 {{end}}

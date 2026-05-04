@@ -381,15 +381,15 @@ func TestTemplates_FinanceAccount_Edit(t *testing.T) {
 	}
 }
 
-func TestTemplates_FinanceAccountModalForm(t *testing.T) {
+func TestTemplates_FinanceAccountDrawerForm(t *testing.T) {
 	tmpl := buildTestTemplates(t)
 	data := map[string]interface{}{
 		"Account":     nil,
 		"Accounts":    []*models.Account{testAccount(1, models.AccountTypeAsset)},
 		"Commodities": []*models.Commodity{{ID: 1, Fullname: "Ruble", Sign: "₽"}},
 	}
-	if err := render(tmpl, "finance_account_modal_form.html", data); err != nil {
-		t.Errorf("finance_account_modal_form.html: %v", err)
+	if err := render(tmpl, "finance_account_drawer_form.html", data); err != nil {
+		t.Errorf("finance_account_drawer_form.html: %v", err)
 	}
 }
 

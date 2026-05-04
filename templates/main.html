@@ -51,9 +51,10 @@
       </a>
       <a href="/finance/" class="sidebar-nav-item {{if or (eq .ActivePage "finance") (eq .ActivePage "transactions")}}active{{end}}">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M2 12l4-4 3 3 5-6"/>
+          <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+          <path d="M5 6h6M5 8.5h6M5 11h4"/>
         </svg>
-        Транзакции
+        Счета
       </a>
     </div>
     {{end}}
@@ -63,7 +64,7 @@
     <div class="sidebar-section">
       <div class="sidebar-section-row">
         <span class="sidebar-section-label">Мои счета</span>
-        <button class="sidebar-add-btn" onclick="openAccountModal(0)" title="Добавить счёт">+</button>
+        <button class="sidebar-add-btn" onclick="openAccountDrawer(0)" title="Добавить счёт">+</button>
       </div>
     </div>
     <div class="sidebar-accounts" id="sidebar-accounts-tree">
@@ -179,18 +180,19 @@
   </div><!-- /main-content -->
 </div><!-- /app-layout -->
 
-<!-- ═══ ACCOUNT MODAL ═══ -->
-<div id="account-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeAccountModal()">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-title" id="account-modal-title">Счёт</span>
-      <button class="modal-close" onclick="closeAccountModal()">✕</button>
+<!-- ═══ ACCOUNT DRAWER ═══ -->
+<div id="account-drawer-overlay" class="drawer-overlay hidden" onclick="closeAccountDrawer()"></div>
+<div id="account-drawer" class="drawer hidden" style="transform:translateX(100%)">
+  <div class="drawer-header">
+    <div style="flex:1;">
+      <div class="modal-title" id="account-drawer-title">Счёт</div>
     </div>
-    <div id="account-modal-body" class="modal-body">
-      <div class="modal-loading">
-        <span class="spinner"></span>
-        <span class="text-muted">Загрузка...</span>
-      </div>
+    <button class="modal-close" onclick="closeAccountDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="account-drawer-body">
+    <div class="modal-loading">
+      <span class="spinner"></span>
+      <span class="text-muted">Загрузка...</span>
     </div>
   </div>
 </div>
@@ -267,30 +269,55 @@ function dismissToast(toast) {
   setTimeout(function() { if (toast.parentElement) toast.parentElement.removeChild(toast); }, 300);
 }
 
-// ── Account modal ──────────────────────────────────────────────────────────
-function openAccountModal(accountId) {
-  var modal = document.getElementById('account-modal');
-  var title = document.getElementById('account-modal-title');
-  var body  = document.getElementById('account-modal-body');
+// ── Account drawer ─────────────────────────────────────────────────────────
+function openAccountDrawer(accountId) {
+  var overlay = document.getElementById('account-drawer-overlay');
+  var drawer  = document.getElementById('account-drawer');
+  var title   = document.getElementById('account-drawer-title');
+  var body    = document.getElementById('account-drawer-body');
+
   title.textContent = accountId ? 'Редактировать счёт' : 'Новый счёт';
-  modal.classList.remove('hidden');
+  overlay.classList.remove('hidden');
+  drawer.classList.remove('hidden');
+  drawer.style.transition = 'none';
+  drawer.style.transform  = 'translateX(100%)';
+  requestAnimationFrame(function() {
+    drawer.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+    drawer.style.transform  = 'none';
+  });
   document.body.style.overflow = 'hidden';
+
   body.innerHTML = '<div class="modal-loading"><span class="spinner"></span><span class="text-muted">Загрузка...</span></div>';
+
   fetch('/api/v1/finance/account/form?account_id=' + accountId)
     .then(function(r) { return r.text(); })
-    .then(function(html) { body.innerHTML = html; htmx.process(body); })
-    .catch(function() { body.innerHTML = '<div class="modal-error">Ошибка загрузки</div>'; });
+    .then(function(html) {
+      body.innerHTML = html;
+      htmx.process(body);
+      var inp = document.getElementById('modal-account_name');
+      if (inp) inp.focus();
+    })
+    .catch(function() {
+      body.innerHTML = '<div class="modal-error">Ошибка загрузки формы</div>';
+    });
 }
 
-function closeAccountModal() {
-  document.getElementById('account-modal').classList.add('hidden');
+function closeAccountDrawer() {
+  var drawer  = document.getElementById('account-drawer');
+  var overlay = document.getElementById('account-drawer-overlay');
+  drawer.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+  drawer.style.transform  = 'translateX(100%)';
   document.body.style.overflow = '';
+  setTimeout(function() {
+    drawer.classList.add('hidden');
+    overlay.classList.add('hidden');
+  }, 230);
 }
 
 function submitAccountForm(event) {
   event.preventDefault();
-  var form = document.getElementById('modal-account-form');
-  var btn  = document.getElementById('modal-account-submit-btn');
+  var form = document.getElementById('drawer-account-form');
+  var btn  = document.getElementById('drawer-account-submit-btn');
   btn.disabled = true; btn.textContent = 'Сохранение...';
   fetch('/api/v1/finance/account/save', {
     method: 'POST',
@@ -299,7 +326,7 @@ function submitAccountForm(event) {
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
-    if (data.result === 'ok') { closeAccountModal(); window.location.reload(); }
+    if (data.result === 'ok') { closeAccountDrawer(); window.location.reload(); }
     else { showToast('Ошибка: ' + (data.error || 'неизвестная ошибка'), 'error'); btn.disabled = false; btn.textContent = 'Сохранить'; }
   })
   .catch(function() { showToast('Ошибка соединения', 'error'); btn.disabled = false; btn.textContent = 'Сохранить'; });
@@ -307,7 +334,7 @@ function submitAccountForm(event) {
 }
 
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeAccountModal();
+  if (e.key === 'Escape') closeAccountDrawer();
 });
 </script>
 </body>

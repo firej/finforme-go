@@ -32,7 +32,7 @@
            value="{{if .Transaction}}{{.Transaction.Description}}{{end}}">
   </div>
 
-  <!-- From / To accounts -->
+  <!-- From / To accounts: контейнерные (placeholder) счета не доступны -->
   <div class="form-row">
     <div class="form-group">
       <label class="form-label" for="modal-credit_account">Счёт списания</label>
@@ -40,9 +40,11 @@
         {{$creditAccountID := .AccountID}}
         {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
+        {{if eq .Placeholder 0}}
         <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>
           {{.DisplayName}}
         </option>
+        {{end}}
         {{end}}
       </select>
     </div>
@@ -52,9 +54,11 @@
         {{$debitAccountID := 0}}
         {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
+        {{if eq .Placeholder 0}}
         <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>
           {{.DisplayName}}
         </option>
+        {{end}}
         {{end}}
       </select>
     </div>

@@ -692,6 +692,20 @@ func (h *Handler) sortAccountsByName(accounts []*models.Account) {
 	}
 }
 
+// isPlaceholderAccount возвращает true, если счёт принадлежит userID и помечен как контейнерный (placeholder=1).
+// При ошибках/отсутствии возвращает false (валидация ID идёт отдельно).
+func (h *Handler) isPlaceholderAccount(userID, accountID int64) bool {
+	var ph int
+	err := h.db.QueryRow(
+		`SELECT placeholder FROM accounts WHERE id = ? AND user_id = ?`,
+		accountID, userID,
+	).Scan(&ph)
+	if err != nil {
+		return false
+	}
+	return ph == 1
+}
+
 func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 	rows, err := h.db.Query(`
 		SELECT id, namespace, mnemonic, fullname, cusip, fraction, quote_source, quote_tz, sign
@@ -1027,6 +1041,14 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 	accountType := r.FormValue("account_type")
 	commodityIDStr := r.FormValue("commodity_id")
 	parentIDStr := r.FormValue("account_parent")
+	hidden := 0
+	if r.FormValue("hidden") == "1" {
+		hidden = 1
+	}
+	placeholder := 0
+	if r.FormValue("placeholder") == "1" {
+		placeholder = 1
+	}
 
 	if name == "" || accountType == "" || commodityIDStr == "" {
 		http.Error(w, "Missing required fields", http.StatusBadRequest)
@@ -1054,8 +1076,8 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 		result, err := h.db.Exec(`
 			INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
 			                      non_std_scu, parent_id, description, hidden, placeholder)
-			VALUES (?, ?, ?, ?, 100, 0, ?, ?, 0, 0)
-		`, userID, name, accountType, commodityID, parentID, description)
+			VALUES (?, ?, ?, ?, 100, 0, ?, ?, ?, ?)
+		`, userID, name, accountType, commodityID, parentID, description, hidden, placeholder)
 
 		if err != nil {
 			fmt.Printf("ERROR creating account: %v\n", err)
@@ -1076,11 +1098,37 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// Защита от противоречивых состояний placeholder
+		if placeholder == 1 {
+			var splits int
+			h.db.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ? AND user_id = ?`,
+				accountID, userID).Scan(&splits)
+			if splits > 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Нельзя сделать счёт контейнерным: к нему уже привязаны транзакции",
+				})
+				return
+			}
+		} else {
+			var kids int
+			h.db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
+				accountID, userID).Scan(&kids)
+			if kids > 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Нельзя убрать признак контейнера: у счёта есть дочерние счета",
+				})
+				return
+			}
+		}
+
 		_, err = h.db.Exec(`
 			UPDATE accounts
-			SET name = ?, account_type = ?, commodity_id = ?, parent_id = ?, description = ?
+			SET name = ?, account_type = ?, commodity_id = ?, parent_id = ?, description = ?,
+			    hidden = ?, placeholder = ?
 			WHERE id = ? AND user_id = ?
-		`, name, accountType, commodityID, parentID, description, accountID, userID)
+		`, name, accountType, commodityID, parentID, description, hidden, placeholder, accountID, userID)
 
 		if err != nil {
 			fmt.Printf("ERROR updating account: %v\n", err)
@@ -1210,6 +1258,15 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+
+	// Контейнерные (placeholder) счета не могут участвовать в транзакциях
+	if h.isPlaceholderAccount(userID, debitAccountID) || h.isPlaceholderAccount(userID, creditAccountID) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт",
+		})
+		return
+	}
 
 	// Конвертируем сумму в целые числа (value_num / value_denom)
 	valueNum := int64(value * 100)
@@ -2415,7 +2472,7 @@ func (h *Handler) APITransactionTableGet(w http.ResponseWriter, r *http.Request)
 	h.renderTemplate(w, "finance_transactions_tbody.html", data)
 }
 
-// APIAccountFormGet - возвращает HTML-фрагмент формы для модального окна редактирования/создания счёта
+// APIAccountFormGet - возвращает HTML-фрагмент формы для drawer-а редактирования/создания счёта
 func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 
@@ -2461,5 +2518,5 @@ func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 		"Commodities": commodities,
 	}
 
-	h.renderTemplate(w, "finance_account_modal_form.html", data)
+	h.renderTemplate(w, "finance_account_drawer_form.html", data)
 }

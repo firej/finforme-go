@@ -30,16 +30,26 @@
       </svg>
       <input class="search-input" type="text" id="tx-search" placeholder="Поиск..." oninput="filterTransactions(this.value)">
     </div>
-    {{if .Account}}
+    {{if .Account}}{{if eq .Account.Placeholder 0}}
     <button class="btn btn-primary" onclick="openTransactionDrawer(0, {{.Account.ID}})">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M8 3v10M3 8h10"/>
       </svg>
       Добавить
     </button>
-    {{end}}
+    {{end}}{{end}}
   </div>
 </div>
+
+{{if .Account}}{{if eq .Account.Placeholder 1}}
+<div class="placeholder-notice">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+    <rect x="2" y="3" width="12" height="10" rx="1.5"/>
+    <path d="M2 6h12"/>
+  </svg>
+  <span>Это контейнерный счёт — он группирует подсчета. Транзакции добавляются в дочерние счета.</span>
+</div>
+{{end}}{{end}}
 
 <!-- Stats + Period -->
 {{if .Account}}
