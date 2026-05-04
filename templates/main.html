@@ -99,6 +99,16 @@
         </svg>
         Настройки
       </a>
+      {{if .IsAdmin}}
+      <a href="/admin/users/" class="sidebar-nav-item {{if eq .ActivePage "admin"}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="5" r="2.5"/>
+          <path d="M2 13c0-3 2.5-5 6-5s6 2 6 5"/>
+          <path d="M11 8.5l1.5 1.5-1.5 1.5M13 10h-2"/>
+        </svg>
+        Админка
+      </a>
+      {{end}}
       <div style="height:1px;background:rgba(255,255,255,0.06);margin:6px 0;"></div>
       <a href="/accounts/info/" class="sidebar-nav-item">
         <div class="avatar" style="width:20px;height:20px;font-size:9px;">
@@ -181,8 +191,8 @@ function applyTheme(t) {
   var moon  = document.getElementById('theme-icon-moon');
   var sun   = document.getElementById('theme-icon-sun');
   var label = document.getElementById('theme-label');
-  if (moon)  moon.classList.toggle('hidden', t === 'dark');
-  if (sun)   sun.classList.toggle('hidden',  t === 'light');
+  if (moon)  moon.classList.toggle('hidden', t === 'light');
+  if (sun)   sun.classList.toggle('hidden',  t === 'dark');
   if (label) label.textContent = t === 'dark' ? 'Тёмная тема' : 'Светлая тема';
 }
 (function() {

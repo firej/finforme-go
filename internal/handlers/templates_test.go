@@ -229,24 +229,24 @@ func TestTemplates_Register(t *testing.T) {
 	}
 }
 
-func TestTemplates_Index_Authenticated(t *testing.T) {
+func TestTemplates_Index(t *testing.T) {
 	tmpl := buildTestTemplates(t)
 	u := testUser()
 	data := baseData(u, testAccountTree())
-	data["Title"] = "finfor.me"
-	if err := render(tmpl, "index.html", data); err != nil {
-		t.Errorf("index.html (auth): %v", err)
+	data["Title"] = "Дашборд"
+	data["TotalAssets"] = 150000.0
+	data["TotalLiabilities"] = 30000.0
+	data["NetWorth"] = 120000.0
+	data["TotalIncome"] = 50000.0
+	data["TotalExpense"] = 20000.0
+	data["TopAccounts"] = []map[string]interface{}{
+		{"ID": int64(1), "Name": "Сбербанк", "AccountType": "BANK", "Balance": 100000.0},
 	}
-}
-
-func TestTemplates_Index_Anonymous(t *testing.T) {
-	tmpl := buildTestTemplates(t)
-	data := map[string]interface{}{
-		"Title": "finfor.me", "Authenticated": false,
-		"AccountTree": nil, "User": nil, "IsAdmin": false, "ActivePage": "",
+	data["RecentTransactions"] = []map[string]interface{}{
+		{"ID": int64(1), "Description": "Зарплата", "PostDate": "2024-03-15", "Amount": 50000.0, "AccountName": "Сбербанк", "AccountType": "BANK"},
 	}
 	if err := render(tmpl, "index.html", data); err != nil {
-		t.Errorf("index.html (anon): %v", err)
+		t.Errorf("index.html: %v", err)
 	}
 }
 
@@ -540,28 +540,6 @@ func TestModels_FieldsExist(t *testing.T) {
 	_ = a.ParentID
 }
 
-func TestTemplates_Dashboard(t *testing.T) {
-	tmpl := buildTestTemplates(t)
-	u := testUser()
-	data := baseData(u, testAccountTree())
-	data["Title"] = "Дашборд"
-	data["TotalAssets"] = 150000.0
-	data["TotalLiabilities"] = 30000.0
-	data["NetWorth"] = 120000.0
-	data["TotalIncome"] = 50000.0
-	data["TotalExpense"] = 20000.0
-	data["TopAccounts"] = []map[string]interface{}{
-		{"ID": int64(1), "Name": "Сбербанк", "AccountType": "BANK", "Balance": 100000.0},
-		{"ID": int64(2), "Name": "Наличные", "AccountType": "CASH", "Balance": 50000.0},
-	}
-	data["RecentTransactions"] = []map[string]interface{}{
-		{"ID": int64(1), "Description": "Зарплата", "PostDate": "2024-03-15", "Amount": 50000.0, "AccountName": "Сбербанк", "AccountType": "BANK"},
-		{"ID": int64(2), "Description": "—",        "PostDate": "2024-03-14", "Amount": 200.0,   "AccountName": "Наличные", "AccountType": "CASH"},
-	}
-	if err := render(tmpl, "dashboard.html", data); err != nil {
-		t.Errorf("dashboard.html: %v", err)
-	}
-}
 
 // Заглушка — чтобы компилятор не ругался на неиспользуемый импорт sql.
 var _ = sql.ErrNoRows

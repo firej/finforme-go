@@ -10,26 +10,11 @@ import (
 // Index - главная страница
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	userID, authenticated := h.getUserID(r)
-
-	data := map[string]interface{}{
-		"Title":         "finfor.me",
-		"Authenticated": authenticated,
+	if !authenticated {
+		http.Redirect(w, r, "/accounts/login/", http.StatusFound)
+		return
 	}
-
-	if authenticated {
-		var user models.User
-		err := h.db.QueryRow(`
-			SELECT id, username, email, first_name, last_name
-			FROM users WHERE id = ?
-		`, userID).Scan(&user.ID, &user.Username, &user.Email, &user.FirstName, &user.LastName)
-
-		if err == nil {
-			data["User"] = user
-		}
-		data["IsAdmin"] = h.getIsAdmin(userID)
-	}
-
-	h.renderTemplate(w, "index.html", data)
+	h.renderDashboard(w, r, userID)
 }
 
 // Login - страница входа

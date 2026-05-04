@@ -5,7 +5,7 @@
   <div class="topbar-title">{{if .Transaction}}Редактирование транзакции{{else}}Новая транзакция{{end}}</div>
 </div>
 
-<div class="content-area">
+
   <div class="card" style="max-width:480px;padding:24px;">
     <form method="POST" hx-post="/api/v1/finance/transaction/save" hx-target="#result">
       {{if .Transaction}}

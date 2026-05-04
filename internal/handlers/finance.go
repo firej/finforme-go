@@ -735,9 +735,13 @@ func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 }
 
 // Dashboard — страница дашборда с обзором финансов
+// Dashboard — редирект на главную страницу (дашборд перенесён на /)
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
-	userID, _ := h.getUserID(r)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
 
+// renderDashboard — общая логика рендеринга дашборда (используется Index и Dashboard)
+func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID int64) {
 	data := h.pageData(userID, "dashboard")
 	data["Title"] = "Дашборд"
 
@@ -855,7 +859,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	data["RecentTransactions"] = recentTx
 
-	h.renderTemplate(w, "dashboard.html", data)
+	h.renderTemplate(w, "index.html", data)
 }
 
 func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder string) []map[string]interface{} {

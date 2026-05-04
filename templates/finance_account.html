@@ -5,7 +5,7 @@
   <div class="topbar-title">{{if .Account}}Редактирование счёта{{else}}Новый счёт{{end}}</div>
 </div>
 
-<div class="content-area">
+
   <div class="card" style="max-width:480px;padding:24px;">
     <form method="POST" hx-post="/api/v1/finance/account/save" hx-target="#result" hx-swap="innerHTML">
       {{if .Account}}
