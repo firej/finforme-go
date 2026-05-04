@@ -6,11 +6,12 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ─── FONTS ─── */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+/* Fonts are loaded via <link> in main.html (non-blocking) */
 
 /* ─── TOKENS ─── */
 :root {
+  color-scheme: light;
+
   --font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'DM Mono', 'Courier New', monospace;
 
@@ -65,6 +66,8 @@
 
 /* ─── DARK THEME ─── */
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --bg-app:     #0c0e16;
   --bg-surface: #161b2e;
   --bg-sidebar: #0a0d18;
@@ -217,6 +220,30 @@ html, body {
   padding: 10px 8px;
   flex-shrink: 0;
 }
+
+/* Sidebar utilities */
+.sidebar-section-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px; margin-bottom: 3px;
+}
+.sidebar-section-row .sidebar-section-label { padding: 0; }
+.sidebar-add-btn {
+  background: none; border: none; cursor: pointer;
+  color: rgba(255,255,255,0.35);
+  font-size: 16px; line-height: 1; padding: 0 2px;
+  transition: color 0.12s;
+}
+.sidebar-add-btn:hover { color: rgba(255,255,255,0.8); }
+.sidebar-divider {
+  height: 1px; background: rgba(255,255,255,0.06); margin: 6px 0;
+}
+.sidebar-avatar { width: 20px; height: 20px; font-size: 9px; }
+.modal-loading {
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px; gap: 8px;
+}
+.modal-error { padding: 16px; color: var(--red); }
+.theme-toggle-btn { background: none; border: none; cursor: pointer; text-align: left; width: 100%; }
 
 /* ─── MAIN CONTENT ─── */
 .main-content {

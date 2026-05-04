@@ -1,13 +1,26 @@
 {{define "header"}}
 <!DOCTYPE html>
-<html lang="ru" data-theme="light">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>{{.Title}}</title>
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+        var root = document.documentElement;
+        root.setAttribute('data-theme', t);
+        root.style.background = t === 'dark' ? '#0c0e16' : '#f1f3f7';
+        root.style.colorScheme = t;
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"></noscript>
   <link rel="stylesheet" href="/static/main.css">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
@@ -48,12 +61,9 @@
     <!-- Accounts tree -->
     {{if .Authenticated}}
     <div class="sidebar-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px;margin-bottom:3px;">
-        <span class="sidebar-section-label" style="padding:0">Мои счета</span>
-        <button onclick="openAccountModal(0)" title="Добавить счёт"
-          style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:16px;line-height:1;padding:0 2px;transition:color 0.12s;"
-          onmouseover="this.style.color='rgba(255,255,255,0.8)'"
-          onmouseout="this.style.color='rgba(255,255,255,0.35)'">+</button>
+      <div class="sidebar-section-row">
+        <span class="sidebar-section-label">Мои счета</span>
+        <button class="sidebar-add-btn" onclick="openAccountModal(0)" title="Добавить счёт">+</button>
       </div>
     </div>
     <div class="sidebar-accounts" id="sidebar-accounts-tree">
@@ -109,9 +119,9 @@
         Админка
       </a>
       {{end}}
-      <div style="height:1px;background:rgba(255,255,255,0.06);margin:6px 0;"></div>
+      <div class="sidebar-divider"></div>
       <a href="/accounts/info/" class="sidebar-nav-item">
-        <div class="avatar" style="width:20px;height:20px;font-size:9px;">
+        <div class="avatar sidebar-avatar">
           {{if .User}}{{slice .User.Username 0 2 | upper}}{{else}}ME{{end}}
         </div>
         {{if .User}}{{.User.Username}}{{end}}
@@ -127,8 +137,8 @@
       <a href="/accounts/register/" class="sidebar-nav-item">Регистрация</a>
       {{end}}
       <!-- Theme toggle -->
-      <div style="height:1px;background:rgba(255,255,255,0.06);margin:6px 0;"></div>
-      <button id="theme-toggle" onclick="toggleTheme()" class="sidebar-nav-item" style="background:none;border:none;cursor:pointer;text-align:left;width:100%;" title="Переключить тему">
+      <div class="sidebar-divider"></div>
+      <button id="theme-toggle" onclick="toggleTheme()" class="sidebar-nav-item theme-toggle-btn" title="Переключить тему">
         <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4 4 0 0 0 7 7z"/>
         </svg>
@@ -167,7 +177,7 @@
       <button class="modal-close" onclick="closeAccountModal()">✕</button>
     </div>
     <div id="account-modal-body" class="modal-body">
-      <div style="display:flex;align-items:center;justify-content:center;padding:32px;gap:8px;">
+      <div class="modal-loading">
         <span class="spinner"></span>
         <span class="text-muted">Загрузка...</span>
       </div>
@@ -185,9 +195,12 @@
   }
 })();
 
-// ── Theme ──────────────────────────────────────────────────────────────────
+// ── Theme (data-theme already applied inline in <head> to avoid FOUC) ──────
 function applyTheme(t) {
-  document.documentElement.setAttribute('data-theme', t);
+  var root = document.documentElement;
+  root.setAttribute('data-theme', t);
+  root.style.background = '';        // hand control back to CSS after first paint
+  root.style.colorScheme = t;
   var moon  = document.getElementById('theme-icon-moon');
   var sun   = document.getElementById('theme-icon-sun');
   var label = document.getElementById('theme-label');
@@ -195,9 +208,7 @@ function applyTheme(t) {
   if (sun)   sun.classList.toggle('hidden',  t === 'dark');
   if (label) label.textContent = t === 'dark' ? 'Тёмная тема' : 'Светлая тема';
 }
-(function() {
-  applyTheme(localStorage.getItem('theme') || 'light');
-})();
+applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
 
 function toggleTheme() {
   var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -254,11 +265,11 @@ function openAccountModal(accountId) {
   title.textContent = accountId ? 'Редактировать счёт' : 'Новый счёт';
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;padding:32px;gap:8px;"><span class="spinner"></span><span class="text-muted">Загрузка...</span></div>';
+  body.innerHTML = '<div class="modal-loading"><span class="spinner"></span><span class="text-muted">Загрузка...</span></div>';
   fetch('/api/v1/finance/account/form?account_id=' + accountId)
     .then(function(r) { return r.text(); })
     .then(function(html) { body.innerHTML = html; htmx.process(body); })
-    .catch(function() { body.innerHTML = '<div style="padding:16px;color:var(--red)">Ошибка загрузки</div>'; });
+    .catch(function() { body.innerHTML = '<div class="modal-error">Ошибка загрузки</div>'; });
 }
 
 function closeAccountModal() {
