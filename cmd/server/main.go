@@ -69,6 +69,7 @@ func main() {
 	r.HandleFunc("/accounts/change_info/", h.RequireAuth(h.ChangeInfo)).Methods("GET", "POST")
 
 	// Финансы
+	r.HandleFunc("/finance/dashboard", h.RequireAuth(h.Dashboard)).Methods("GET")
 	r.HandleFunc("/finance/", h.RequireAuth(h.FinanceIndex)).Methods("GET")
 	r.HandleFunc("/finance/account/new", h.RequireAuth(h.FinanceAccountEdit)).Methods("GET")
 	r.HandleFunc("/finance/account/{id}/edit", h.RequireAuth(h.FinanceAccountEdit)).Methods("GET")

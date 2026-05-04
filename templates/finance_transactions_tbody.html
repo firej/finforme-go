@@ -1,40 +1,42 @@
 {{define "finance_transactions_tbody.html"}}
 {{range .Transactions}}
-<tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="openTransactionModal({{.id}}, {{$.Account.ID}})">
-    <td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">{{.post_date}}</td>
-    <td class="py-2.5 px-3 text-gray-900">{{.description}}</td>
-    <td class="py-2.5 px-3">
-        <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()" class="text-primary-600 hover:text-primary-700 transition-colors">{{.account_name}}</a>
-    </td>
-    <td class="py-2.5 px-3 text-right font-mono">
-        {{if .plus_balance_changing}}<span class="text-emerald-600">{{formatMoney .plus_balance_changing}}</span>{{end}}
-    </td>
-    <td class="py-2.5 px-3 text-right font-mono">
-        {{if .balance_changing}}<span class="text-red-600">{{formatMoney .balance_changing}}</span>{{end}}
-    </td>
-    <td class="py-2.5 px-3 text-right font-mono font-medium">{{formatMoney .account_balance}}</td>
-    <td class="py-2.5 px-3">
-        {{range .tags}}
-        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800 mr-1">{{.}}</span>
-        {{end}}
-    </td>
-    <td class="py-2.5 px-3 whitespace-nowrap" onclick="event.stopPropagation()">
-        <div class="flex gap-1.5">
-            <button onclick="openTransactionModal({{.id}}, {{$.Account.ID}})"
-               class="px-2.5 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded hover:bg-primary-100 transition-colors">
-                Редактировать
-            </button>
-            <button
-                hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
-                hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
-                hx-target="closest tr"
-                hx-swap="outerHTML swap:0.5s"
-                hx-on::after-request="if(event.detail.successful) { const row = this.closest('tr'); row.style.transition = 'all 0.5s ease-out'; row.style.opacity = '0'; row.style.transform = 'translateX(-100%)'; setTimeout(() => row.remove(), 500); }"
-                class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors">
-                Удалить
-            </button>
-        </div>
-    </td>
+<tr class="clickable-row" onclick="openTransactionModal({{.id}}, {{$.Account.ID}})">
+  <td style="color:var(--text-secondary);white-space:nowrap;" class="mono">{{.post_date}}</td>
+  <td>{{.description}}</td>
+  <td>
+    <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
+       style="color:var(--accent-text);text-decoration:none;font-size:12.5px;">{{.account_name}}</a>
+  </td>
+  <td class="mono right">
+    {{if .plus_balance_changing}}<span class="amount-in">{{formatMoney .plus_balance_changing}}</span>{{end}}
+  </td>
+  <td class="mono right">
+    {{if .balance_changing}}<span class="amount-out">{{formatMoney .balance_changing}}</span>{{end}}
+  </td>
+  <td class="mono right">
+    <span class="{{if gt .account_balance 0.0}}bal-pos{{else if lt .account_balance 0.0}}bal-neg{{else}}bal-zero{{end}}">
+      {{formatMoney .account_balance}}
+    </span>
+  </td>
+  <td>
+    {{range .tags}}<span class="tag">{{.}}</span>{{end}}
+  </td>
+  <td onclick="event.stopPropagation()">
+    <div class="row-actions">
+      <button onclick="openTransactionModal({{.id}}, {{$.Account.ID}})" class="btn btn-ghost btn-sm">
+        Изменить
+      </button>
+      <button
+        hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
+        hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
+        hx-target="closest tr"
+        hx-swap="outerHTML swap:0.5s"
+        hx-on::after-request="if(event.detail.successful) { var r=this.closest('tr'); r.style.transition='all 0.5s ease-out'; r.style.opacity='0'; r.style.transform='translateX(-100%)'; setTimeout(function(){r.remove()},500); }"
+        class="btn btn-danger btn-sm">
+        Удалить
+      </button>
+    </div>
+  </td>
 </tr>
 {{end}}
 {{end}}

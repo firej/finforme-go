@@ -1,280 +1,401 @@
 {{define "finance_transactions.html"}}
 {{template "header" .}}
 
-<!-- Контейнер для toast-нотификаций -->
-<div id="toast-container" class="toast-container"></div>
-
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+<!-- Topbar -->
+<div class="topbar">
+  <div class="topbar-title">
     {{if .Account}}
-    <div class="flex items-start justify-between mb-4">
-        <div>
-            <h1 class="text-2xl font-bold text-gray-900">{{.Account.Name}}</h1>
-            {{if .Account.Description}}<p class="text-sm text-gray-500 mt-1">{{.Account.Description}}</p>{{end}}
-        </div>
-        <button onclick="openTransactionModal(0, {{.Account.ID}})"
-           class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm shrink-0">
-            + Добавить
-        </button>
-    </div>
-
-    <div class="flex items-center gap-2 mb-4">
-        <span class="text-sm text-gray-500">Сортировка по дате:</span>
-        {{if eq .SortOrder "desc"}}
-            <a href="/finance/account/{{.Account.ID}}?sort=asc"
-               class="px-3 py-1.5 text-xs font-medium border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50 transition-colors">
-                ↑ Сначала старые
-            </a>
-            <span class="px-3 py-1.5 text-xs font-medium bg-primary-600 text-white rounded-lg">
-                ↓ Сначала новые
-            </span>
-        {{else}}
-            <span class="px-3 py-1.5 text-xs font-medium bg-primary-600 text-white rounded-lg">
-                ↑ Сначала старые
-            </span>
-            <a href="/finance/account/{{.Account.ID}}?sort=desc"
-               class="px-3 py-1.5 text-xs font-medium border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50 transition-colors">
-                ↓ Сначала новые
-            </a>
+      <span style="display:inline-flex;align-items:center;gap:8px;">
+        <span class="account-dot dot-{{.Account.AccountType}}" style="width:8px;height:8px;"></span>
+        {{.Account.Name}}
+      </span>
+      <span class="topbar-subtitle">
+        {{if eq .Account.AccountType "ASSET"}}<span class="badge badge-ASSET">Актив</span>
+        {{else if eq .Account.AccountType "BANK"}}<span class="badge badge-BANK">Банк</span>
+        {{else if eq .Account.AccountType "CASH"}}<span class="badge badge-CASH">Наличные</span>
+        {{else if eq .Account.AccountType "LIABILITY"}}<span class="badge badge-LIABILITY">Долг</span>
+        {{else if eq .Account.AccountType "INCOME"}}<span class="badge badge-INCOME">Доход</span>
+        {{else if eq .Account.AccountType "EXPENSE"}}<span class="badge badge-EXPENSE">Расход</span>
+        {{else if eq .Account.AccountType "EQUITY"}}<span class="badge badge-EQUITY">Капитал</span>
         {{end}}
-    </div>
-
-    <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600">
-                        <a href="/finance/account/{{.Account.ID}}?sort={{.OppositeSortOrder}}" class="hover:text-gray-900 transition-colors">
-                            Дата {{if eq .SortOrder "desc"}}↓{{else}}↑{{end}}
-                        </a>
-                    </th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600">Описание</th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600">Счет-контрагент</th>
-                    <th class="text-right py-3 px-3 font-semibold text-gray-600">Приход</th>
-                    <th class="text-right py-3 px-3 font-semibold text-gray-600">Расход</th>
-                    <th class="text-right py-3 px-3 font-semibold text-gray-600">Баланс</th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600">Теги</th>
-                    <th class="text-left py-3 px-3 font-semibold text-gray-600">Действия</th>
-                </tr>
-            </thead>
-            <tbody id="transactions-tbody" class="divide-y divide-gray-100">
-                {{range .Transactions}}
-                <tr class="hover:bg-gray-50 transition-colors clickable-row" onclick="openTransactionModal({{.id}}, {{$.Account.ID}})">
-                    <td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">{{.post_date}}</td>
-                    <td class="py-2.5 px-3 text-gray-900">{{.description}}</td>
-                    <td class="py-2.5 px-3">
-                        <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()" class="text-primary-600 hover:text-primary-700 transition-colors">{{.account_name}}</a>
-                    </td>
-                    <td class="py-2.5 px-3 text-right font-mono">
-                        {{if .plus_balance_changing}}<span class="text-emerald-600">{{formatMoney .plus_balance_changing}}</span>{{end}}
-                    </td>
-                    <td class="py-2.5 px-3 text-right font-mono">
-                        {{if .balance_changing}}<span class="text-red-600">{{formatMoney .balance_changing}}</span>{{end}}
-                    </td>
-                    <td class="py-2.5 px-3 text-right font-mono font-medium">{{formatMoney .account_balance}}</td>
-                    <td class="py-2.5 px-3">
-                        {{range .tags}}
-                        <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800 mr-1">{{.}}</span>
-                        {{end}}
-                    </td>
-                    <td class="py-2.5 px-3 whitespace-nowrap" onclick="event.stopPropagation()">
-                        <div class="flex gap-1.5">
-                            <button onclick="openTransactionModal({{.id}}, {{$.Account.ID}})"
-                               class="px-2.5 py-1 text-xs font-medium bg-primary-50 text-primary-700 rounded hover:bg-primary-100 transition-colors">
-                                Редактировать
-                            </button>
-                            <button
-                                hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
-                                hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
-                                hx-target="closest tr"
-                                hx-swap="outerHTML swap:0.5s"
-                                hx-on::after-request="if(event.detail.successful) { const row = this.closest('tr'); row.style.transition = 'all 0.5s ease-out'; row.style.opacity = '0'; row.style.transform = 'translateX(-100%)'; setTimeout(() => row.remove(), 500); }"
-                                class="px-2.5 py-1 text-xs font-medium bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors">
-                                Удалить
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
-    </div>
+      </span>
+    {{else}}
+      Транзакции
     {{end}}
+  </div>
+  <div class="topbar-actions">
+    <div class="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/>
+      </svg>
+      <input class="search-input" type="text" id="tx-search" placeholder="Поиск..." oninput="filterTransactions(this.value)">
+    </div>
+    {{if .Account}}
+    <button class="btn btn-primary" onclick="openTransactionDrawer(0, {{.Account.ID}})">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M8 3v10M3 8h10"/>
+      </svg>
+      Добавить
+    </button>
+    {{end}}
+  </div>
 </div>
 
-<!-- Модальное окно для редактирования/создания транзакции -->
-<div id="transaction-modal" class="modal-overlay hidden" onclick="handleModalOverlayClick(event)">
-    <div class="modal-container">
-        <div class="modal-header">
-            <h2 id="modal-title" class="text-xl font-bold text-gray-900">Транзакция</h2>
-            <button onclick="closeTransactionModal()" class="modal-close-btn" aria-label="Закрыть">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-        </div>
-        <div id="modal-body" class="modal-body">
-            <div class="flex items-center justify-center py-8">
-                <div class="spinner"></div>
-                <span class="text-gray-500 ml-2">Загрузка...</span>
-            </div>
-        </div>
+<!-- Stats + Period -->
+{{if .Account}}
+<div style="margin-bottom:16px;">
+  <!-- Period selector -->
+  <div class="period-bar">
+    <span class="period-label">Период:</span>
+    <div class="sort-tabs" id="period-tabs">
+      <button class="sort-tab" data-period="month"   onclick="setPeriod('month')">Месяц</button>
+      <button class="sort-tab" data-period="quarter" onclick="setPeriod('quarter')">Квартал</button>
+      <button class="sort-tab" data-period="year"    onclick="setPeriod('year')">Год</button>
+      <button class="sort-tab active" data-period="all" onclick="setPeriod('all')">Всё время</button>
+      <button class="sort-tab" data-period="custom"  onclick="setPeriod('custom')">Выбрать…</button>
     </div>
+    <select id="month-picker" class="form-select" style="display:none;height:28px;padding:0 8px;font-size:12px;width:auto;min-width:160px;"
+      onchange="setCustomMonth(this.value)">
+      {{range .AvailableMonths}}
+      <option value="{{.Value}}">{{.Label}}</option>
+      {{end}}
+    </select>
+    <span id="period-hint" class="text-muted" style="font-size:11px;"></span>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stat-cell">
+      <div class="stat-label">Баланс</div>
+      <div class="stat-value {{if gt .Account.Balance 0.0}}text-green{{else if lt .Account.Balance 0.0}}text-red{{end}}">
+        {{formatMoney .Account.Balance}}
+      </div>
+      <div class="stat-delta pos">↑ актуально</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Приход</div>
+      <div class="stat-value text-green" id="stat-income">{{formatMoney .TotalIncome}}</div>
+      <div class="stat-delta" id="stat-income-count">{{.IncomeCount}} транз.</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Расход</div>
+      <div class="stat-value text-red" id="stat-expense">{{formatMoney .TotalExpense}}</div>
+      <div class="stat-delta" id="stat-expense-count">{{.ExpenseCount}} транз.</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">Транзакций</div>
+      <div class="stat-value" id="stat-total">{{.TotalCount}}</div>
+      <div class="stat-delta text-muted">за период</div>
+    </div>
+  </div>
+</div>
+{{end}}
+
+<!-- Transactions table -->
+<div class="card" style="overflow:hidden;">
+  <!-- Table toolbar -->
+  <div style="padding:10px 12px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+    <div class="sort-tabs">
+      {{if eq .SortOrder "desc"}}
+        <a href="/finance/account/{{.Account.ID}}?sort=asc" class="sort-tab">↑ Сначала старые</a>
+        <span class="sort-tab active">↓ Сначала новые</span>
+      {{else}}
+        <span class="sort-tab active">↑ Сначала старые</span>
+        <a href="/finance/account/{{.Account.ID}}?sort=desc" class="sort-tab">↓ Сначала новые</a>
+      {{end}}
+    </div>
+    <div style="flex:1;"></div>
+    <button class="btn btn-ghost btn-sm">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12M5 8h6M8 12h0"/>
+      </svg>
+      Фильтр
+    </button>
+  </div>
+
+  <!-- Table -->
+  <div style="overflow-x:auto;">
+    <table class="data-table" id="transactions-table">
+      <thead>
+        <tr>
+          <th style="width:90px;">Дата</th>
+          <th>Описание</th>
+          <th>Счёт-контрагент</th>
+          <th class="right" style="width:120px;">Приход</th>
+          <th class="right" style="width:120px;">Расход</th>
+          <th class="right" style="width:130px;">Баланс</th>
+          <th style="width:100px;">Теги</th>
+          <th style="width:80px;"></th>
+        </tr>
+      </thead>
+      <tbody id="transactions-tbody">
+        {{$prevDate := ""}}
+        {{range .Transactions}}
+          {{if ne .post_date $prevDate}}
+          <tr class="date-group-row">
+            <td colspan="8">{{formatDateGroup .post_date}}</td>
+          </tr>
+          {{end}}
+          {{$prevDate = .post_date}}
+          <tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
+              data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
+              onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
+            <td style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
+            <td style="font-weight:450;">{{.description}}</td>
+            <td>
+              <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
+                 style="color:var(--accent-text);font-size:12px;text-decoration:none;">
+                {{.account_name}}
+              </a>
+            </td>
+            <td class="mono right">
+              {{if .plus_balance_changing}}
+                <span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>
+              {{end}}
+            </td>
+            <td class="mono right">
+              {{if .balance_changing}}
+                <span class="amount-out">−{{formatMoney .balance_changing}}</span>
+              {{end}}
+            </td>
+            <td class="mono right">
+              {{if gt .account_balance 0.0}}
+                <span class="bal-pos">{{formatMoney .account_balance}}</span>
+              {{else if lt .account_balance 0.0}}
+                <span class="bal-neg">{{formatMoney .account_balance}}</span>
+              {{else}}
+                <span class="bal-zero">{{formatMoney .account_balance}}</span>
+              {{end}}
+            </td>
+            <td>
+              {{range .tags}}
+                <span class="tag">{{.}}</span>
+              {{end}}
+            </td>
+            <td onclick="event.stopPropagation()">
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm btn-icon"
+                  onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})" title="Редактировать">
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M11 2l3 3-8 8H3v-3l8-8z"/>
+                  </svg>
+                </button>
+                <button class="btn btn-danger btn-sm btn-icon"
+                  hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
+                  hx-confirm="Удалить транзакцию?"
+                  hx-on::after-request="if(event.detail.successful){const r=this.closest('tr');r.style.transition='all 0.3s';r.style.opacity='0';r.style.transform='translateX(-20px)';setTimeout(()=>r.remove(),300);}"
+                  title="Удалить">
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
+                  </svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TRANSACTION DRAWER ═══ -->
+<div id="tx-drawer-overlay" class="drawer-overlay hidden" onclick="closeTransactionDrawer()"></div>
+<div id="tx-drawer" class="drawer hidden" style="transform:translateX(100%)">
+  <div class="drawer-header">
+    <div style="flex:1;">
+      <div class="modal-title" id="tx-drawer-title">Транзакция</div>
+    </div>
+    <button class="modal-close" onclick="closeTransactionDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="tx-drawer-body">
+    <div style="display:flex;align-items:center;justify-content:center;padding:48px;gap:8px;">
+      <span class="spinner"></span>
+      <span class="text-muted">Загрузка...</span>
+    </div>
+  </div>
 </div>
 
 <script>
-    // Текущий порядок сортировки (берём из URL или по умолчанию desc)
-    var currentSortOrder = new URLSearchParams(window.location.search).get('sort') || 'desc';
-    var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
+var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
+var currentSortOrder = '{{.SortOrder}}';
+var currentPeriod    = 'all';
+var currentMonth     = '';
 
-    // === Toast-нотификации ===
-    function showToast(message, type) {
-        var container = document.getElementById('toast-container');
+// ── Period ────────────────────────────────────────────────────────────────
+function setPeriod(p) {
+  currentPeriod = p;
+  document.querySelectorAll('#period-tabs .sort-tab').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.period === p);
+  });
+  var picker = document.getElementById('month-picker');
+  var hint   = document.getElementById('period-hint');
+  picker.style.display = (p === 'custom') ? '' : 'none';
+  var hints = { month:'последние 30 дней', quarter:'последние 3 месяца', year:'последние 12 месяцев', all:'', custom:'' };
+  hint.textContent = hints[p] || '';
+  filterByPeriod();
+}
 
-        var toast = document.createElement('div');
-        toast.className = 'toast toast-' + type;
+function setCustomMonth(val) {
+  currentMonth = val;
+  filterByPeriod();
+}
 
-        var iconSvg = '';
-        if (type === 'success') {
-            iconSvg = '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
-        } else {
-            iconSvg = '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
-        }
+function filterByPeriod() {
+  var now = new Date();
+  var from = null;
+  if (currentPeriod === 'month')   { from = new Date(now); from.setMonth(now.getMonth()-1); }
+  if (currentPeriod === 'quarter') { from = new Date(now); from.setMonth(now.getMonth()-3); }
+  if (currentPeriod === 'year')    { from = new Date(now); from.setFullYear(now.getFullYear()-1); }
 
-        toast.innerHTML = iconSvg +
-            '<span>' + message + '</span>' +
-            '<button class="toast-close" onclick="dismissToast(this.parentElement)">&times;</button>';
+  var rows = document.querySelectorAll('#transactions-tbody .tx-row');
+  rows.forEach(function(row) {
+    var d = new Date(row.dataset.date);
+    var show = true;
+    if (from && currentPeriod !== 'custom') show = d >= from;
+    if (currentPeriod === 'custom' && currentMonth) show = row.dataset.date.startsWith(currentMonth);
+    row.style.display = show ? '' : 'none';
+  });
 
-        container.appendChild(toast);
-
-        // Автоматическое скрытие через 4 секунды
-        setTimeout(function() {
-            dismissToast(toast);
-        }, 4000);
+  // Hide date group rows that have no visible rows following them
+  var tbody = document.getElementById('transactions-tbody');
+  var allRows = tbody.querySelectorAll('tr');
+  allRows.forEach(function(row) {
+    if (row.classList.contains('date-group-row')) {
+      var next = row.nextElementSibling;
+      var hasVisible = false;
+      while (next && !next.classList.contains('date-group-row')) {
+        if (next.style.display !== 'none') { hasVisible = true; break; }
+        next = next.nextElementSibling;
+      }
+      row.style.display = hasVisible ? '' : 'none';
     }
+  });
 
-    function dismissToast(toast) {
-        if (toast.classList.contains('toast-hiding')) return;
-        toast.classList.add('toast-hiding');
-        setTimeout(function() {
-            if (toast.parentElement) {
-                toast.parentElement.removeChild(toast);
-            }
-        }, 300);
-    }
+  recalcStats();
+}
 
-    // === Модальное окно ===
-    function openTransactionModal(txId, accountId) {
-        var modal = document.getElementById('transaction-modal');
-        var modalTitle = document.getElementById('modal-title');
-        var modalBody = document.getElementById('modal-body');
+// ── Пересчёт статистики по видимым строкам ────────────────────────────────
+function recalcStats() {
+  var income = 0, expense = 0, incomeCount = 0, expenseCount = 0, total = 0;
+  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
+    if (row.style.display === 'none') return;
+    total++;
+    var inc = parseFloat(row.dataset.income) || 0;
+    var exp = parseFloat(row.dataset.expense) || 0;
+    if (inc > 0) { income += inc; incomeCount++; }
+    if (exp > 0) { expense += exp; expenseCount++; }
+  });
+  var fmt = function(v) { return v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  var el = function(id) { return document.getElementById(id); };
+  if (el('stat-income'))       el('stat-income').textContent       = fmt(income);
+  if (el('stat-expense'))      el('stat-expense').textContent      = fmt(expense);
+  if (el('stat-income-count')) el('stat-income-count').textContent = incomeCount + ' транз.';
+  if (el('stat-expense-count'))el('stat-expense-count').textContent= expenseCount + ' транз.';
+  if (el('stat-total'))        el('stat-total').textContent        = total;
+}
 
-        modalTitle.textContent = txId ? 'Редактирование транзакции' : 'Новая транзакция';
+// ── Search ────────────────────────────────────────────────────────────────
+function filterTransactions(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
+    var match = !q || row.dataset.desc.toLowerCase().includes(q);
+    row.style.display = match ? '' : 'none';
+  });
+  recalcStats();
+}
 
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+// ── Drawer ────────────────────────────────────────────────────────────────
+function openTransactionDrawer(txId, accountId) {
+  var overlay = document.getElementById('tx-drawer-overlay');
+  var drawer  = document.getElementById('tx-drawer');
+  var title   = document.getElementById('tx-drawer-title');
+  var body    = document.getElementById('tx-drawer-body');
 
-        modalBody.innerHTML = '<div class="flex items-center justify-center py-8"><div class="spinner"></div><span class="text-gray-500 ml-2">Загрузка...</span></div>';
+  title.textContent = txId ? 'Редактировать транзакцию' : 'Новая транзакция';
+  overlay.classList.remove('hidden');
+  drawer.classList.remove('hidden');
+  drawer.style.transition  = 'none';
+  drawer.style.transform   = 'translateX(100%)';
+  requestAnimationFrame(function() {
+    drawer.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+    drawer.style.transform   = 'none';
+  });
+  document.body.style.overflow = 'hidden';
 
-        var url = '/api/v1/finance/transaction/form?tx_id=' + txId + '&account_id=' + accountId;
-        fetch(url)
-            .then(function(response) { return response.text(); })
-            .then(function(html) {
-                modalBody.innerHTML = html;
-                htmx.process(modalBody);
+  body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;padding:48px;gap:8px;"><span class="spinner"></span><span class="text-muted">Загрузка...</span></div>';
 
-                var descInput = document.getElementById('modal-description');
-                if (descInput) descInput.focus();
-            })
-            .catch(function(err) {
-                modalBody.innerHTML = '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">Ошибка загрузки формы</div>';
-            });
-    }
-
-    function closeTransactionModal() {
-        var modal = document.getElementById('transaction-modal');
-        modal.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-
-    function handleModalOverlayClick(event) {
-        if (event.target === event.currentTarget) {
-            closeTransactionModal();
-        }
-    }
-
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            var modal = document.getElementById('transaction-modal');
-            if (!modal.classList.contains('hidden')) {
-                closeTransactionModal();
-            }
-        }
+  fetch('/api/v1/finance/transaction/form?tx_id=' + txId + '&account_id=' + accountId)
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      body.innerHTML = html;
+      htmx.process(body);
+      var inp = document.getElementById('modal-description');
+      if (inp) inp.focus();
+    })
+    .catch(function() {
+      body.innerHTML = '<div style="padding:16px;color:var(--red);">Ошибка загрузки формы</div>';
     });
+}
 
-    // === Обновление таблицы без перезагрузки ===
-    function refreshTransactionsTable() {
-        var tbody = document.getElementById('transactions-tbody');
-        // Показываем индикатор загрузки поверх таблицы
-        tbody.style.opacity = '0.5';
+function closeTransactionDrawer() {
+  var drawer  = document.getElementById('tx-drawer');
+  var overlay = document.getElementById('tx-drawer-overlay');
+  drawer.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+  drawer.style.transform   = 'translateX(100%)';
+  document.body.style.overflow = '';
+  setTimeout(function() {
+    drawer.classList.add('hidden');
+    overlay.classList.add('hidden');
+  }, 230);
+}
 
-        var url = '/api/v1/finance/transaction/table?account_id=' + currentAccountId + '&sort=' + currentSortOrder;
-        fetch(url)
-            .then(function(response) { return response.text(); })
-            .then(function(html) {
-                tbody.innerHTML = html;
-                tbody.style.opacity = '1';
-                // Переинициализируем HTMX для новых элементов
-                htmx.process(tbody);
-            })
-            .catch(function(err) {
-                tbody.style.opacity = '1';
-                console.error('Error refreshing table:', err);
-            });
+// ── Submit tx form ────────────────────────────────────────────────────────
+function submitTransactionForm(event) {
+  event.preventDefault();
+  var form = document.getElementById('modal-transaction-form');
+  var btn  = document.getElementById('modal-submit-btn');
+  btn.disabled = true; btn.textContent = 'Сохранение...';
+
+  fetch('/api/v1/finance/transaction/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(new FormData(form)).toString()
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.result === 'ok') {
+      closeTransactionDrawer();
+      showToast('Транзакция сохранена', 'success');
+      refreshTransactionsTable();
+    } else {
+      showToast('Ошибка: ' + (data.error || 'неизвестная ошибка'), 'error');
+      btn.disabled = false; btn.textContent = 'Сохранить';
     }
+  })
+  .catch(function() {
+    showToast('Ошибка соединения', 'error');
+    btn.disabled = false; btn.textContent = 'Сохранить';
+  });
+  return false;
+}
 
-    // === Отправка формы транзакции через fetch ===
-    function submitTransactionForm(event) {
-        event.preventDefault();
+// ── Refresh table ─────────────────────────────────────────────────────────
+function refreshTransactionsTable() {
+  var tbody = document.getElementById('transactions-tbody');
+  tbody.style.opacity = '0.5';
+  fetch('/api/v1/finance/transaction/table?account_id=' + currentAccountId + '&sort=' + currentSortOrder)
+    .then(function(r) { return r.text(); })
+    .then(function(html) {
+      tbody.innerHTML = html;
+      tbody.style.opacity = '1';
+      htmx.process(tbody);
+    })
+    .catch(function() { tbody.style.opacity = '1'; });
+}
 
-        var form = document.getElementById('modal-transaction-form');
-        var submitBtn = document.getElementById('modal-submit-btn');
-        var formData = new URLSearchParams(new FormData(form));
-
-        // Блокируем кнопку на время отправки
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Сохранение...';
-
-        fetch('/api/v1/finance/transaction/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: formData.toString()
-        })
-        .then(function(response) { return response.json(); })
-        .then(function(data) {
-            if (data.result === 'ok') {
-                // Закрываем модальное окно и показываем нотификацию сразу
-                closeTransactionModal();
-                showToast('Транзакция сохранена. Обновляем список...', 'success');
-                // Обновляем таблицу в фоне
-                refreshTransactionsTable();
-            } else if (data.error) {
-                var resultEl = document.getElementById('modal-result');
-                if (resultEl) {
-                    resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm mt-3">Ошибка: ' + data.error + '</div>';
-                }
-                showToast('Ошибка: ' + data.error, 'error');
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Сохранить';
-            }
-        })
-        .catch(function(err) {
-            showToast('Ошибка соединения с сервером', 'error');
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Сохранить';
-        });
-
-        return false;
-    }
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeTransactionDrawer();
+});
 </script>
 
 {{template "footer" .}}

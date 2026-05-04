@@ -6,7 +6,10 @@ import (
 	"html/template"
 	"math"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/evbogdanov/finforme/internal/models"
 	"github.com/gorilla/sessions"
 )
 
@@ -62,6 +65,60 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 		},
 		"eqStr": func(a, b string) bool {
 			return a == b
+		},
+		"upper": strings.ToUpper,
+		"slice": func(s string, i, j int) string {
+			r := []rune(s)
+			if i < 0 {
+				i = 0
+			}
+			if j > len(r) {
+				j = len(r)
+			}
+			if i >= j {
+				return ""
+			}
+			return string(r[i:j])
+		},
+		"formatMoneyShort": func(value float64) string {
+			abs := math.Abs(value)
+			sign := ""
+			if value < 0 {
+				sign = "-"
+			}
+			switch {
+			case abs >= 1_000_000:
+				return fmt.Sprintf("%s%.1fM", sign, abs/1_000_000)
+			case abs >= 1_000:
+				return fmt.Sprintf("%s%.1fK", sign, abs/1_000)
+			default:
+				return fmt.Sprintf("%s%.0f", sign, abs)
+			}
+		},
+		"formatDateGroup": func(dateStr string) string {
+			// dateStr ожидается в формате "2006-01-02"
+			t, err := time.Parse("2006-01-02", dateStr)
+			if err != nil {
+				return dateStr
+			}
+			now := time.Now()
+			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+			d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, now.Location())
+			switch {
+			case d.Equal(today):
+				return "Сегодня"
+			case d.Equal(today.AddDate(0, 0, -1)):
+				return "Вчера"
+			default:
+				months := []string{
+					"января", "февраля", "марта", "апреля", "мая", "июня",
+					"июля", "августа", "сентября", "октября", "ноября", "декабря",
+				}
+				if t.Year() == now.Year() {
+					return fmt.Sprintf("%d %s", t.Day(), months[t.Month()-1])
+				}
+				return fmt.Sprintf("%d %s %d", t.Day(), months[t.Month()-1], t.Year())
+			}
 		},
 	}
 
@@ -123,6 +180,36 @@ func (h *Handler) clearSession(w http.ResponseWriter, r *http.Request) error {
 	return session.Save(r, w)
 }
 
+// pageData возвращает базовые данные для страниц: user, accountTree, activePage
+func (h *Handler) pageData(userID int64, activePage string) map[string]interface{} {
+	data := map[string]interface{}{
+		"Authenticated": true,
+		"IsAdmin":       h.getIsAdmin(userID),
+		"ActivePage":    activePage,
+	}
+
+	// Пользователь
+	var user models.User
+	err := h.db.QueryRow(
+		`SELECT id, username, email, first_name, last_name FROM users WHERE id = ?`, userID,
+	).Scan(&user.ID, &user.Username, &user.Email, &user.FirstName, &user.LastName)
+	if err == nil {
+		data["User"] = user
+	}
+
+	// Дерево счетов для сайдбара (с балансами)
+	sidebarAccounts, err := h.getAccountsWithBalance(userID)
+	if err == nil && len(sidebarAccounts) > 0 {
+		accountsMap := make(map[int64]*models.Account, len(sidebarAccounts))
+		for _, acc := range sidebarAccounts {
+			accountsMap[acc.ID] = acc
+		}
+		data["AccountTree"] = h.buildAccountTree(sidebarAccounts, accountsMap)
+	}
+
+	return data
+}
+
 // RequireAuth - middleware для проверки аутентификации
 func (h *Handler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -145,10 +232,15 @@ func (h *Handler) RequireAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// renderTemplate рендерит шаблон с данными
+// renderTemplate рендерит шаблон с данными через буфер,
+// чтобы при ошибке можно было вернуть 500 не после начала записи тела.
 func (h *Handler) renderTemplate(w http.ResponseWriter, name string, data interface{}) {
-	err := h.templates.ExecuteTemplate(w, name, data)
+	var buf strings.Builder
+	err := h.templates.ExecuteTemplate(&buf, name, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, buf.String())
 }

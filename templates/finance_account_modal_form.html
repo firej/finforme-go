@@ -1,78 +1,80 @@
 {{define "finance_account_modal_form.html"}}
+{{/*
+  Рендерится внутри модального окна account-modal в main.html.
+  Вызывается через /api/v1/finance/account/form?account_id=N
+*/}}
 <form id="modal-account-form" onsubmit="return submitAccountForm(event)">
-    {{if .Account}}
-    <input type="hidden" name="id" value="{{.Account.ID}}">
-    {{end}}
+  {{if .Account}}
+  <input type="hidden" name="id" value="{{.Account.ID}}">
+  {{end}}
 
-    <div class="mb-4">
-        <label for="modal-account_name" class="block text-sm font-medium text-gray-700 mb-1">Название счета <span class="text-red-500">*</span></label>
-        <input type="text" id="modal-account_name" name="account_name" autofocus
-               value="{{if .Account}}{{.Account.Name}}{{end}}" required
-               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+  <!-- Name -->
+  <div class="form-group">
+    <label class="form-label" for="modal-account_name">Название счёта <span style="color:var(--red)">*</span></label>
+    <input class="form-input" type="text" id="modal-account_name" name="account_name"
+           autofocus required placeholder="Например: Tinkoff Black"
+           value="{{if .Account}}{{.Account.Name}}{{end}}">
+  </div>
+
+  <!-- Description -->
+  <div class="form-group">
+    <label class="form-label" for="modal-account_description">Описание</label>
+    <input class="form-input" type="text" id="modal-account_description" name="account_description"
+           placeholder="Необязательное описание"
+           value="{{if .Account}}{{.Account.Description}}{{end}}">
+  </div>
+
+  <!-- Type + Currency -->
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label" for="modal-account_type">Тип <span style="color:var(--red)">*</span></label>
+      <select class="form-select" id="modal-account_type" name="account_type" required>
+        <option value="ASSET"     {{if .Account}}{{if eq .Account.AccountType "ASSET"}}selected{{end}}{{end}}>Актив</option>
+        <option value="CASH"      {{if .Account}}{{if eq .Account.AccountType "CASH"}}selected{{end}}{{end}}>Наличные</option>
+        <option value="BANK"      {{if .Account}}{{if eq .Account.AccountType "BANK"}}selected{{end}}{{end}}>Банк</option>
+        <option value="LIABILITY" {{if .Account}}{{if eq .Account.AccountType "LIABILITY"}}selected{{end}}{{end}}>Обязательства</option>
+        <option value="INCOME"    {{if .Account}}{{if eq .Account.AccountType "INCOME"}}selected{{end}}{{end}}>Доход</option>
+        <option value="EXPENSE"   {{if .Account}}{{if eq .Account.AccountType "EXPENSE"}}selected{{end}}{{end}}>Расход</option>
+        <option value="EQUITY"    {{if .Account}}{{if eq .Account.AccountType "EQUITY"}}selected{{end}}{{end}}>Капитал</option>
+      </select>
     </div>
-
-    <div class="mb-4">
-        <label for="modal-account_description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
-        <input type="text" id="modal-account_description" name="account_description"
-               value="{{if .Account}}{{.Account.Description}}{{end}}"
-               class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
+    <div class="form-group">
+      <label class="form-label" for="modal-commodity_id">Валюта <span style="color:var(--red)">*</span></label>
+      <select class="form-select" id="modal-commodity_id" name="commodity_id" required>
+        {{if .Commodities}}
+          {{range .Commodities}}
+          <option value="{{.ID}}" {{if $.Account}}{{if eq $.Account.CommodityID .ID}}selected{{end}}{{end}}>
+            {{.Fullname}} ({{.Sign}})
+          </option>
+          {{end}}
+        {{else}}
+          <option value="">Нет доступных валют</option>
+        {{end}}
+      </select>
     </div>
+  </div>
 
-    <div class="grid grid-cols-2 gap-4 mb-4">
-        <div>
-            <label for="modal-account_type" class="block text-sm font-medium text-gray-700 mb-1">Тип счета <span class="text-red-500">*</span></label>
-            <select id="modal-account_type" name="account_type" required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white">
-                <option value="ASSET" {{if .Account}}{{if eq .Account.AccountType "ASSET"}}selected{{end}}{{end}}>Актив</option>
-                <option value="CASH" {{if .Account}}{{if eq .Account.AccountType "CASH"}}selected{{end}}{{end}}>Наличные</option>
-                <option value="BANK" {{if .Account}}{{if eq .Account.AccountType "BANK"}}selected{{end}}{{end}}>Банк</option>
-                <option value="LIABILITY" {{if .Account}}{{if eq .Account.AccountType "LIABILITY"}}selected{{end}}{{end}}>Обязательства</option>
-                <option value="INCOME" {{if .Account}}{{if eq .Account.AccountType "INCOME"}}selected{{end}}{{end}}>Доход</option>
-                <option value="EXPENSE" {{if .Account}}{{if eq .Account.AccountType "EXPENSE"}}selected{{end}}{{end}}>Расход</option>
-                <option value="EQUITY" {{if .Account}}{{if eq .Account.AccountType "EQUITY"}}selected{{end}}{{end}}>Капитал</option>
-            </select>
-        </div>
-        <div>
-            <label for="modal-commodity_id" class="block text-sm font-medium text-gray-700 mb-1">Валюта <span class="text-red-500">*</span></label>
-            <select id="modal-commodity_id" name="commodity_id" required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white">
-                {{if .Commodities}}
-                    {{range .Commodities}}
-                    <option value="{{.ID}}" {{if $.Account}}{{if eq $.Account.CommodityID .ID}}selected{{end}}{{end}}>
-                        {{.Fullname}} ({{.Sign}})
-                    </option>
-                    {{end}}
-                {{else}}
-                    <option value="">Нет доступных валют</option>
-                {{end}}
-            </select>
-        </div>
-    </div>
+  <!-- Parent account -->
+  <div class="form-group">
+    <label class="form-label" for="modal-account_parent">Родительский счёт</label>
+    <select class="form-select" id="modal-account_parent" name="account_parent">
+      <option value="">— корневой —</option>
+      {{range .Accounts}}
+      {{if ne .AccountType "ROOT"}}
+      <option value="{{.ID}}"
+        {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID (derefInt64 $.Account.ParentID)}}selected{{end}}{{end}}{{end}}>
+        {{.DisplayName}}
+      </option>
+      {{end}}
+      {{end}}
+    </select>
+  </div>
 
-    <div class="mb-4">
-        <label for="modal-account_parent" class="block text-sm font-medium text-gray-700 mb-1">Родительский счет</label>
-        <select id="modal-account_parent" name="account_parent"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm">
-            <option value="">Нет</option>
-            {{range .Accounts}}
-            {{if ne .AccountType "ROOT"}}
-            <option value="{{.ID}}" {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID (derefInt64 $.Account.ParentID)}}selected{{end}}{{end}}{{end}}>
-                {{.DisplayName}}
-            </option>
-            {{end}}
-            {{end}}
-        </select>
-    </div>
+  <div id="modal-account-result"></div>
 
-    <div id="modal-account-result"></div>
-
-    <div class="flex gap-3 mt-4">
-        <button type="submit" id="modal-account-submit-btn" class="px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors">
-            Сохранить
-        </button>
-        <button type="button" onclick="closeAccountModal()" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
-            Отмена
-        </button>
-    </div>
+  <div style="display:flex;gap:8px;margin-top:4px;">
+    <button type="submit" id="modal-account-submit-btn" class="btn btn-primary">Сохранить</button>
+    <button type="button" class="btn btn-ghost" onclick="closeAccountModal()">Отмена</button>
+  </div>
 </form>
 {{end}}

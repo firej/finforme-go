@@ -28,16 +28,8 @@ func (h *Handler) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 // adminPageData формирует общие данные для страниц админки
 func (h *Handler) adminPageData(r *http.Request, title string) map[string]interface{} {
 	userID, _ := h.getUserID(r)
-	var user models.User
-	h.db.QueryRow(`SELECT id, username FROM users WHERE id = ?`, userID).
-		Scan(&user.ID, &user.Username)
-
-	data := map[string]interface{}{
-		"Title":         title,
-		"Authenticated": true,
-		"IsAdmin":       true,
-		"User":          user,
-	}
+	data := h.pageData(userID, "")
+	data["Title"] = title
 
 	// Передаём сообщения из query-параметров
 	if msg := r.URL.Query().Get("msg"); msg != "" {

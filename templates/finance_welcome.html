@@ -1,177 +1,122 @@
 {{define "finance_welcome.html"}}
 {{template "header" .}}
 
-<div>
-    <h1 class="text-3xl font-bold text-gray-900 mb-2">Добро пожаловать в систему учета финансов!</h1>
-    <p class="text-lg text-gray-500 mb-8">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
+<div class="topbar">
+  <div class="topbar-title">Добро пожаловать</div>
+</div>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">🚀 Быстрый старт</h3>
-            <p class="text-sm text-gray-600 mb-4 flex-1">Создайте базовый набор счетов как в GnuCash: Активы, Обязательства, Доходы, Расходы и Капитал с готовой иерархией подсчетов.</p>
-            <button id="createBaseBtn" onclick="createBaseAccounts()"
-                    class="w-full px-4 py-2.5 bg-emerald-600 text-white font-medium rounded-lg shadow hover:bg-emerald-700 transition-colors text-sm">
-                Создать базовый набор
-            </button>
-        </div>
+<div class="content-area">
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">У вас пока нет счетов. Выберите один из вариантов для начала работы:</p>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">📝 Создать вручную</h3>
-            <p class="text-sm text-gray-600 mb-4 flex-1">Начните с чистого листа и создайте свой первый счет вручную. Подходит для опытных пользователей.</p>
-            <a href="/finance/account/new"
-               class="w-full inline-flex justify-center px-4 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors text-sm">
-                Создать счет
-            </a>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col">
-            <h3 class="text-lg font-semibold text-gray-900 mb-2">📥 Импорт из GnuCash</h3>
-            <p class="text-sm text-gray-600 mb-4 flex-1">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash - сжатый XML).</p>
-            <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" class="hidden" onchange="importGnuCashXML(this)">
-            <button id="importXmlBtn" onclick="document.getElementById('gnucashFile').click()"
-                    class="w-full px-4 py-2.5 bg-sky-600 text-white font-medium rounded-lg shadow hover:bg-sky-700 transition-colors text-sm">
-                Выбрать файл .gnucash
-            </button>
-        </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Быстрый старт</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;flex:1;">Создайте базовый набор счетов как в GnuCash: Активы, Обязательства, Доходы, Расходы и Капитал с готовой иерархией.</p>
+      <button id="createBaseBtn" onclick="createBaseAccounts()" class="btn btn-primary" style="justify-content:center;">
+        Создать базовый набор
+      </button>
     </div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-semibold text-gray-900">📊 Что включает базовый набор счетов?</h3>
-        </div>
-        <div class="p-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                    <h4 class="font-semibold text-gray-900 mb-2">Активы</h4>
-                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
-                        <li>└ Текущие активы</li>
-                        <li class="ml-4">├ Наличные</li>
-                        <li class="ml-4">├ Расчетный счет</li>
-                        <li class="ml-4">└ Сберегательный счет</li>
-                    </ul>
-
-                    <h4 class="font-semibold text-gray-900 mt-4 mb-2">Обязательства</h4>
-                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
-                        <li>├ Кредитная карта</li>
-                        <li>└ Займы</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold text-gray-900 mb-2">Доходы</h4>
-                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
-                        <li>├ Зарплата</li>
-                        <li>├ Проценты</li>
-                        <li>└ Прочие доходы</li>
-                    </ul>
-
-                    <h4 class="font-semibold text-gray-900 mt-4 mb-2">Капитал</h4>
-                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
-                        <li>└ Начальный баланс</li>
-                    </ul>
-                </div>
-                <div>
-                    <h4 class="font-semibold text-gray-900 mb-2">Расходы</h4>
-                    <ul class="text-sm text-gray-600 space-y-1 ml-2">
-                        <li>├ Продукты</li>
-                        <li>├ Транспорт</li>
-                        <li>├ Коммунальные услуги</li>
-                        <li class="ml-4">├ Электричество</li>
-                        <li class="ml-4">├ Газ</li>
-                        <li class="ml-4">├ Вода</li>
-                        <li class="ml-4">├ Интернет</li>
-                        <li class="ml-4">└ Телефон</li>
-                        <li>├ Развлечения</li>
-                        <li>├ Одежда</li>
-                        <li>├ Здоровье</li>
-                        <li>├ Образование</li>
-                        <li>├ Подарки</li>
-                        <li>└ Прочие расходы</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Создать вручную</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;flex:1;">Начните с чистого листа и создайте свой первый счёт вручную. Подходит для опытных пользователей.</p>
+      <button onclick="openAccountModal(0)" class="btn btn-primary" style="justify-content:center;">Создать счёт</button>
     </div>
+
+    <div class="card" style="padding:20px;display:flex;flex-direction:column;">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Импорт из GnuCash</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;flex:1;">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash — сжатый XML).</p>
+      <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" style="display:none;" onchange="importGnuCashXML(this)">
+      <button id="importXmlBtn" onclick="document.getElementById('gnucashFile').click()" class="btn btn-ghost" style="justify-content:center;">
+        Выбрать файл .gnucash
+      </button>
+    </div>
+  </div>
+
+  <div class="card" style="overflow:hidden;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">Что включает базовый набор счетов?</div>
+    <div style="padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Активы</div>
+        <ul style="font-size:12px;color:var(--text-secondary);line-height:1.8;list-style:none;padding:0;">
+          <li>└ Текущие активы</li>
+          <li style="padding-left:12px;">├ Наличные</li>
+          <li style="padding-left:12px;">├ Расчетный счет</li>
+          <li style="padding-left:12px;">└ Сберегательный счет</li>
+        </ul>
+        <div style="font-size:12px;font-weight:600;margin-top:12px;margin-bottom:6px;">Обязательства</div>
+        <ul style="font-size:12px;color:var(--text-secondary);line-height:1.8;list-style:none;padding:0;">
+          <li>├ Кредитная карта</li>
+          <li>└ Займы</li>
+        </ul>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Доходы</div>
+        <ul style="font-size:12px;color:var(--text-secondary);line-height:1.8;list-style:none;padding:0;">
+          <li>├ Зарплата</li>
+          <li>├ Проценты</li>
+          <li>└ Прочие доходы</li>
+        </ul>
+        <div style="font-size:12px;font-weight:600;margin-top:12px;margin-bottom:6px;">Капитал</div>
+        <ul style="font-size:12px;color:var(--text-secondary);line-height:1.8;list-style:none;padding:0;">
+          <li>└ Начальный баланс</li>
+        </ul>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Расходы</div>
+        <ul style="font-size:12px;color:var(--text-secondary);line-height:1.8;list-style:none;padding:0;">
+          <li>├ Продукты</li>
+          <li>├ Транспорт</li>
+          <li>├ Коммунальные услуги</li>
+          <li>├ Развлечения</li>
+          <li>├ Одежда</li>
+          <li>├ Здоровье</li>
+          <li>├ Образование</li>
+          <li>├ Подарки</li>
+          <li>└ Прочие расходы</li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
 function createBaseAccounts() {
-    const btn = document.getElementById('createBaseBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Создание...';
-    btn.classList.add('opacity-75', 'cursor-not-allowed');
-
-    fetch('/api/v1/finance/welcome/createbase', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+  var btn = document.getElementById('createBaseBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Создание...';
+  fetch('/api/v1/finance/welcome/createbase', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.result === 'ok') { window.location.href = '/finance/'; }
+      else { alert('Ошибка: ' + (data.message || 'Неизвестная ошибка')); btn.disabled = false; btn.innerHTML = 'Создать базовый набор'; }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.result === 'ok') {
-            window.location.href = '/finance/';
-        } else {
-            alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
-            btn.disabled = false;
-            btn.innerHTML = 'Создать базовый набор';
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
-        }
-    })
-    .catch(error => {
-        alert('Ошибка: ' + error.message);
-        btn.disabled = false;
-        btn.innerHTML = 'Создать базовый набор';
-        btn.classList.remove('opacity-75', 'cursor-not-allowed');
-    });
+    .catch(function(e) { alert('Ошибка: ' + e.message); btn.disabled = false; btn.innerHTML = 'Создать базовый набор'; });
 }
 
 function importGnuCashXML(input) {
-    if (!input.files || input.files.length === 0) {
-        return;
-    }
-
-    const file = input.files[0];
-    const btn = document.getElementById('importXmlBtn');
-    const originalText = btn.innerHTML;
-
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Импорт...';
-    btn.classList.add('opacity-75', 'cursor-not-allowed');
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    fetch('/api/v1/finance/welcome/importxml', {
-        method: 'POST',
-        body: formData
+  if (!input.files || input.files.length === 0) return;
+  var btn = document.getElementById('importXmlBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Импорт...';
+  var fd = new FormData();
+  fd.append('file', input.files[0]);
+  fetch('/api/v1/finance/welcome/importxml', { method: 'POST', body: fd })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.result === 'ok') {
+        var msg = 'Импорт завершен!';
+        if (data.accounts !== undefined) msg += '\nСчетов: ' + data.accounts;
+        if (data.transactions !== undefined) msg += '\nТранзакций: ' + data.transactions;
+        alert(msg);
+        window.location.href = '/finance/';
+      } else {
+        alert('Ошибка: ' + (data.message || 'Неизвестная ошибка'));
+        btn.disabled = false; btn.innerHTML = 'Выбрать файл .gnucash';
+      }
     })
-    .then(response => response.json())
-    .then(data => {
-        if (data.result === 'ok') {
-            let message = 'Импорт завершен успешно!';
-            if (data.accounts !== undefined) {
-                message += '\nИмпортировано счетов: ' + data.accounts;
-            }
-            if (data.transactions !== undefined) {
-                message += '\nИмпортировано транзакций: ' + data.transactions;
-            }
-            alert(message);
-            window.location.href = '/finance/';
-        } else {
-            alert('Ошибка импорта: ' + (data.message || 'Неизвестная ошибка'));
-            btn.disabled = false;
-            btn.innerHTML = originalText;
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
-        }
-    })
-    .catch(error => {
-        alert('Ошибка: ' + error.message);
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-        btn.classList.remove('opacity-75', 'cursor-not-allowed');
-    });
-
-    input.value = '';
+    .catch(function(e) { alert('Ошибка: ' + e.message); btn.disabled = false; btn.innerHTML = 'Выбрать файл .gnucash'; });
+  input.value = '';
 }
 </script>
 

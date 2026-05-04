@@ -1,0 +1,110 @@
+{{define "dashboard.html"}}
+{{template "header" .}}
+
+<div class="topbar">
+  <div class="topbar-title">Дашборд</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px;">
+
+  <!-- KPI row -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Чистый капитал</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:{{if ge .NetWorth 0.0}}var(--green){{else}}var(--red){{end}};margin-bottom:2px;">
+        {{formatMoney .NetWorth}}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);">Активы − Обязательства</div>
+    </div>
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Активы</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:var(--green);margin-bottom:2px;">
+        {{formatMoney .TotalAssets}}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);">ASSET + BANK + CASH</div>
+    </div>
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Обязательства</div>
+      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:{{if gt .TotalLiabilities 0.0}}var(--red){{else}}var(--text-primary){{end}};margin-bottom:2px;">
+        {{formatMoney .TotalLiabilities}}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);">LIABILITY</div>
+    </div>
+  </div>
+
+  <!-- Income / Expense -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Доходы (всего)</div>
+      <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--green);">
+        {{formatMoney .TotalIncome}}
+      </div>
+    </div>
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Расходы (всего)</div>
+      <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--red);">
+        {{formatMoney .TotalExpense}}
+      </div>
+    </div>
+  </div>
+
+  <!-- Top accounts + Recent transactions -->
+  <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:12px;align-items:start;">
+
+    <!-- Top accounts -->
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Крупнейшие счета</div>
+      {{if .TopAccounts}}
+        {{range .TopAccounts}}
+        <a href="/finance/account/{{.ID}}"
+           style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light);text-decoration:none;color:inherit;cursor:pointer;">
+          <span class="account-dot dot-{{.AccountType}}" style="width:8px;height:8px;flex-shrink:0;"></span>
+          <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Name}}</span>
+          <span style="font-family:var(--font-mono);font-size:12px;color:{{if ge .Balance 0.0}}var(--green){{else}}var(--red){{end}};font-weight:500;flex-shrink:0;">
+            {{formatMoneyShort .Balance}}
+          </span>
+        </a>
+        {{end}}
+      {{else}}
+        <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0;">Нет данных</div>
+      {{end}}
+    </div>
+
+    <!-- Recent transactions -->
+    <div class="card" style="padding:16px 18px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Последние транзакции</div>
+      {{if .RecentTransactions}}
+        <table style="width:100%;border-collapse:collapse;">
+          <tbody>
+            {{range .RecentTransactions}}
+            <tr style="border-bottom:1px solid var(--border-light);">
+              <td style="padding:7px 8px 7px 0;width:80px;">
+                <span style="font-size:11px;color:var(--text-muted);">{{formatDateGroup .PostDate}}</span>
+              </td>
+              <td style="padding:7px 4px;width:100%;">
+                <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
+                  <span class="account-dot dot-{{.AccountType}}" style="width:6px;height:6px;flex-shrink:0;"></span>
+                  <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Description}}</span>
+                </div>
+                <div style="font-size:10px;color:var(--text-muted);margin-top:1px;padding-left:11px;">{{.AccountName}}</div>
+              </td>
+              <td style="padding:7px 0 7px 8px;text-align:right;white-space:nowrap;">
+                <span style="font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);">
+                  {{formatMoneyShort .Amount}}
+                </span>
+              </td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0;">Нет транзакций</div>
+      {{end}}
+    </div>
+
+  </div>
+
+</div>
+
+{{template "footer" .}}
+{{end}}

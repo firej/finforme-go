@@ -192,13 +192,9 @@ func (h *Handler) AccountInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := map[string]interface{}{
-		"Title":         "Информация об аккаунте",
-		"User":          user,
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
-
+	data := h.pageData(userID, "")
+	data["Title"] = "Информация об аккаунте"
+	data["User"] = user
 	h.renderTemplate(w, "account_info.html", data)
 }
 
@@ -207,11 +203,8 @@ func (h *Handler) PasswordChange(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 
 	if r.Method == "GET" {
-		data := map[string]interface{}{
-			"Title":         "Смена пароля",
-			"Authenticated": true,
-			"IsAdmin":       h.getIsAdmin(userID),
-		}
+		data := h.pageData(userID, "")
+		data["Title"] = "Смена пароля"
 		h.renderTemplate(w, "password_change_form.html", data)
 		return
 	}
@@ -268,12 +261,9 @@ func (h *Handler) ChangeInfo(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		data := map[string]interface{}{
-			"Title":         "Изменение информации",
-			"User":          user,
-			"Authenticated": true,
-			"IsAdmin":       h.getIsAdmin(userID),
-		}
+		data := h.pageData(userID, "")
+		data["Title"] = "Изменение информации"
+		data["User"] = user
 		h.renderTemplate(w, "change_info_form.html", data)
 		return
 	}

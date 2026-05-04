@@ -1,97 +1,86 @@
 {{define "finance_transaction.html"}}
 {{template "header" .}}
 
-<div class="max-w-2xl">
-    <h2 class="text-2xl font-bold text-gray-900 mb-6">{{if .Transaction}}Редактирование транзакции{{else}}Новая транзакция{{end}}</h2>
+<div class="topbar">
+  <div class="topbar-title">{{if .Transaction}}Редактирование транзакции{{else}}Новая транзакция{{end}}</div>
+</div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <form method="POST" hx-post="/api/v1/finance/transaction/save" hx-target="#result">
-            {{if .Transaction}}
-            <input type="hidden" name="id" value="{{.Transaction.ID}}">
-            {{end}}
+<div class="content-area">
+  <div class="card" style="max-width:480px;padding:24px;">
+    <form method="POST" hx-post="/api/v1/finance/transaction/save" hx-target="#result">
+      {{if .Transaction}}
+      <input type="hidden" name="id" value="{{.Transaction.ID}}">
+      {{end}}
 
-            <div class="mb-4">
-                <label for="description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
-                <input type="text" id="description" name="description"
-                       value="{{if .Transaction}}{{.Transaction.Description}}{{end}}" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="description">Описание</label>
+        <input class="form-input" type="text" id="description" name="description"
+               value="{{if .Transaction}}{{.Transaction.Description}}{{end}}" required>
+      </div>
 
-            <div class="mb-4">
-                <label for="post_date" class="block text-sm font-medium text-gray-700 mb-1">Дата</label>
-                <input type="date" id="post_date" name="post_date"
-                       value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{end}}" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="post_date">Дата</label>
+        <input class="form-input" type="date" id="post_date" name="post_date"
+               value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{end}}" required>
+      </div>
 
-            <div class="mb-4">
-                <label for="tags" class="block text-sm font-medium text-gray-700 mb-1">Теги (через запятую)</label>
-                <input type="text" id="tags" name="tags"
-                       value="{{if .Transaction}}{{.Transaction.Tags}}{{end}}"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="tags">Теги (через запятую)</label>
+        <input class="form-input" type="text" id="tags" name="tags"
+               value="{{if .Transaction}}{{.Transaction.Tags}}{{end}}">
+      </div>
 
-            <div class="mb-4">
-                <label for="value" class="block text-sm font-medium text-gray-700 mb-1">Сумма</label>
-                <input type="number" step="0.01" id="value" name="value"
-                       value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="value">Сумма</label>
+        <input class="form-input form-input-mono" type="number" step="0.01" id="value" name="value"
+               value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}" required>
+      </div>
 
-            <div class="mb-4">
-                <label for="debit_account" class="block text-sm font-medium text-gray-700 mb-1">Счет зачисления</label>
-                <select id="debit_account" name="debit_account" required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm">
-                    {{$debitAccountID := 0}}
-                    {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
-                    {{range .Accounts}}
-                    <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
-                    {{end}}
-                </select>
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="debit_account">Счёт зачисления</label>
+        <select class="form-select" id="debit_account" name="debit_account" required>
+          {{$debitAccountID := 0}}
+          {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
+          {{range .Accounts}}
+          <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
+          {{end}}
+        </select>
+      </div>
 
-            <div class="mb-6">
-                <label for="credit_account" class="block text-sm font-medium text-gray-700 mb-1">Счет списания</label>
-                <select id="credit_account" name="credit_account" required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white font-mono text-sm">
-                    {{$creditAccountID := 0}}
-                    {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
-                    {{range .Accounts}}
-                    <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
-                    {{end}}
-                </select>
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="credit_account">Счёт списания</label>
+        <select class="form-select" id="credit_account" name="credit_account" required>
+          {{$creditAccountID := 0}}
+          {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
+          {{range .Accounts}}
+          <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
+          {{end}}
+        </select>
+      </div>
 
-            <div class="flex gap-3">
-                <button type="submit" class="px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors">
-                    Сохранить
-                </button>
-                <a href="/finance/account/{{.AccountID}}" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
-                    Отмена
-                </a>
-            </div>
-        </form>
+      <div style="display:flex;gap:8px;margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/finance/account/{{.AccountID}}" class="btn btn-ghost">Отмена</a>
+      </div>
+    </form>
 
-        <div id="result" class="mt-4"></div>
+    <div id="result" style="margin-top:16px;"></div>
 
-        <script>
-            document.body.addEventListener('htmx:afterRequest', function(evt) {
-                if (evt.detail.successful) {
-                    try {
-                        const response = JSON.parse(evt.detail.xhr.responseText);
-                        if (response.result === 'ok') {
-                            window.location.href = '/finance/account/{{.AccountID}}';
-                        } else if (response.error) {
-                            document.getElementById('result').innerHTML =
-                                '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">Ошибка: ' + response.error + '</div>';
-                        }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                    }
-                }
-            });
-        </script>
-    </div>
+    <script>
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+      if (evt.detail.successful) {
+        try {
+          var r = JSON.parse(evt.detail.xhr.responseText);
+          if (r.result === 'ok') { window.location.href = '/finance/account/{{.AccountID}}'; }
+          else if (r.error) {
+            document.getElementById('result').innerHTML =
+              '<div style="padding:10px 12px;background:var(--red-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--red);">Ошибка: ' + r.error + '</div>';
+          }
+        } catch(e) {}
+      }
+    });
+    </script>
+  </div>
 </div>
 
 {{template "footer" .}}

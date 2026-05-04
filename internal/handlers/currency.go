@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/evbogdanov/finforme/internal/models"
 )
 
 // CurrencyRateRow — одна строка курса из БД (последний курс)
@@ -38,22 +37,13 @@ type CurrencyChartData struct {
 func (h *Handler) CurrencyPage(w http.ResponseWriter, r *http.Request) {
 	userID, authenticated := h.getUserID(r)
 
-	data := map[string]interface{}{
-		"Title":         "Курсы валют",
-		"Authenticated": authenticated,
-	}
-
+	var data map[string]interface{}
 	if authenticated {
-		var user models.User
-		err := h.db.QueryRow(`
-			SELECT id, username, email, first_name, last_name
-			FROM users WHERE id = ?
-		`, userID).Scan(&user.ID, &user.Username, &user.Email, &user.FirstName, &user.LastName)
-		if err == nil {
-			data["User"] = user
-		}
-		data["IsAdmin"] = h.getIsAdmin(userID)
+		data = h.pageData(userID, "currency")
+	} else {
+		data = map[string]interface{}{"Authenticated": false}
 	}
+	data["Title"] = "Курсы валют"
 
 	rates, updatedAt, err := loadCurrencyRates(h.db)
 	if err != nil {

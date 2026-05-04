@@ -1,149 +1,128 @@
 {{define "finance_settings.html"}}
 {{template "header" .}}
 
-<div>
-    <h2 class="text-2xl font-bold text-gray-900 mb-6">Настройки</h2>
+<div class="topbar">
+  <div class="topbar-title">Настройки</div>
+</div>
 
-    <!-- Импорт данных -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-semibold text-gray-900">Импорт данных</h3>
+<div class="content-area">
+
+  <!-- Импорт данных -->
+  <div class="card" style="overflow:hidden;margin-bottom:12px;max-width:600px;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">Импорт данных</div>
+    <div style="padding:20px;">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Импорт из GnuCash</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">Загрузите файл базы данных GnuCash (*.sqlite) для импорта счетов и транзакций.</p>
+
+      <form id="importForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <label class="form-label" for="fileInput">Файл базы данных GnuCash</label>
+          <input class="form-input" type="file" id="fileInput" name="file" accept=".sqlite,.db" required>
+          <div class="form-hint">Поддерживаются только файлы SQLite базы данных GnuCash</div>
         </div>
-        <div class="p-6">
-            <h4 class="font-medium text-gray-900 mb-2">Импорт из GnuCash</h4>
-            <p class="text-sm text-gray-600 mb-4">Загрузите файл базы данных GnuCash (*.sqlite) для импорта счетов и транзакций.</p>
 
-            <form id="importForm" enctype="multipart/form-data" class="mb-6">
-                <div class="mb-4">
-                    <label for="fileInput" class="block text-sm font-medium text-gray-700 mb-1">Файл базы данных GnuCash</label>
-                    <input type="file" id="fileInput" name="file" accept=".sqlite,.db" required
-                           class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500">
-                    <p class="mt-1 text-xs text-gray-500">Поддерживаются только файлы SQLite базы данных GnuCash</p>
-                </div>
-
-                <div id="progressDiv" class="mb-4 hidden">
-                    <div class="w-full bg-gray-200 rounded-full h-8 overflow-hidden">
-                        <div id="progressBar" class="h-full bg-primary-600 rounded-full flex items-center justify-center text-white text-xs font-medium progress-bar-animated" style="width: 100%">
-                            Импорт данных...
-                        </div>
-                    </div>
-                </div>
-
-                <div id="messageDiv" class="mb-4 hidden p-4 rounded-lg text-sm"></div>
-
-                <button type="submit" id="submitBtn"
-                        class="px-4 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors text-sm">
-                    Импортировать
-                </button>
-            </form>
-
-            <div class="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800 mb-4">
-                <p class="font-semibold mb-1">Инструкция:</p>
-                <ol class="list-decimal list-inside space-y-1">
-                    <li>Откройте GnuCash и сохраните вашу базу данных в формате SQLite</li>
-                    <li>Выберите сохраненный файл с помощью кнопки выше</li>
-                    <li>Нажмите "Импортировать" и дождитесь завершения процесса</li>
-                </ol>
-            </div>
-
-            <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                <span class="font-semibold">Внимание!</span> Импорт добавит новые счета и транзакции к существующим данным.
-                Если вы хотите полностью заменить данные, сначала удалите существующие счета.
-            </div>
+        <div id="progressDiv" style="display:none;margin-bottom:16px;">
+          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;">
+            <div id="progressBar" style="width:100%;height:100%;background:var(--accent);border-radius:99px;"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Импорт данных...</div>
         </div>
+
+        <div id="messageDiv" style="display:none;margin-bottom:16px;padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;"></div>
+
+        <button type="submit" id="submitBtn" class="btn btn-primary">Импортировать</button>
+      </form>
+
+      <div style="margin-top:16px;padding:12px;background:var(--accent-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-secondary);">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--text-primary);">Инструкция:</div>
+        <ol style="padding-left:16px;line-height:1.8;">
+          <li>Откройте GnuCash и сохраните базу данных в формате SQLite</li>
+          <li>Выберите сохранённый файл кнопкой выше</li>
+          <li>Нажмите «Импортировать» и дождитесь завершения</li>
+        </ol>
+      </div>
+
+      <div style="margin-top:10px;padding:10px 12px;background:var(--amber-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-secondary);">
+        <span style="font-weight:600;color:var(--amber);">Внимание!</span> Импорт добавит новые счета и транзакции к существующим данным.
+      </div>
     </div>
+  </div>
 
-    <!-- Экспорт данных -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-        <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 class="text-lg font-semibold text-gray-900">Экспорт данных</h3>
-        </div>
-        <div class="p-6">
-            <p class="text-sm text-gray-600 mb-4">Экспортировать все данные в JSON формате</p>
-            <a href="/api/v1/finance/export/json" download
-               class="inline-flex items-center px-4 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors text-sm">
-                Экспортировать JSON
-            </a>
-        </div>
+  <!-- Экспорт данных -->
+  <div class="card" style="overflow:hidden;margin-bottom:12px;max-width:600px;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">Экспорт данных</div>
+    <div style="padding:20px;">
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">Экспортировать все данные в JSON формате</p>
+      <a href="/api/v1/finance/export/json" download class="btn btn-primary">Экспортировать JSON</a>
     </div>
+  </div>
 
-    <!-- Опасная зона -->
-    <div class="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-red-200 bg-red-600">
-            <h3 class="text-lg font-semibold text-white">Опасная зона</h3>
-        </div>
-        <div class="p-6">
-            <p class="text-sm text-red-600 font-medium mb-4">Внимание! Это действие необратимо!</p>
-            <button
-                hx-delete="/api/v1/finance/delete"
-                hx-confirm="Вы уверены? Все данные будут удалены безвозвратно!"
-                hx-on::after-request="if(event.detail.successful) { window.location.href = '/finance/'; }"
-                class="px-4 py-2.5 bg-red-600 text-white font-medium rounded-lg shadow hover:bg-red-700 transition-colors text-sm">
-                Удалить все данные
-            </button>
-        </div>
+  <!-- Опасная зона -->
+  <div class="card" style="overflow:hidden;max-width:600px;border-color:oklch(0.85 0.06 25);">
+    <div style="padding:14px 16px;border-bottom:1px solid oklch(0.85 0.06 25);font-size:13px;font-weight:600;background:var(--red);color:white;">Опасная зона</div>
+    <div style="padding:20px;">
+      <p style="font-size:12.5px;color:var(--red);font-weight:500;margin-bottom:16px;">Внимание! Это действие необратимо!</p>
+      <button
+        hx-delete="/api/v1/finance/delete"
+        hx-confirm="Вы уверены? Все данные будут удалены безвозвратно!"
+        hx-on::after-request="if(event.detail.successful) { window.location.href = '/finance/'; }"
+        class="btn btn-danger">
+        Удалить все данные
+      </button>
     </div>
+  </div>
+
 </div>
 
 <script>
 document.getElementById('importForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
+  e.preventDefault();
+  var fileInput = document.getElementById('fileInput');
+  var submitBtn = document.getElementById('submitBtn');
+  var progressDiv = document.getElementById('progressDiv');
+  var messageDiv = document.getElementById('messageDiv');
 
-    const fileInput = document.getElementById('fileInput');
-    const submitBtn = document.getElementById('submitBtn');
-    const progressDiv = document.getElementById('progressDiv');
-    const messageDiv = document.getElementById('messageDiv');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    messageDiv.style.display = '';
+    messageDiv.style.background = 'var(--red-subtle)';
+    messageDiv.style.color = 'var(--red)';
+    messageDiv.textContent = 'Пожалуйста, выберите файл';
+    return;
+  }
 
-    if (!fileInput.files || fileInput.files.length === 0) {
-        messageDiv.className = 'mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm';
-        messageDiv.textContent = 'Пожалуйста, выберите файл';
-        messageDiv.classList.remove('hidden');
-        return;
+  var fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  submitBtn.disabled = true;
+  progressDiv.style.display = '';
+  messageDiv.style.display = 'none';
+
+  try {
+    var response = await fetch('/api/v1/finance/welcome/import', { method: 'POST', body: fd });
+    var data = await response.json();
+    progressDiv.style.display = 'none';
+
+    if (data.result === 'ok') {
+      messageDiv.style.display = '';
+      messageDiv.style.background = 'var(--green-subtle)';
+      messageDiv.style.color = 'var(--green)';
+      messageDiv.textContent = 'Импорт успешно завершён! Перенаправление...';
+      fileInput.value = '';
+      setTimeout(function() { window.location.href = '/finance/view'; }, 2000);
+    } else {
+      messageDiv.style.display = '';
+      messageDiv.style.background = 'var(--red-subtle)';
+      messageDiv.style.color = 'var(--red)';
+      messageDiv.textContent = 'Ошибка импорта: ' + (data.message || 'Неизвестная ошибка');
+      submitBtn.disabled = false;
     }
-
-    const formData = new FormData();
-    formData.append('file', fileInput.files[0]);
-
-    submitBtn.disabled = true;
-    submitBtn.classList.add('opacity-75', 'cursor-not-allowed');
-    progressDiv.classList.remove('hidden');
-    messageDiv.classList.add('hidden');
-
-    try {
-        const response = await fetch('/api/v1/finance/welcome/import', {
-            method: 'POST',
-            body: formData
-        });
-
-        const data = await response.json();
-
-        progressDiv.classList.add('hidden');
-
-        if (data.result === 'ok') {
-            messageDiv.className = 'mb-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm';
-            messageDiv.textContent = 'Импорт успешно завершен! Перенаправление...';
-            messageDiv.classList.remove('hidden');
-
-            fileInput.value = '';
-
-            setTimeout(() => {
-                window.location.href = '/finance/view';
-            }, 2000);
-        } else {
-            messageDiv.className = 'mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm';
-            messageDiv.textContent = 'Ошибка импорта: ' + (data.message || 'Неизвестная ошибка');
-            messageDiv.classList.remove('hidden');
-            submitBtn.disabled = false;
-            submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
-        }
-    } catch (error) {
-        progressDiv.classList.add('hidden');
-        messageDiv.className = 'mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm';
-        messageDiv.textContent = 'Ошибка при отправке запроса: ' + error.message;
-        messageDiv.classList.remove('hidden');
-        submitBtn.disabled = false;
-        submitBtn.classList.remove('opacity-75', 'cursor-not-allowed');
-    }
+  } catch(error) {
+    progressDiv.style.display = 'none';
+    messageDiv.style.display = '';
+    messageDiv.style.background = 'var(--red-subtle)';
+    messageDiv.style.color = 'var(--red)';
+    messageDiv.textContent = 'Ошибка при отправке: ' + error.message;
+    submitBtn.disabled = false;
+  }
 });
 </script>
 

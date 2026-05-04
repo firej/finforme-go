@@ -1,88 +1,323 @@
 {{define "header"}}
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Title}}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe',
-                            300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6',
-                            600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a'
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    <link rel="stylesheet" href="/static/main.css">
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
-
-    <!-- Yandex.Metrika counter -->
-    <script type="text/javascript">
-        (function(m,e,t,r,i,k,a){
-            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-            m[i].l=1*new Date();
-            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
-        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js', 'ym');
-
-        ym(24975356, 'init', {clickmap:true, referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
-    </script>
-    <noscript><div><img src="https://mc.yandex.ru/watch/24975356" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-    <!-- /Yandex.Metrika counter -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.Title}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/main.css">
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
-<body class="bg-gray-50 min-h-screen text-gray-900">
-    <nav class="bg-gray-900 shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-14">
-                <div class="flex items-center space-x-6">
-                    <a href="/" class="text-white font-bold text-xl tracking-tight hover:text-gray-200 transition-colors">finfor.me</a>
-                    <div class="hidden sm:flex items-center space-x-1">
-                        {{if .Authenticated}}
-                        <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
-                        <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
-                        {{if .IsAdmin}}<a href="/admin/" class="text-yellow-300 hover:text-yellow-100 hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">⚙ Админка</a>{{end}}
-                        {{end}}
-                        <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
-                        <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-1">
-                    {{if .Authenticated}}
-                    <a href="/accounts/info/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">{{if .User}}{{.User.Username}}{{end}}</a>
-                    <a href="/accounts/logout/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Выход</a>
-                    {{else}}
-                    <a href="/accounts/login/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Вход</a>
-                    <a href="/accounts/register/" class="bg-primary-600 text-white hover:bg-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Регистрация</a>
-                    {{end}}
-                </div>
-            </div>
-            <div class="sm:hidden pb-2 flex space-x-1 flex-wrap gap-y-1">
-                {{if .Authenticated}}
-                <a href="/finance/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Финансы</a>
-                <a href="/finance/settings" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Настройки</a>
-                {{if .IsAdmin}}<a href="/admin/" class="text-yellow-300 hover:text-yellow-100 hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">⚙ Админка</a>{{end}}
-                {{end}}
-                <a href="/mortgage/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Ипотечный калькулятор</a>
-                <a href="/currency/" class="text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors">Курсы валют</a>
-            </div>
+<body>
+
+<div class="app-layout">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+
+    <!-- Logo -->
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">f</div>
+      <span class="sidebar-logo-text">finfor<span>.me</span></span>
+    </div>
+
+    <!-- Top nav -->
+    {{if .Authenticated}}
+    <div class="sidebar-section">
+      <a href="/finance/dashboard" class="sidebar-nav-item {{if eq .ActivePage "dashboard"}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1" y="1" width="6" height="6" rx="1"/>
+          <rect x="9" y="1" width="6" height="6" rx="1"/>
+          <rect x="1" y="9" width="6" height="6" rx="1"/>
+          <rect x="9" y="9" width="6" height="6" rx="1"/>
+        </svg>
+        Дашборд
+      </a>
+      <a href="/finance/" class="sidebar-nav-item {{if or (eq .ActivePage "finance") (eq .ActivePage "transactions")}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 12l4-4 3 3 5-6"/>
+        </svg>
+        Транзакции
+      </a>
+    </div>
+    {{end}}
+
+    <!-- Accounts tree -->
+    {{if .Authenticated}}
+    <div class="sidebar-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px;margin-bottom:3px;">
+        <span class="sidebar-section-label" style="padding:0">Мои счета</span>
+        <button onclick="openAccountModal(0)" title="Добавить счёт"
+          style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.35);font-size:16px;line-height:1;padding:0 2px;transition:color 0.12s;"
+          onmouseover="this.style.color='rgba(255,255,255,0.8)'"
+          onmouseout="this.style.color='rgba(255,255,255,0.35)'">+</button>
+      </div>
+    </div>
+    <div class="sidebar-accounts" id="sidebar-accounts-tree">
+      {{if .AccountTree}}
+        {{range .AccountTree}}
+          {{if eq .AccountType "ROOT"}}
+            {{range .Childs}}{{template "sidebar_account_node" .}}{{end}}
+          {{else}}
+            {{template "sidebar_account_node" .}}
+          {{end}}
+        {{end}}
+      {{end}}
+    </div>
+    {{end}}
+
+    <!-- Bottom nav -->
+    <div class="sidebar-bottom">
+      {{if .Authenticated}}
+      <a href="/currency/" class="sidebar-nav-item {{if eq .ActivePage "currency"}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="6"/>
+          <path d="M10 6a3 3 0 00-4 0v4a3 3 0 004 0"/><path d="M6 8h4"/>
+        </svg>
+        Курсы валют
+      </a>
+      <a href="/mortgage/" class="sidebar-nav-item {{if eq .ActivePage "mortgage"}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="2" width="10" height="12" rx="1.5"/>
+          <rect x="5" y="4" width="6" height="2.5" rx="0.5" fill="currentColor" stroke="none" opacity=".4"/>
+          <circle cx="5.5" cy="9" r=".7" fill="currentColor" stroke="none"/>
+          <circle cx="8" cy="9" r=".7" fill="currentColor" stroke="none"/>
+          <circle cx="10.5" cy="9" r=".7" fill="currentColor" stroke="none"/>
+          <circle cx="5.5" cy="11.5" r=".7" fill="currentColor" stroke="none"/>
+          <circle cx="8" cy="11.5" r=".7" fill="currentColor" stroke="none"/>
+          <circle cx="10.5" cy="11.5" r=".7" fill="currentColor" stroke="none"/>
+        </svg>
+        Ипотека
+      </a>
+      <a href="/finance/settings" class="sidebar-nav-item {{if eq .ActivePage "settings"}}active{{end}}">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M11.54 4.46l1.41-1.41M3.05 12.95l1.41-1.41"/>
+        </svg>
+        Настройки
+      </a>
+      <div style="height:1px;background:rgba(255,255,255,0.06);margin:6px 0;"></div>
+      <a href="/accounts/info/" class="sidebar-nav-item">
+        <div class="avatar" style="width:20px;height:20px;font-size:9px;">
+          {{if .User}}{{slice .User.Username 0 2 | upper}}{{else}}ME{{end}}
         </div>
-    </nav>
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {{if .User}}{{.User.Username}}{{end}}
+      </a>
+      <a href="/accounts/logout/" class="sidebar-nav-item">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M6 14H3a1 1 0 01-1-1V3a1 1 0 011-1h3M11 11l3-3-3-3M14 8H6"/>
+        </svg>
+        Выход
+      </a>
+      {{else}}
+      <a href="/accounts/login/" class="sidebar-nav-item">Вход</a>
+      <a href="/accounts/register/" class="sidebar-nav-item">Регистрация</a>
+      {{end}}
+      <!-- Theme toggle -->
+      <div style="height:1px;background:rgba(255,255,255,0.06);margin:6px 0;"></div>
+      <button id="theme-toggle" onclick="toggleTheme()" class="sidebar-nav-item" style="background:none;border:none;cursor:pointer;text-align:left;width:100%;" title="Переключить тему">
+        <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M13.5 9.5A5.5 5.5 0 1 1 6.5 2.5a4 4 0 0 0 7 7z"/>
+        </svg>
+        <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" class="hidden">
+          <circle cx="8" cy="8" r="3"/>
+          <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M11.54 4.46l1.41-1.41M3.05 12.95l1.41-1.41"/>
+        </svg>
+        <span id="theme-label">Светлая тема</span>
+      </button>
+    </div>
+
+  </aside>
+  <!-- ═══ /SIDEBAR ═══ -->
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="main-content">
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <!-- Page content injected here -->
+    <div class="content-area">
 {{end}}
 
+
 {{define "footer"}}
-    </main>
-    <footer class="mt-auto py-4 text-center text-sm text-gray-400">
-        <div class="max-w-7xl mx-auto px-4">finfor.me</div>
-    </footer>
+    </div><!-- /content-area -->
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- ═══ ACCOUNT MODAL ═══ -->
+<div id="account-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeAccountModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="account-modal-title">Счёт</span>
+      <button class="modal-close" onclick="closeAccountModal()">✕</button>
+    </div>
+    <div id="account-modal-body" class="modal-body">
+      <div style="display:flex;align-items:center;justify-content:center;padding:32px;gap:8px;">
+        <span class="spinner"></span>
+        <span class="text-muted">Загрузка...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Active sidebar account (highlight by current URL) ──────────────────────
+(function() {
+  var m = window.location.pathname.match(/\/finance\/account\/(\d+)/);
+  if (m) {
+    var row = document.querySelector('.stree-row[data-id="' + m[1] + '"]');
+    if (row) row.classList.add('active');
+  }
+})();
+
+// ── Theme ──────────────────────────────────────────────────────────────────
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  var moon  = document.getElementById('theme-icon-moon');
+  var sun   = document.getElementById('theme-icon-sun');
+  var label = document.getElementById('theme-label');
+  if (moon)  moon.classList.toggle('hidden', t === 'dark');
+  if (sun)   sun.classList.toggle('hidden',  t === 'light');
+  if (label) label.textContent = t === 'dark' ? 'Тёмная тема' : 'Светлая тема';
+}
+(function() {
+  applyTheme(localStorage.getItem('theme') || 'light');
+})();
+
+function toggleTheme() {
+  var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('theme', next);
+  applyTheme(next);
+}
+
+// ── Enable sidebar toggle transitions after first paint (avoid load flash) ─
+requestAnimationFrame(function() {
+  requestAnimationFrame(function() {
+    var tree = document.getElementById('sidebar-accounts-tree');
+    if (tree) tree.classList.add('stree-ready');
+  });
+});
+
+// ── Sidebar tree collapse ──────────────────────────────────────────────────
+function toggleSidebarNode(event, accountId) {
+  event.stopPropagation();
+  var btn = event.currentTarget;
+  var isOpen = btn.dataset.open !== 'false';
+  var children = document.querySelectorAll('.stree-children[data-parent="' + accountId + '"]');
+  children.forEach(function(c) { c.style.display = isOpen ? 'none' : ''; });
+  btn.classList.toggle('open', !isOpen);
+  btn.dataset.open = isOpen ? 'false' : 'true';
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(message, type) {
+  var container = document.getElementById('toast-container');
+  var toast = document.createElement('div');
+  toast.className = 'toast toast-' + (type || 'success');
+  toast.innerHTML =
+    '<svg class="toast-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+    (type === 'error'
+      ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>'
+      : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>') +
+    '</svg><span>' + message + '</span>' +
+    '<button class="toast-close" onclick="dismissToast(this.parentElement)">×</button>';
+  container.appendChild(toast);
+  setTimeout(function() { dismissToast(toast); }, 4000);
+}
+
+function dismissToast(toast) {
+  if (!toast || toast.classList.contains('toast-hiding')) return;
+  toast.classList.add('toast-hiding');
+  setTimeout(function() { if (toast.parentElement) toast.parentElement.removeChild(toast); }, 300);
+}
+
+// ── Account modal ──────────────────────────────────────────────────────────
+function openAccountModal(accountId) {
+  var modal = document.getElementById('account-modal');
+  var title = document.getElementById('account-modal-title');
+  var body  = document.getElementById('account-modal-body');
+  title.textContent = accountId ? 'Редактировать счёт' : 'Новый счёт';
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;padding:32px;gap:8px;"><span class="spinner"></span><span class="text-muted">Загрузка...</span></div>';
+  fetch('/api/v1/finance/account/form?account_id=' + accountId)
+    .then(function(r) { return r.text(); })
+    .then(function(html) { body.innerHTML = html; htmx.process(body); })
+    .catch(function() { body.innerHTML = '<div style="padding:16px;color:var(--red)">Ошибка загрузки</div>'; });
+}
+
+function closeAccountModal() {
+  document.getElementById('account-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function submitAccountForm(event) {
+  event.preventDefault();
+  var form = document.getElementById('modal-account-form');
+  var btn  = document.getElementById('modal-account-submit-btn');
+  btn.disabled = true; btn.textContent = 'Сохранение...';
+  fetch('/api/v1/finance/account/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(new FormData(form)).toString()
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.result === 'ok') { closeAccountModal(); window.location.reload(); }
+    else { showToast('Ошибка: ' + (data.error || 'неизвестная ошибка'), 'error'); btn.disabled = false; btn.textContent = 'Сохранить'; }
+  })
+  .catch(function() { showToast('Ошибка соединения', 'error'); btn.disabled = false; btn.textContent = 'Сохранить'; });
+  return false;
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeAccountModal();
+});
+</script>
 </body>
 </html>
+{{end}}
+
+
+{{/* ─── Sidebar account tree node (recursive) ─── */}}
+{{define "sidebar_account_node"}}
+{{if ne .AccountType "ROOT"}}
+{{if eq .Hidden 0}}
+<div class="stree-item">
+  <a href="/finance/account/{{.ID}}"
+     class="stree-row"
+     data-id="{{.ID}}">
+    {{if .Childs}}
+    <button class="stree-toggle open" data-open="true"
+      onclick="toggleSidebarNode(event, {{.ID}})" aria-label="Свернуть">
+      <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M6 4l4 4-4 4"/>
+      </svg>
+    </button>
+    {{else}}
+    <span class="stree-toggle-placeholder"></span>
+    {{end}}
+    <span class="account-dot dot-{{.AccountType}}"></span>
+    <span class="stree-name">{{.Name}}</span>
+    {{if ne .Balance 0.0}}
+    <span class="stree-bal" style="color:{{if gt .Balance 0.0}}var(--green){{else}}var(--red){{end}}">
+      {{formatMoneyShort .Balance}}
+    </span>
+    {{end}}
+  </a>
+  {{if .Childs}}
+  <div class="stree-children" data-parent="{{.ID}}">
+    {{range .Childs}}
+      {{template "sidebar_account_node" .}}
+    {{end}}
+  </div>
+  {{end}}
+</div>
+{{end}}
+{{end}}
 {{end}}

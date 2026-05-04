@@ -1,104 +1,94 @@
 {{define "finance_account.html"}}
 {{template "header" .}}
 
-<div class="max-w-2xl">
-    <h2 class="text-2xl font-bold text-gray-900 mb-6">{{if .Account}}Редактирование счета{{else}}Новый счет{{end}}</h2>
+<div class="topbar">
+  <div class="topbar-title">{{if .Account}}Редактирование счёта{{else}}Новый счёт{{end}}</div>
+</div>
 
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <form method="POST" hx-post="/api/v1/finance/account/save" hx-target="#result" hx-swap="innerHTML">
-            {{if .Account}}
-            <input type="hidden" name="id" value="{{.Account.ID}}">
+<div class="content-area">
+  <div class="card" style="max-width:480px;padding:24px;">
+    <form method="POST" hx-post="/api/v1/finance/account/save" hx-target="#result" hx-swap="innerHTML">
+      {{if .Account}}
+      <input type="hidden" name="id" value="{{.Account.ID}}">
+      {{end}}
+
+      <div class="form-group">
+        <label class="form-label" for="account_name">Название счёта <span style="color:var(--red)">*</span></label>
+        <input class="form-input" type="text" id="account_name" name="account_name"
+               value="{{if .Account}}{{.Account.Name}}{{end}}" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="account_description">Описание</label>
+        <input class="form-input" type="text" id="account_description" name="account_description"
+               value="{{if .Account}}{{.Account.Description}}{{end}}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="account_type">Тип счёта <span style="color:var(--red)">*</span></label>
+        <select class="form-select" id="account_type" name="account_type" required>
+          <option value="ASSET"     {{if .Account}}{{if eq .Account.AccountType "ASSET"}}selected{{end}}{{end}}>Актив</option>
+          <option value="CASH"      {{if .Account}}{{if eq .Account.AccountType "CASH"}}selected{{end}}{{end}}>Наличные</option>
+          <option value="BANK"      {{if .Account}}{{if eq .Account.AccountType "BANK"}}selected{{end}}{{end}}>Банк</option>
+          <option value="LIABILITY" {{if .Account}}{{if eq .Account.AccountType "LIABILITY"}}selected{{end}}{{end}}>Обязательства</option>
+          <option value="INCOME"    {{if .Account}}{{if eq .Account.AccountType "INCOME"}}selected{{end}}{{end}}>Доход</option>
+          <option value="EXPENSE"   {{if .Account}}{{if eq .Account.AccountType "EXPENSE"}}selected{{end}}{{end}}>Расход</option>
+          <option value="EQUITY"    {{if .Account}}{{if eq .Account.AccountType "EQUITY"}}selected{{end}}{{end}}>Капитал</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="commodity_id">Валюта <span style="color:var(--red)">*</span></label>
+        <select class="form-select" id="commodity_id" name="commodity_id" required>
+          {{if .Commodities}}
+            {{range .Commodities}}
+            <option value="{{.ID}}" {{if $.Account}}{{if eq $.Account.CommodityID .ID}}selected{{end}}{{end}}>
+              {{.Fullname}} ({{.Sign}})
+            </option>
             {{end}}
+          {{else}}
+            <option value="">Нет доступных валют</option>
+          {{end}}
+        </select>
+      </div>
 
-            <div class="mb-4">
-                <label for="account_name" class="block text-sm font-medium text-gray-700 mb-1">Название счета <span class="text-red-500">*</span></label>
-                <input type="text" id="account_name" name="account_name"
-                       value="{{if .Account}}{{.Account.Name}}{{end}}" required
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div class="form-group">
+        <label class="form-label" for="account_parent">Родительский счёт</label>
+        <select class="form-select" id="account_parent" name="account_parent">
+          <option value="">Нет</option>
+          {{range .Accounts}}
+          {{if ne .AccountType "ROOT"}}
+          <option value="{{.ID}}" {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID (derefInt64 $.Account.ParentID)}}selected{{end}}{{end}}{{end}}>
+            {{.Name}}
+          </option>
+          {{end}}
+          {{end}}
+        </select>
+      </div>
 
-            <div class="mb-4">
-                <label for="account_description" class="block text-sm font-medium text-gray-700 mb-1">Описание</label>
-                <input type="text" id="account_description" name="account_description"
-                       value="{{if .Account}}{{.Account.Description}}{{end}}"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors">
-            </div>
+      <div style="display:flex;gap:8px;margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Сохранить</button>
+        <a href="/finance/" class="btn btn-ghost">Отмена</a>
+      </div>
+    </form>
 
-            <div class="mb-4">
-                <label for="account_type" class="block text-sm font-medium text-gray-700 mb-1">Тип счета <span class="text-red-500">*</span></label>
-                <select id="account_type" name="account_type" required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white">
-                    <option value="ASSET" {{if .Account}}{{if eq .Account.AccountType "ASSET"}}selected{{end}}{{end}}>Актив</option>
-                    <option value="CASH" {{if .Account}}{{if eq .Account.AccountType "CASH"}}selected{{end}}{{end}}>Наличные</option>
-                    <option value="BANK" {{if .Account}}{{if eq .Account.AccountType "BANK"}}selected{{end}}{{end}}>Банк</option>
-                    <option value="LIABILITY" {{if .Account}}{{if eq .Account.AccountType "LIABILITY"}}selected{{end}}{{end}}>Обязательства</option>
-                    <option value="INCOME" {{if .Account}}{{if eq .Account.AccountType "INCOME"}}selected{{end}}{{end}}>Доход</option>
-                    <option value="EXPENSE" {{if .Account}}{{if eq .Account.AccountType "EXPENSE"}}selected{{end}}{{end}}>Расход</option>
-                    <option value="EQUITY" {{if .Account}}{{if eq .Account.AccountType "EQUITY"}}selected{{end}}{{end}}>Капитал</option>
-                </select>
-            </div>
+    <div id="result" style="margin-top:16px;"></div>
 
-            <div class="mb-4">
-                <label for="commodity_id" class="block text-sm font-medium text-gray-700 mb-1">Валюта <span class="text-red-500">*</span></label>
-                <select id="commodity_id" name="commodity_id" required
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white">
-                    {{if .Commodities}}
-                        {{range .Commodities}}
-                        <option value="{{.ID}}" {{if $.Account}}{{if eq $.Account.CommodityID .ID}}selected{{end}}{{end}}>
-                            {{.Fullname}} ({{.Sign}})
-                        </option>
-                        {{end}}
-                    {{else}}
-                        <option value="">Нет доступных валют</option>
-                    {{end}}
-                </select>
-            </div>
-
-            <div class="mb-6">
-                <label for="account_parent" class="block text-sm font-medium text-gray-700 mb-1">Родительский счет</label>
-                <select id="account_parent" name="account_parent"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors bg-white">
-                    <option value="">Нет</option>
-                    {{range .Accounts}}
-                    {{if ne .AccountType "ROOT"}}
-                    <option value="{{.ID}}" {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID $.Account.ParentID}}selected{{end}}{{end}}{{end}}>
-                        {{.Name}}
-                    </option>
-                    {{end}}
-                    {{end}}
-                </select>
-            </div>
-
-            <div class="flex gap-3">
-                <button type="submit" class="px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-colors">
-                    Сохранить
-                </button>
-                <a href="/finance/" class="px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">
-                    Отмена
-                </a>
-            </div>
-        </form>
-
-        <div id="result" class="mt-4"></div>
-
-        <script>
-            document.body.addEventListener('htmx:afterRequest', function(evt) {
-                if (evt.detail.successful) {
-                    try {
-                        const response = JSON.parse(evt.detail.xhr.responseText);
-                        if (response.result === 'ok') {
-                            window.location.href = '/finance/';
-                        } else if (response.error) {
-                            document.getElementById('result').innerHTML =
-                                '<div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">Ошибка: ' + response.error + '</div>';
-                        }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                    }
-                }
-            });
-        </script>
-    </div>
+    <script>
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+      if (evt.detail.successful) {
+        try {
+          var r = JSON.parse(evt.detail.xhr.responseText);
+          if (r.result === 'ok') { window.location.href = '/finance/'; }
+          else if (r.error) {
+            document.getElementById('result').innerHTML =
+              '<div style="padding:10px 12px;background:var(--red-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--red);">Ошибка: ' + r.error + '</div>';
+          }
+        } catch(e) {}
+      }
+    });
+    </script>
+  </div>
 </div>
 
 {{template "footer" .}}

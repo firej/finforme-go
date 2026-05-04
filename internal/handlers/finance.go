@@ -21,22 +21,13 @@ import (
 func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
 	userID, authenticated := h.getUserID(r)
 
-	data := map[string]interface{}{
-		"Title":         "Ипотечный калькулятор",
-		"Authenticated": authenticated,
-	}
-
+	var data map[string]interface{}
 	if authenticated {
-		var user models.User
-		err := h.db.QueryRow(`
-			SELECT id, username, email, first_name, last_name
-			FROM users WHERE id = ?
-		`, userID).Scan(&user.ID, &user.Username, &user.Email, &user.FirstName, &user.LastName)
-		if err == nil {
-			data["User"] = user
-		}
-		data["IsAdmin"] = h.getIsAdmin(userID)
+		data = h.pageData(userID, "mortgage")
+	} else {
+		data = map[string]interface{}{"Authenticated": false}
 	}
+	data["Title"] = "Ипотечный калькулятор"
 
 	h.renderTemplate(w, "mortgage_calculator.html", data)
 }
@@ -103,11 +94,8 @@ func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 
 	// Если нет счетов, показываем welcome страницу
 	if len(accounts) == 0 {
-		data := map[string]interface{}{
-			"Title":         "finfor.me",
-			"Authenticated": true,
-			"IsAdmin":       h.getIsAdmin(userID),
-		}
+		data := h.pageData(userID, "finance")
+		data["Title"] = "finfor.me"
 		h.renderTemplate(w, "finance_welcome.html", data)
 		return
 	}
@@ -118,13 +106,10 @@ func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 	// Получаем валюты
 	commodities, _ := h.getCommodities()
 
-	data := map[string]interface{}{
-		"Title":         "finfor.me",
-		"AccountTree":   accountTree,
-		"Commodities":   commodities,
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
+	data := h.pageData(userID, "finance")
+	data["Title"] = "finfor.me"
+	data["AccountTree"] = accountTree
+	data["Commodities"] = commodities
 
 	h.renderTemplate(w, "finance.html", data)
 }
@@ -136,6 +121,9 @@ func (h *Handler) buildAccountTree(accounts []*models.Account, accountsMap map[i
 
 	for _, acc := range accounts {
 		if acc.ParentID == nil || acc.AccountType == models.AccountTypeRoot {
+			rootAccounts = append(rootAccounts, acc)
+		} else if _, parentExists := accountsMap[*acc.ParentID]; !parentExists {
+			// Родитель не в карте (например ROOT был исключён из списка) — считаем корневым
 			rootAccounts = append(rootAccounts, acc)
 		}
 	}
@@ -277,17 +265,69 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		oppositeSortOrder = "desc"
 	}
 
-	data := map[string]interface{}{
-		"Title":             account.Name,
-		"Account":           account,
-		"Transactions":      transactions,
-		"Accounts":          accounts,
-		"Commodities":       commodities,
-		"Authenticated":     true,
-		"IsAdmin":           h.getIsAdmin(userID),
-		"SortOrder":         sortOrder,
-		"OppositeSortOrder": oppositeSortOrder,
+	// Статистика и список доступных месяцев
+	var totalIncome, totalExpense float64
+	var incomeCount, expenseCount, totalCount int
+	monthsSet := make(map[string]bool)
+
+	for _, tx := range transactions {
+		totalCount++
+		if v, ok := tx["plus_balance_changing"].(float64); ok && v > 0 {
+			totalIncome += v
+			incomeCount++
+		}
+		if v, ok := tx["balance_changing"].(float64); ok && v > 0 {
+			totalExpense += v
+			expenseCount++
+		}
+		if d, ok := tx["post_date"].(string); ok && len(d) >= 7 {
+			monthsSet[d[:7]] = true
+		}
 	}
+
+	monthNames := []string{
+		"Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+		"Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+	}
+	availableMonths := make([]map[string]string, 0, len(monthsSet))
+	for ym := range monthsSet {
+		parts := strings.SplitN(ym, "-", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		month, _ := strconv.Atoi(parts[1])
+		if month < 1 || month > 12 {
+			continue
+		}
+		availableMonths = append(availableMonths, map[string]string{
+			"Value": ym,
+			"Label": fmt.Sprintf("%s %s", monthNames[month-1], parts[0]),
+		})
+	}
+	// Сортируем месяцы по убыванию
+	for i := 0; i < len(availableMonths)-1; i++ {
+		for j := i + 1; j < len(availableMonths); j++ {
+			if availableMonths[i]["Value"] < availableMonths[j]["Value"] {
+				availableMonths[i], availableMonths[j] = availableMonths[j], availableMonths[i]
+			}
+		}
+	}
+
+	data := h.pageData(userID, "transactions")
+	data["Title"] = account.Name
+	data["Account"] = account
+	data["Transactions"] = transactions
+	data["Accounts"] = accounts
+	data["Commodities"] = commodities
+	data["SortOrder"] = sortOrder
+	data["OppositeSortOrder"] = oppositeSortOrder
+	data["ActiveAccountID"] = accountID
+	data["TotalIncome"] = totalIncome
+	data["TotalExpense"] = totalExpense
+	data["TotalCount"] = totalCount
+	data["IncomeCount"] = incomeCount
+	data["ExpenseCount"] = expenseCount
+	data["AvailableMonths"] = availableMonths
 
 	h.renderTemplate(w, "finance_transactions.html", data)
 }
@@ -312,13 +352,10 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 
 	if accountIDStr == "" {
 		// Создание нового счета
-		data := map[string]interface{}{
-			"Title":         "Новый счет",
-			"Accounts":      accounts,
-			"Commodities":   commodities,
-			"Authenticated": true,
-			"IsAdmin":       h.getIsAdmin(userID),
-		}
+		data := h.pageData(userID, "finance")
+		data["Title"] = "Новый счет"
+		data["Accounts"] = accounts
+		data["Commodities"] = commodities
 		h.renderTemplate(w, "finance_account.html", data)
 		return
 	}
@@ -357,15 +394,11 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 		account.Description = description.String
 	}
 
-	data := map[string]interface{}{
-		"Title":         "Редактирование счета",
-		"Account":       account,
-		"Accounts":      accounts,
-		"Commodities":   commodities,
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
-
+	data := h.pageData(userID, "finance")
+	data["Title"] = "Редактирование счета"
+	data["Account"] = account
+	data["Accounts"] = accounts
+	data["Commodities"] = commodities
 	h.renderTemplate(w, "finance_account.html", data)
 }
 
@@ -388,17 +421,13 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 
 	accounts, _ := h.getAccounts(userID)
 
-	data := map[string]interface{}{
-		"Title":         "Транзакция",
-		"Transaction":   transaction,
-		"Debit":         debit,
-		"Credit":        credit,
-		"AccountID":     accountID,
-		"Accounts":      accounts,
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
-
+	data := h.pageData(userID, "transactions")
+	data["Title"] = "Транзакция"
+	data["Transaction"] = transaction
+	data["Debit"] = debit
+	data["Credit"] = credit
+	data["AccountID"] = accountID
+	data["Accounts"] = accounts
 	h.renderTemplate(w, "finance_transaction.html", data)
 }
 
@@ -461,30 +490,78 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 		transactions = append(transactions, tx)
 	}
 
-	data := map[string]interface{}{
-		"Title":         fmt.Sprintf("Транзакции с тегом: %s", tag),
-		"Tag":           tag,
-		"Transactions":  transactions,
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
-
+	data := h.pageData(userID, "transactions")
+	data["Title"] = fmt.Sprintf("Транзакции с тегом: %s", tag)
+	data["Tag"] = tag
+	data["Transactions"] = transactions
 	h.renderTemplate(w, "finance_transactions_by_tag.html", data)
 }
 
 // FinanceSettings - настройки
 func (h *Handler) FinanceSettings(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
-	data := map[string]interface{}{
-		"Title":         "Настройки",
-		"Authenticated": true,
-		"IsAdmin":       h.getIsAdmin(userID),
-	}
-
+	data := h.pageData(userID, "settings")
+	data["Title"] = "Настройки"
 	h.renderTemplate(w, "finance_settings.html", data)
 }
 
 // Вспомогательные функции
+
+// getAccountsWithBalance загружает счета пользователя вместе с балансом (для сайдбара).
+func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error) {
+	rows, err := h.db.Query(`
+		SELECT a.id, a.name, a.account_type, a.commodity_id, a.commodity_scu,
+		       a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder,
+		       COALESCE(SUM(s.value_num), 0) AS balance
+		FROM accounts a
+		LEFT JOIN splits s ON a.id = s.account_id
+		WHERE a.user_id = ?
+		GROUP BY a.id
+		ORDER BY a.name
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	allAccounts := make([]*models.Account, 0)
+	accountsMap := make(map[int64]*models.Account)
+
+	for rows.Next() {
+		var acc models.Account
+		var parentID sql.NullInt64
+		var code, description sql.NullString
+		var balanceRaw int64
+
+		err := rows.Scan(&acc.ID, &acc.Name, &acc.AccountType, &acc.CommodityID,
+			&acc.CommoditySCU, &acc.NonStdSCU, &parentID, &code, &description,
+			&acc.Hidden, &acc.Placeholder, &balanceRaw)
+		if err != nil {
+			continue
+		}
+
+		if parentID.Valid {
+			acc.ParentID = &parentID.Int64
+		}
+		if code.Valid {
+			acc.Code = code.String
+		}
+		if description.Valid {
+			acc.Description = description.String
+		}
+
+		acc.Balance = float64(balanceRaw) / 100.0
+		if acc.IsNegativeBalance() {
+			acc.Balance = -acc.Balance
+		}
+
+		allAccounts = append(allAccounts, &acc)
+		accountsMap[acc.ID] = &acc
+	}
+
+	result := h.flattenAccountsHierarchy(allAccounts, accountsMap)
+	return result, nil
+}
 
 func (h *Handler) getAccounts(userID int64) ([]*models.Account, error) {
 	rows, err := h.db.Query(`
@@ -655,6 +732,130 @@ func (h *Handler) getCommodities() ([]*models.Commodity, error) {
 	}
 
 	return commodities, nil
+}
+
+// Dashboard — страница дашборда с обзором финансов
+func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
+
+	data := h.pageData(userID, "dashboard")
+	data["Title"] = "Дашборд"
+
+	// Загружаем балансы счетов, сгруппированные по типу
+	rows, err := h.db.Query(`
+		SELECT a.account_type, SUM(s.value_num) / 100.0 AS balance
+		FROM accounts a
+		LEFT JOIN splits s ON a.id = s.account_id
+		WHERE a.user_id = ? AND a.account_type IN ('ASSET','BANK','CASH','LIABILITY','INCOME','EXPENSE','EQUITY')
+		GROUP BY a.account_type
+	`, userID)
+
+	var totalAssets, totalLiabilities, totalIncome, totalExpense float64
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var accountType string
+			var balance float64
+			if err := rows.Scan(&accountType, &balance); err != nil {
+				continue
+			}
+			switch accountType {
+			case "ASSET", "BANK", "CASH":
+				totalAssets += balance
+			case "LIABILITY":
+				// LIABILITY в GnuCash хранится отрицательным — инвертируем
+				totalLiabilities += -balance
+			case "INCOME":
+				totalIncome += -balance
+			case "EXPENSE":
+				totalExpense += balance
+			}
+		}
+	}
+	data["TotalAssets"] = totalAssets
+	data["TotalLiabilities"] = totalLiabilities
+	data["NetWorth"] = totalAssets - totalLiabilities
+	data["TotalIncome"] = totalIncome
+	data["TotalExpense"] = totalExpense
+
+	// Топ-7 счетов по абсолютному балансу (не ROOT, не INCOME/EXPENSE)
+	topRows, err := h.db.Query(`
+		SELECT a.id, a.name, a.account_type,
+		       COALESCE(SUM(s.value_num), 0) / 100.0 AS balance
+		FROM accounts a
+		LEFT JOIN splits s ON a.id = s.account_id
+		WHERE a.user_id = ?
+		  AND a.account_type IN ('ASSET','BANK','CASH','LIABILITY','EQUITY')
+		  AND a.hidden = 0
+		GROUP BY a.id, a.name, a.account_type
+		HAVING ABS(balance) > 0
+		ORDER BY ABS(balance) DESC
+		LIMIT 7
+	`, userID)
+	var topAccounts []map[string]interface{}
+	if err == nil {
+		defer topRows.Close()
+		for topRows.Next() {
+			var id int64
+			var name, accountType string
+			var balance float64
+			if err := topRows.Scan(&id, &name, &accountType, &balance); err != nil {
+				continue
+			}
+			// LIABILITY инвертируем
+			if accountType == "LIABILITY" {
+				balance = -balance
+			}
+			topAccounts = append(topAccounts, map[string]interface{}{
+				"ID":          id,
+				"Name":        name,
+				"AccountType": accountType,
+				"Balance":     balance,
+			})
+		}
+	}
+	data["TopAccounts"] = topAccounts
+
+	// Последние 8 транзакций пользователя
+	recentRows, err := h.db.Query(`
+		SELECT DISTINCT t.id, t.description, DATE_FORMAT(t.post_date, '%Y-%m-%d') AS post_date,
+		       s.value_num / 100.0 AS amount,
+		       a.name AS account_name, a.account_type
+		FROM transactions t
+		JOIN splits s ON s.tx_id = t.id
+		JOIN accounts a ON a.id = s.account_id
+		WHERE t.user_id = ?
+		  AND a.account_type NOT IN ('ROOT','EQUITY')
+		  AND s.value_num > 0
+		ORDER BY t.post_date DESC, t.id DESC
+		LIMIT 8
+	`, userID)
+	var recentTx []map[string]interface{}
+	if err == nil {
+		defer recentRows.Close()
+		for recentRows.Next() {
+			var txID int64
+			var description, postDate, accountName, accountType string
+			var amount float64
+			if err := recentRows.Scan(&txID, &description, &postDate, &amount, &accountName, &accountType); err != nil {
+				continue
+			}
+			if description == "" {
+				description = "—"
+			}
+			recentTx = append(recentTx, map[string]interface{}{
+				"ID":          txID,
+				"Description": description,
+				"PostDate":    postDate,
+				"Amount":      amount,
+				"AccountName": accountName,
+				"AccountType": accountType,
+			})
+		}
+	}
+	data["RecentTransactions"] = recentTx
+
+	h.renderTemplate(w, "dashboard.html", data)
 }
 
 func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder string) []map[string]interface{} {

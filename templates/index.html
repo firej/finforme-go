@@ -1,25 +1,19 @@
 {{define "index.html"}}
 {{template "header" .}}
 
-<div class="flex flex-col items-center justify-center py-16 text-center">
-    <h1 class="text-4xl font-bold text-gray-900 mb-4">Добро пожаловать в finfor.me</h1>
-    <p class="text-xl text-gray-500 mb-8">Система учета личных финансов</p>
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:50vh;text-align:center;padding:20px;">
+  <h1 style="font-size:28px;font-weight:700;margin-bottom:8px;letter-spacing:-0.5px;">Добро пожаловать в finfor.me</h1>
+  <p style="font-size:15px;color:var(--text-secondary);margin-bottom:28px;">Система учёта личных финансов</p>
 
-    {{if .Authenticated}}
-    <div>
-        <a href="/finance/" class="inline-flex items-center px-6 py-3 bg-primary-600 text-white font-semibold rounded-lg shadow hover:bg-primary-700 transition-colors text-lg">
-            Перейти к финансам
-        </a>
-    </div>
-    {{else}}
-    <div>
-        <p class="text-gray-600 mb-6">Для начала работы необходимо войти в систему или зарегистрироваться.</p>
-        <div class="flex gap-3 justify-center">
-            <a href="/accounts/login/" class="inline-flex items-center px-5 py-2.5 bg-primary-600 text-white font-medium rounded-lg shadow hover:bg-primary-700 transition-colors">Вход</a>
-            <a href="/accounts/register/" class="inline-flex items-center px-5 py-2.5 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors">Регистрация</a>
-        </div>
-    </div>
-    {{end}}
+  {{if .Authenticated}}
+  <a href="/finance/" class="btn btn-primary" style="font-size:14px;padding:10px 24px;">Перейти к финансам</a>
+  {{else}}
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Для начала работы войдите в систему или зарегистрируйтесь.</p>
+  <div style="display:flex;gap:10px;">
+    <a href="/accounts/login/" class="btn btn-primary">Вход</a>
+    <a href="/accounts/register/" class="btn btn-ghost">Регистрация</a>
+  </div>
+  {{end}}
 </div>
 
 {{template "footer" .}}
