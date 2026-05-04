@@ -48,6 +48,11 @@ func main() {
 	// Создание обработчиков
 	h := handlers.New(db, store)
 
+	// Демо-пользователь со счетами и транзакциями (idempotent)
+	if err := h.SeedDemoUser(); err != nil {
+		log.Printf("WARN: failed to seed demo user: %v", err)
+	}
+
 	// Настройка роутера
 	r := mux.NewRouter()
 
@@ -62,6 +67,7 @@ func main() {
 
 	// Аутентификация
 	r.HandleFunc("/accounts/login/", h.Login).Methods("GET", "POST")
+	r.HandleFunc("/accounts/login-demo/", h.LoginDemo).Methods("POST")
 	r.HandleFunc("/accounts/logout/", h.Logout).Methods("GET")
 	r.HandleFunc("/accounts/register/", h.Register).Methods("GET", "POST")
 	r.HandleFunc("/accounts/info/", h.RequireAuth(h.AccountInfo)).Methods("GET")

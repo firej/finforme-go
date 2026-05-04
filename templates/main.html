@@ -159,6 +159,16 @@
     <!-- Toast container -->
     <div id="toast-container"></div>
 
+    {{if .IsDemo}}
+    <div class="demo-banner">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="8" cy="8" r="6.5"/>
+        <path d="M8 4.5v4M8 11h.01"/>
+      </svg>
+      <span>Демо-режим. Все изменения отклоняются — это только для просмотра.</span>
+    </div>
+    {{end}}
+
     <!-- Page content injected here -->
     <div class="content-area">
 {{end}}

@@ -15,9 +15,10 @@ import (
 
 // Handler содержит зависимости для обработчиков
 type Handler struct {
-	db        *sql.DB
-	store     *sessions.CookieStore
-	templates *template.Template
+	db         *sql.DB
+	store      *sessions.CookieStore
+	templates  *template.Template
+	demoUserID int64 // 0 если демо-пользователь не настроен
 }
 
 // New создает новый экземпляр Handler
@@ -185,6 +186,7 @@ func (h *Handler) pageData(userID int64, activePage string) map[string]interface
 	data := map[string]interface{}{
 		"Authenticated": true,
 		"IsAdmin":       h.getIsAdmin(userID),
+		"IsDemo":        h.isDemo(userID),
 		"ActivePage":    activePage,
 	}
 
@@ -210,26 +212,48 @@ func (h *Handler) pageData(userID int64, activePage string) map[string]interface
 	return data
 }
 
-// RequireAuth - middleware для проверки аутентификации
+// RequireAuth - middleware для проверки аутентификации.
+// Для демо-пользователя блокирует любые методы кроме GET/HEAD.
 func (h *Handler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := h.getUserID(r); !ok {
+		userID, ok := h.getUserID(r)
+		if !ok {
 			http.Redirect(w, r, "/accounts/login/?next="+r.URL.Path, http.StatusSeeOther)
+			return
+		}
+		if h.isDemoWrite(r, userID) {
+			http.Error(w, "Демо-режим: запись отключена", http.StatusForbidden)
 			return
 		}
 		next(w, r)
 	}
 }
 
-// RequireAuthMiddleware - middleware для API
+// RequireAuthMiddleware - middleware для API.
+// Для демо-пользователя блокирует любые методы кроме GET/HEAD с JSON-ошибкой.
 func (h *Handler) RequireAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := h.getUserID(r); !ok {
+		userID, ok := h.getUserID(r)
+		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if h.isDemoWrite(r, userID) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"Демо-режим: запись отключена"}`)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isDemoWrite возвращает true, если запрос — это запись от демо-пользователя.
+func (h *Handler) isDemoWrite(r *http.Request, userID int64) bool {
+	if !h.isDemo(userID) {
+		return false
+	}
+	return r.Method != http.MethodGet && r.Method != http.MethodHead
 }
 
 // renderTemplate рендерит шаблон с данными через буфер,

@@ -245,6 +245,19 @@ html, body {
 .modal-error { padding: 16px; color: var(--red); }
 .theme-toggle-btn { background: none; border: none; cursor: pointer; text-align: left; width: 100%; }
 
+/* Demo banner */
+.demo-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; margin: 12px 20px 0;
+  background: var(--amber-subtle);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-sm);
+  color: var(--amber);
+  font-size: 12px; font-weight: 500;
+  flex-shrink: 0;
+}
+.demo-banner svg { flex-shrink: 0; }
+
 /* ─── MAIN CONTENT ─── */
 .main-content {
   flex: 1; display: flex; flex-direction: column;
