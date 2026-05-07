@@ -2,6 +2,7 @@
 {{template "header" .}}
 
 <div class="topbar">
+  {{template "mobile_menu_btn" .}}
   <div class="topbar-title">
     Курсы валют
     {{if .UpdatedAt}}<span class="topbar-subtitle">{{.UpdatedAt}}</span>{{end}}
@@ -11,7 +12,7 @@
 
 
   {{if .Rates}}
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-bottom:16px;">
+  <div class="currency-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-bottom:16px;">
     {{range .Rates}}
     <div class="card" style="overflow:hidden;">
       <!-- Заголовок карточки -->

@@ -2,13 +2,14 @@
 {{template "header" .}}
 
 <div class="topbar">
+  {{template "mobile_menu_btn" .}}
   <div class="topbar-title">Дашборд</div>
 </div>
 
 <div style="display:flex;flex-direction:column;gap:14px;">
 
   <!-- KPI row -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+  <div class="dash-kpi" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
     <div class="card" style="padding:16px 18px;">
       <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Чистый капитал</div>
       <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:{{if ge .NetWorth 0.0}}var(--green){{else}}var(--red){{end}};margin-bottom:2px;">
@@ -33,7 +34,7 @@
   </div>
 
   <!-- Income / Expense -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+  <div class="dash-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
     <div class="card" style="padding:16px 18px;">
       <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Доходы (всего)</div>
       <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--green);">
@@ -49,7 +50,7 @@
   </div>
 
   <!-- Top accounts + Recent transactions -->
-  <div style="display:grid;grid-template-columns:1fr 1.6fr;gap:12px;align-items:start;">
+  <div class="dash-grid-2" style="display:grid;grid-template-columns:1fr 1.6fr;gap:12px;align-items:start;">
 
     <!-- Top accounts -->
     <div class="card" style="padding:16px 18px;">

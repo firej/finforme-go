@@ -3,6 +3,7 @@
 
 <!-- Topbar -->
 <div class="topbar">
+  {{template "mobile_menu_btn" .}}
   <div class="topbar-title">
     {{if .Account}}
       <span style="display:inline-flex;align-items:center;gap:8px;">
@@ -35,7 +36,7 @@
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M8 3v10M3 8h10"/>
       </svg>
-      Добавить
+      <span class="btn-label">Добавить</span>
     </button>
     {{end}}{{end}}
   </div>
@@ -143,25 +144,27 @@
           <tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
               data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
               onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
-            <td style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
-            <td style="font-weight:450;">{{.description}}</td>
-            <td>
+            <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
+            <td class="tx-cell-desc" style="font-weight:450;">{{.description}}</td>
+            <td data-mlabel="Счёт">
               <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
                  style="color:var(--accent-text);font-size:12px;text-decoration:none;">
                 {{.account_name}}
               </a>
             </td>
-            <td class="mono right">
+            <td class="mono right" data-mlabel="Приход"
+                {{if not .plus_balance_changing}}data-empty="1"{{end}}>
               {{if .plus_balance_changing}}
                 <span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>
               {{end}}
             </td>
-            <td class="mono right">
+            <td class="mono right" data-mlabel="Расход"
+                {{if not .balance_changing}}data-empty="1"{{end}}>
               {{if .balance_changing}}
                 <span class="amount-out">−{{formatMoney .balance_changing}}</span>
               {{end}}
             </td>
-            <td class="mono right">
+            <td class="mono right" data-mlabel="Баланс">
               {{if gt .account_balance 0.0}}
                 <span class="bal-pos">{{formatMoney .account_balance}}</span>
               {{else if lt .account_balance 0.0}}
@@ -170,12 +173,12 @@
                 <span class="bal-zero">{{formatMoney .account_balance}}</span>
               {{end}}
             </td>
-            <td>
+            <td data-mlabel="Теги" {{if not .tags}}data-empty="1"{{end}}>
               {{range .tags}}
                 <span class="tag">{{.}}</span>
               {{end}}
             </td>
-            <td onclick="event.stopPropagation()">
+            <td onclick="event.stopPropagation()" data-empty="1">
               <div class="row-actions">
                 <button class="btn btn-ghost btn-sm btn-icon"
                   onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})" title="Редактировать">

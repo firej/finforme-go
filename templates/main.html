@@ -154,6 +154,8 @@
   </aside>
   <!-- ═══ /SIDEBAR ═══ -->
 
+  <div class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+
   <!-- ═══ MAIN ═══ -->
   <div class="main-content">
 
@@ -234,6 +236,25 @@ requestAnimationFrame(function() {
     var tree = document.getElementById('sidebar-accounts-tree');
     if (tree) tree.classList.add('stree-ready');
   });
+});
+
+// ── Mobile sidebar toggle ──────────────────────────────────────────────────
+function toggleSidebar(force) {
+  var sb = document.querySelector('.sidebar');
+  if (!sb) return;
+  var open = (typeof force === 'boolean') ? force : !sb.classList.contains('is-open');
+  sb.classList.toggle('is-open', open);
+  document.body.classList.toggle('sidebar-open', open);
+}
+// Закрывать при клике по ссылке внутри сайдбара
+document.querySelectorAll('.sidebar a').forEach(function(a){
+  a.addEventListener('click', function(){
+    if (window.innerWidth <= 640) toggleSidebar(false);
+  });
+});
+// При ресайзе на десктоп — сбросить состояние
+window.addEventListener('resize', function(){
+  if (window.innerWidth > 640) toggleSidebar(false);
 });
 
 // ── Sidebar tree collapse ──────────────────────────────────────────────────
@@ -339,6 +360,15 @@ document.addEventListener('keydown', function(e) {
 </script>
 </body>
 </html>
+{{end}}
+
+
+{{define "mobile_menu_btn"}}
+<button type="button" class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Меню">
+  <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+    <path d="M2 4h12M2 8h12M2 12h12"/>
+  </svg>
+</button>
 {{end}}
 
 

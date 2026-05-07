@@ -665,3 +665,193 @@ body.show-hidden .ptree-node.is-hidden > .ptree-row:hover { opacity: 0.85; }
 .text-red      { color: var(--red); }
 .font-mono     { font-family: var(--font-mono); }
 .hidden        { display: none !important; }
+
+/* ============================================================
+   MOBILE ADAPTATION
+   ============================================================ */
+
+/* ─── Гамбургер-кнопка в топбаре (видна только на ≤640px) ─── */
+.mobile-menu-btn {
+  display: none;
+  width: 32px; height: 32px; border-radius: 7px;
+  border: none; background: transparent; cursor: pointer;
+  align-items: center; justify-content: center;
+  color: var(--text-primary); flex-shrink: 0;
+  margin-right: 4px;
+}
+.mobile-menu-btn:hover { background: var(--bg-row-hover); }
+
+/* ─── Подложка под выезжающий сайдбар ─── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(10,13,24,0.5); backdrop-filter: blur(2px);
+  z-index: 49; animation: fadeIn 0.15s;
+}
+
+/* ═══ TABLET (≤900px) ═══ */
+@media (max-width: 900px) {
+  :root { --sidebar-w: 240px; }
+  .content-area { padding: 16px; }
+  .topbar { padding: 0 14px; gap: 8px; }
+  .search-input { width: 140px; }
+  .stats-bar { grid-template-columns: repeat(2, 1fr); }
+  .dash-grid-2 { grid-template-columns: 1fr !important; }
+  .dash-kpi { grid-template-columns: repeat(3,1fr) !important; }
+  .currency-grid, [data-currency-grid] { grid-template-columns: 1fr !important; }
+  .currency-cards-grid { grid-template-columns: 1fr !important; }
+  .mortgage-grid { grid-template-columns: 1fr !important; }
+  .mortgage-grid > .card[style*="position:sticky"],
+  .mortgage-grid > .card { position: static !important; }
+}
+
+/* ═══ MOBILE (≤640px) ═══ */
+@media (max-width: 640px) {
+  html, body { font-size: 13px; }
+
+  /* Sidebar выезжает слева */
+  .mobile-menu-btn { display: inline-flex; }
+  .sidebar {
+    position: fixed; left: 0; top: 0; bottom: 0;
+    width: 280px; max-width: 85vw;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94);
+    z-index: 50;
+    box-shadow: 0 0 24px rgba(0,0,0,0.3);
+  }
+  .sidebar.is-open { transform: none; }
+  body.sidebar-open .sidebar-backdrop { display: block; }
+
+  /* Topbar */
+  .topbar { height: 48px; padding: 0 8px; gap: 4px; }
+  .topbar-title { font-size: 14px; }
+  .topbar-subtitle { display: none; }
+
+  /* Кнопки в топбаре сжаты до иконок: текст-лейбл прячется */
+  .topbar-actions { gap: 4px; flex-shrink: 0; }
+  .topbar-actions .btn-label { display: none; }
+  .topbar-actions .btn {
+    padding: 6px 8px; gap: 0;
+  }
+  .topbar-actions .btn-primary {
+    width: 32px; height: 32px; padding: 0; justify-content: center;
+  }
+
+  /* Поиск — компактный */
+  .topbar-actions .search-wrap { flex: 0 1 auto; min-width: 0; max-width: 130px; }
+  .topbar-actions .search-input {
+    width: 100%; padding: 5px 8px 5px 26px; font-size: 12px;
+  }
+  .topbar-actions .search-wrap svg { left: 7px; }
+
+  .content-area { padding: 12px; }
+
+  /* Stats: 2x2 grid */
+  .stats-bar { grid-template-columns: repeat(2,1fr); }
+  .stat-cell { padding: 11px 12px; }
+  .stat-value { font-size: 15px; letter-spacing: -0.3px; }
+  .stat-label, .stat-delta { font-size: 10px; }
+
+  .sort-tabs { flex-wrap: wrap; }
+  .sort-tab { padding: 4px 9px; font-size: 11.5px; }
+
+  /* ─── Таблица транзакций → карточки (grid-layout) ─── */
+  .data-table thead { display: none; }
+  .data-table, .data-table tbody { display: block; width: 100%; }
+  .data-table tr.date-group-row { display: block; padding: 12px 4px 4px; }
+  .data-table tr.date-group-row td { display: block; padding: 0; border: none; width: 100%; }
+  .data-table tbody tr.tx-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+  .data-table tbody tr.tx-row:hover { background: var(--bg-row-hover); }
+  .data-table tbody tr.tx-row > td {
+    padding: 0; border: none;
+    grid-column: 1 / -1;     /* по умолчанию ячейка занимает всю ширину */
+    min-width: 0;
+  }
+
+  /* Описание — слева в первой строке */
+  .data-table tbody tr td.tx-cell-desc {
+    grid-column: 1; grid-row: 1;
+    font-weight: 500; font-size: 13.5px; line-height: 1.35;
+    overflow-wrap: anywhere;
+    margin-bottom: 4px;
+  }
+  /* Дата — справа в первой строке (без absolute, без overlap) */
+  .data-table tbody tr td.tx-cell-date {
+    grid-column: 2; grid-row: 1;
+    font-size: 11px !important; color: var(--text-muted);
+    white-space: nowrap; text-align: right;
+    align-self: start;
+  }
+
+  /* Поля с подписями (счёт, приход, расход, баланс, теги) */
+  .data-table tbody tr td[data-mlabel] {
+    display: flex; align-items: baseline; gap: 8px; padding: 2px 0;
+    text-align: left !important;
+  }
+  .data-table tbody tr td[data-mlabel]::before {
+    content: attr(data-mlabel);
+    font-size: 10px; color: var(--text-muted); font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    flex: 0 0 64px;
+  }
+
+  /* Пустые ячейки приход/расход/тэги/actions — скрыть */
+  .data-table tbody tr td[data-empty="1"] { display: none; }
+
+  /* Сумма крупнее в карточке */
+  .data-table tbody tr td.mono.right .amount-in,
+  .data-table tbody tr td.mono.right .amount-out {
+    font-size: 14px; font-weight: 600;
+  }
+  .row-actions { display: none; }   /* edit/delete только в drawer */
+
+  /* Drawer / Modal как bottom-sheet */
+  .drawer { width: 100% !important; max-width: 100% !important; }
+  .modal-overlay { padding: 12px; align-items: flex-end; }
+  .modal-box { max-width: 100% !important; border-radius: 14px 14px 0 0; }
+  .modal-box.wide { max-width: 100% !important; }
+  .modal-body { padding: 16px; }
+  .modal-header { padding: 14px 16px 12px; }
+  .modal-footer { padding: 12px 16px; }
+
+  /* Формы — одна колонка */
+  .form-row { grid-template-columns: 1fr !important; gap: 0 !important; }
+
+  /* Дашборд */
+  .dash-grid-2 { grid-template-columns: 1fr !important; }
+  .dash-kpi { grid-template-columns: 1fr !important; }
+  .dash-kpi .card { padding: 12px 14px !important; }
+
+  /* Welcome / валюты */
+  .welcome-cards { grid-template-columns: 1fr !important; }
+  .welcome-included { grid-template-columns: 1fr !important; }
+  [data-currency-grid] { grid-template-columns: 1fr !important; }
+  .currency-cards-grid { grid-template-columns: 1fr !important; }
+
+  /* Ипотечный калькулятор */
+  .mortgage-grid { grid-template-columns: 1fr !important; }
+  .mortgage-grid > .card { position: static !important; }
+
+  .icon-btn { width: 30px; height: 30px; }
+  .drag-handle { display: none !important; }
+
+  /* Полная таблица счетов: спрячем ручку драга и колонку «Действия» */
+  .ptree-header,
+  .ptree-row { grid-template-columns: 1fr 70px 100px !important; }
+  .ptree-header > *:nth-child(4),
+  .ptree-actions { display: none !important; }
+
+  #toast-container { left: 12px; right: 12px; bottom: 12px; }
+  .toast { max-width: 100%; }
+}

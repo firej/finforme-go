@@ -3,6 +3,7 @@
 
 <!-- Topbar -->
 <div class="topbar">
+  {{template "mobile_menu_btn" .}}
   <div class="topbar-title">Список счетов</div>
   <div class="topbar-actions">
     <button id="toggle-hidden-btn" class="btn btn-ghost" onclick="toggleHiddenAccounts()" title="Показать/скрыть скрытые счета">
@@ -13,13 +14,13 @@
       <svg id="toggle-hidden-icon-hide" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" class="hidden">
         <path d="M2 2l12 12M6.5 6.5a2 2 0 002.8 2.8M3 8s2-4 5-4c1 0 1.9.3 2.7.7M13 8s-2 4-5 4c-1 0-1.9-.3-2.7-.7"/>
       </svg>
-      <span id="toggle-hidden-label">Показать скрытые</span>
+      <span id="toggle-hidden-label" class="btn-label">Показать скрытые</span>
     </button>
     <button class="btn btn-primary" onclick="openAccountDrawer(0)">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M8 3v10M3 8h10"/>
       </svg>
-      Добавить счёт
+      <span class="btn-label">Добавить счёт</span>
     </button>
   </div>
 </div>
