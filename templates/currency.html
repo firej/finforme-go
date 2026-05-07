@@ -11,7 +11,7 @@
 
 
   {{if .Rates}}
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:680px;margin-bottom:16px;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:12px;margin-bottom:16px;">
     {{range .Rates}}
     <div class="card" style="overflow:hidden;">
       <!-- Заголовок карточки -->
@@ -64,8 +64,8 @@
       </div>
 
       <!-- График -->
-      <div style="padding:0 12px 10px;" id="chart-wrap-{{.Code}}-{{.Source}}">
-        <canvas id="chart-{{.Code}}-{{.Source}}" height="70"></canvas>
+      <div style="padding:0 12px 10px;height:220px;position:relative;" id="chart-wrap-{{.Code}}-{{.Source}}">
+        <canvas id="chart-{{.Code}}-{{.Source}}"></canvas>
       </div>
 
       <!-- Подвал -->
@@ -152,6 +152,7 @@
   function buildOptions(colors) {
     return {
       responsive: true,
+      maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },

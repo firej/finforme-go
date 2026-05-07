@@ -82,7 +82,6 @@
 
     <!-- Bottom nav -->
     <div class="sidebar-bottom">
-      {{if .Authenticated}}
       <a href="/currency/" class="sidebar-nav-item {{if eq .ActivePage "currency"}}active{{end}}">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="8" r="6"/>
@@ -101,8 +100,9 @@
           <circle cx="8" cy="11.5" r=".7" fill="currentColor" stroke="none"/>
           <circle cx="10.5" cy="11.5" r=".7" fill="currentColor" stroke="none"/>
         </svg>
-        Ипотека
+        Ипотечный калькулятор
       </a>
+      {{if .Authenticated}}
       <a href="/finance/settings" class="sidebar-nav-item {{if eq .ActivePage "settings"}}active{{end}}">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="8" r="2.5"/>

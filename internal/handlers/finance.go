@@ -796,33 +796,34 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 	data["TotalIncome"] = totalIncome
 	data["TotalExpense"] = totalExpense
 
-	// Топ-7 счетов по абсолютному балансу (не ROOT, не INCOME/EXPENSE)
+	// 7 счетов-активов с самой свежей транзакционной активностью
 	topRows, err := h.db.Query(`
 		SELECT a.id, a.name, a.account_type,
-		       COALESCE(SUM(s.value_num), 0) / 100.0 AS balance
+		       COALESCE(SUM(s.value_num), 0) / 100.0 AS balance,
+		       MAX(t.post_date) AS last_tx
 		FROM accounts a
-		LEFT JOIN splits s ON a.id = s.account_id
+		JOIN splits s ON s.account_id = a.id
+		JOIN transactions t ON t.id = s.tx_id
 		WHERE a.user_id = ?
-		  AND a.account_type IN ('ASSET','BANK','CASH','LIABILITY','EQUITY')
+		  AND a.account_type IN ('ASSET','BANK','CASH')
 		  AND a.hidden = 0
 		GROUP BY a.id, a.name, a.account_type
-		HAVING ABS(balance) > 0
-		ORDER BY ABS(balance) DESC
+		ORDER BY last_tx DESC
 		LIMIT 7
 	`, userID)
 	var topAccounts []map[string]interface{}
-	if err == nil {
+	if err != nil {
+		fmt.Printf("ERROR querying top accounts: %v\n", err)
+	} else {
 		defer topRows.Close()
 		for topRows.Next() {
 			var id int64
 			var name, accountType string
 			var balance float64
-			if err := topRows.Scan(&id, &name, &accountType, &balance); err != nil {
+			var lastTx sql.NullTime
+			if err := topRows.Scan(&id, &name, &accountType, &balance, &lastTx); err != nil {
+				fmt.Printf("ERROR scanning top account row: %v\n", err)
 				continue
-			}
-			// LIABILITY инвертируем
-			if accountType == "LIABILITY" {
-				balance = -balance
 			}
 			topAccounts = append(topAccounts, map[string]interface{}{
 				"ID":          id,

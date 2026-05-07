@@ -11,7 +11,10 @@ import (
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	userID, authenticated := h.getUserID(r)
 	if !authenticated {
-		http.Redirect(w, r, "/accounts/login/", http.StatusFound)
+		data := map[string]interface{}{
+			"Title": "Добро пожаловать",
+		}
+		h.renderTemplate(w, "welcome.html", data)
 		return
 	}
 	h.renderDashboard(w, r, userID)

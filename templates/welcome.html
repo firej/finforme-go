@@ -1,0 +1,22 @@
+{{define "welcome.html"}}
+{{template "header" .}}
+
+<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - var(--topbar-h) - 40px);text-align:center;padding:20px;">
+  <h1 style="font-size:28px;font-weight:700;margin-bottom:8px;letter-spacing:-0.5px;">Добро пожаловать в finfor.me</h1>
+  <p style="font-size:15px;color:var(--text-secondary);margin-bottom:28px;">Система учёта личных финансов</p>
+
+  <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">Для начала работы войдите в систему или зарегистрируйтесь.</p>
+  <div style="display:flex;gap:10px;margin-bottom:18px;">
+    <a href="/accounts/login/" class="btn btn-primary">Вход</a>
+    <a href="/accounts/register/" class="btn btn-ghost">Регистрация</a>
+  </div>
+
+  <form method="POST" action="/accounts/login-demo/" style="margin:0;">
+    <button type="submit" class="btn btn-ghost" style="font-size:12.5px;">
+      Или попробуйте демо-аккаунт
+    </button>
+  </form>
+</div>
+
+{{template "footer" .}}
+{{end}}
