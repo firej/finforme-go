@@ -1,0 +1,761 @@
+{{define "finance_import_csv.html"}}
+{{template "header" .}}
+
+<div class="topbar">
+  {{template "mobile_menu_btn" .}}
+  <div class="topbar-title">Импорт транзакций из CSV</div>
+</div>
+
+<style>
+  .csvi-step { margin-bottom: 16px; }
+  .csvi-step h3 {
+    font-size: 13px; font-weight: 600; margin: 0 0 12px;
+    color: var(--text-primary);
+  }
+  .csvi-grid { display: grid; gap: 12px; }
+  .csvi-grid-2 { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 640px) {
+    .csvi-grid-2 { grid-template-columns: 1fr; }
+  }
+  .csvi-table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+  }
+  .csvi-table th, .csvi-table td {
+    padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-light);
+    vertical-align: middle;
+  }
+  .csvi-table th {
+    font-weight: 600; color: var(--text-secondary);
+    background: var(--bg-row-hover); position: sticky; top: 0;
+  }
+  .csvi-table tr.dup td { background: var(--amber-subtle); }
+  .csvi-table tr.err td { background: var(--red-subtle); }
+  .csvi-tablewrap { overflow-x: auto; max-height: 540px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .csvi-amt { font-family: var(--font-mono); white-space: nowrap; }
+  .csvi-amt.neg { color: var(--red); }
+  .csvi-amt.pos { color: var(--green); }
+  .csvi-badge {
+    display: inline-block; padding: 1px 6px; border-radius: 99px;
+    font-size: 11px; font-weight: 600;
+  }
+  .csvi-badge.dup { background: var(--amber-subtle); color: var(--amber); }
+  .csvi-badge.new { background: var(--green-subtle); color: var(--green); }
+  .csvi-msg {
+    margin: 12px 0; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 12.5px;
+  }
+  .csvi-msg.err { background: var(--red-subtle); color: var(--red); }
+  .csvi-msg.ok  { background: var(--green-subtle); color: var(--green); }
+  .csvi-msg.info { background: var(--accent-subtle); color: var(--text-secondary); }
+  .csvi-skip-cell { text-align: center; }
+  .csvi-row-skipped td { opacity: 0.4; }
+  .csvi-acct-select { font-size: 12px; padding: 4px 6px; min-width: 160px; }
+</style>
+
+<!-- Шаг 1: исходные данные -->
+<div class="card csvi-step" style="padding: 18px; max-width: 1100px;">
+  <h3>1. Исходный счёт и файл CSV</h3>
+
+  <div class="csvi-grid csvi-grid-2" style="margin-bottom: 12px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" for="csvi-source">Исходный счёт <span style="color:var(--red)">*</span></label>
+      <select id="csvi-source" class="form-select" required>
+        <option value="">— выберите счёт —</option>
+        {{range .Accounts}}
+        {{if eq .Placeholder 0}}
+        <option value="{{.ID}}">{{.DisplayName}}</option>
+        {{end}}
+        {{end}}
+      </select>
+      <div class="form-hint">Куда относятся строки CSV. Контейнерные счета скрыты.</div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" for="csvi-file">Файл CSV</label>
+      <input id="csvi-file" class="form-input" type="file" accept=".csv,.tsv,.txt,text/csv,text/plain">
+      <div class="form-hint">Или вставьте содержимое ниже.</div>
+    </div>
+  </div>
+
+  <div class="form-group" style="margin-bottom: 12px;">
+    <label class="form-label" for="csvi-text">CSV-данные</label>
+    <textarea id="csvi-text" class="form-input form-input-mono"
+              rows="8" placeholder="Дата;Описание;Сумма&#10;2025-01-05;Кофе;-3.50"
+              style="resize: vertical; font-size: 12px;"></textarea>
+  </div>
+
+  <div class="csvi-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" for="csvi-sep">Разделитель</label>
+      <select id="csvi-sep" class="form-select">
+        <option value="auto">Авто</option>
+        <option value=",">Запятая ,</option>
+        <option value=";">Точка с запятой ;</option>
+        <option value="\t">Табуляция</option>
+        <option value="|">Вертикальная черта |</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" for="csvi-decimal">Десятичный разделитель</label>
+      <select id="csvi-decimal" class="form-select">
+        <option value="auto">Авто</option>
+        <option value=".">Точка .</option>
+        <option value=",">Запятая ,</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">
+        <input id="csvi-header" type="checkbox" checked style="margin-right:6px;">
+        Первая строка — заголовки
+      </label>
+    </div>
+  </div>
+
+  <button type="button" id="csvi-parse-btn" class="btn btn-primary">Прочитать CSV →</button>
+</div>
+
+<div id="csvi-error" class="csvi-msg err" style="display:none; max-width:1100px;"></div>
+
+<!-- Шаг 2: маппинг колонок -->
+<div class="card csvi-step" id="csvi-step2" style="padding: 18px; max-width: 1100px; display: none;">
+  <h3>2. Сопоставление колонок</h3>
+  <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 12px;">
+    Укажите, какая колонка содержит дату, сумму и описание. Опционально — счёт-контрагент и формат даты.
+  </p>
+
+  <div class="csvi-tablewrap" style="margin-bottom: 14px;">
+    <table class="csvi-table" id="csvi-map-table"></table>
+  </div>
+
+  <div class="csvi-grid csvi-grid-2" style="margin-bottom: 12px;">
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label" for="csvi-date-fmt">Формат даты</label>
+      <select id="csvi-date-fmt" class="form-select">
+        <option value="auto">Авто</option>
+        <option value="YYYY-MM-DD">YYYY-MM-DD (2025-01-31)</option>
+        <option value="DD.MM.YYYY">DD.MM.YYYY (31.01.2025)</option>
+        <option value="DD/MM/YYYY">DD/MM/YYYY (31/01/2025)</option>
+        <option value="MM/DD/YYYY">MM/DD/YYYY (01/31/2025)</option>
+        <option value="DD-MM-YYYY">DD-MM-YYYY (31-01-2025)</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:0;">
+      <label class="form-label">
+        <input id="csvi-invert" type="checkbox" style="margin-right:6px;">
+        Инвертировать знак суммы
+      </label>
+      <div class="form-hint">Включите, если в файле расходы — положительные.</div>
+    </div>
+  </div>
+
+  <button type="button" id="csvi-preview-btn" class="btn btn-primary">Сформировать превью →</button>
+</div>
+
+<!-- Шаг 3: превью -->
+<div class="card csvi-step" id="csvi-step3" style="padding: 18px; max-width: 1100px; display: none;">
+  <h3>3. Превью и сохранение</h3>
+  <div id="csvi-stats" class="csvi-msg info"></div>
+
+  <div class="csvi-tablewrap" style="margin-bottom: 14px;">
+    <table class="csvi-table" id="csvi-preview-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Дата</th>
+          <th>Сумма</th>
+          <th>Описание</th>
+          <th>Второй счёт</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody id="csvi-preview-body"></tbody>
+    </table>
+  </div>
+
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <button type="button" id="csvi-save-btn" class="btn btn-primary">Сохранить транзакции</button>
+    <button type="button" id="csvi-skip-dups" class="btn btn-ghost">Пропустить дубликаты</button>
+    <button type="button" id="csvi-include-all" class="btn btn-ghost">Включить все</button>
+    <a href="/finance/" class="btn btn-ghost">Отмена</a>
+  </div>
+
+  <div id="csvi-save-msg" class="csvi-msg" style="display:none; margin-top:14px;"></div>
+</div>
+
+<script>
+(function() {
+  // ── State ────────────────────────────────────────────────────────────────
+  var allAccounts = [
+    {{range .Accounts}}
+    {{if eq .Placeholder 0}}
+    { id: {{.ID}}, name: {{.Name | printf "%q"}}, display: {{.DisplayName | printf "%q"}} },
+    {{end}}
+    {{end}}
+  ];
+
+  var COL_ROLES = [
+    { v: 'ignore',      label: '— игнорировать —' },
+    { v: 'date',        label: 'Дата' },
+    { v: 'amount',      label: 'Сумма' },
+    { v: 'amount_debit',  label: 'Сумма (дебет / +)' },
+    { v: 'amount_credit', label: 'Сумма (кредит / −)' },
+    { v: 'description', label: 'Описание' },
+    { v: 'currency',    label: 'Валюта' },
+    { v: 'account',     label: 'Счёт (контрагент)' },
+  ];
+
+  var parsedRows = [];     // [[col1, col2, ...], ...]
+  var hasHeader = true;
+  var headerRow = null;
+  var columnRoles = [];    // одна роль на колонку
+  var previewItems = [];   // данные с сервера
+
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  var $ = function(id) { return document.getElementById(id); };
+
+  // ── CSV parser (handles quoted fields, escaped quotes) ───────────────────
+  function parseCSV(text, sep) {
+    var rows = [];
+    var row = [];
+    var field = '';
+    var i = 0;
+    var inQuotes = false;
+    var n = text.length;
+    while (i < n) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (i + 1 < n && text[i + 1] === '"') {
+            field += '"';
+            i += 2;
+            continue;
+          }
+          inQuotes = false;
+          i++;
+          continue;
+        }
+        field += c;
+        i++;
+      } else {
+        if (c === '"') {
+          inQuotes = true;
+          i++;
+        } else if (c === sep) {
+          row.push(field);
+          field = '';
+          i++;
+        } else if (c === '\r') {
+          i++;
+        } else if (c === '\n') {
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = '';
+          i++;
+        } else {
+          field += c;
+          i++;
+        }
+      }
+    }
+    if (field.length > 0 || row.length > 0) {
+      row.push(field);
+      rows.push(row);
+    }
+    // Remove empty trailing rows
+    while (rows.length > 0) {
+      var last = rows[rows.length - 1];
+      if (last.length === 1 && last[0].trim() === '') { rows.pop(); } else { break; }
+    }
+    return rows;
+  }
+
+  function detectSeparator(text) {
+    var firstLine = text.split(/\r?\n/, 1)[0] || '';
+    var candidates = [
+      { s: ';', c: 0 },
+      { s: ',', c: 0 },
+      { s: '\t', c: 0 },
+      { s: '|', c: 0 }
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      candidates[i].c = (firstLine.match(new RegExp(candidates[i].s === '\t' ? '\\t' : '\\' + candidates[i].s, 'g')) || []).length;
+    }
+    candidates.sort(function(a, b) { return b.c - a.c; });
+    return candidates[0].c > 0 ? candidates[0].s : ',';
+  }
+
+  function inferRole(headerName, sample) {
+    var h = (headerName || '').toLowerCase().trim();
+    if (/(date|дата|дат)/.test(h)) return 'date';
+    if (/(описан|назначен|комментар|memo|description|narrative|payee|merchant|контраген)/.test(h)) return 'description';
+    if (/(валют|currency)/.test(h)) return 'currency';
+    if (/(счёт|счет|account|категор)/.test(h)) return 'account';
+    if (/(дебет|приход|зачислен|debit|credit\s*amount|поступл)/.test(h)) return 'amount_debit';
+    if (/(кредит|расход|списан|withdraw)/.test(h)) return 'amount_credit';
+    if (/(сумм|amount|итог|value|total)/.test(h)) return 'amount';
+    // По образцу: если выглядит как число — amount
+    if (sample && /^-?[\d\s.,]+$/.test(sample.trim()) && /\d/.test(sample)) return 'amount';
+    // Похоже на дату
+    if (sample && /^\d{2,4}[-./]\d{1,2}[-./]\d{1,4}/.test(sample.trim())) return 'date';
+    return 'ignore';
+  }
+
+  // ── Шаг 1: парсинг ───────────────────────────────────────────────────────
+  function showError(msg) {
+    var el = $('csvi-error');
+    if (!msg) { el.style.display = 'none'; el.textContent = ''; return; }
+    el.style.display = '';
+    el.className = 'csvi-msg err';
+    el.textContent = msg;
+  }
+
+  $('csvi-file').addEventListener('change', function(e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function() { $('csvi-text').value = reader.result; };
+    reader.onerror = function() { showError('Не удалось прочитать файл'); };
+    reader.readAsText(f, 'utf-8');
+  });
+
+  $('csvi-parse-btn').addEventListener('click', function() {
+    showError('');
+    var text = $('csvi-text').value;
+    if (!text.trim()) { showError('Пустые данные'); return; }
+
+    var sepSel = $('csvi-sep').value;
+    var sep;
+    if (sepSel === 'auto') sep = detectSeparator(text);
+    else if (sepSel === '\\t') sep = '\t';
+    else sep = sepSel;
+
+    var rows = parseCSV(text, sep);
+    if (rows.length === 0) { showError('Не удалось разобрать данные'); return; }
+
+    hasHeader = $('csvi-header').checked;
+    if (hasHeader) {
+      headerRow = rows[0];
+      parsedRows = rows.slice(1);
+    } else {
+      headerRow = null;
+      parsedRows = rows;
+    }
+    if (parsedRows.length === 0) { showError('Нет строк данных после заголовка'); return; }
+
+    renderMappingTable();
+    $('csvi-step2').style.display = '';
+    $('csvi-step3').style.display = 'none';
+    $('csvi-step2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  // ── Шаг 2: маппинг ───────────────────────────────────────────────────────
+  function renderMappingTable() {
+    var nCols = 0;
+    parsedRows.forEach(function(r) { if (r.length > nCols) nCols = r.length; });
+    if (headerRow && headerRow.length > nCols) nCols = headerRow.length;
+
+    columnRoles = [];
+    for (var i = 0; i < nCols; i++) {
+      var hname = headerRow ? (headerRow[i] || '') : '';
+      var sample = '';
+      for (var j = 0; j < parsedRows.length && j < 5; j++) {
+        if (parsedRows[j][i]) { sample = parsedRows[j][i]; break; }
+      }
+      columnRoles.push(inferRole(hname, sample));
+    }
+    // Защита: если ни одна не date — назначить первой подходящей; то же для amount, description
+    ensureRoleAssigned('date', nCols);
+    ensureRoleAssigned('amount', nCols, ['amount_debit', 'amount_credit']);
+    ensureRoleAssigned('description', nCols);
+
+    var table = $('csvi-map-table');
+    var html = '';
+
+    // header row
+    if (headerRow) {
+      html += '<thead><tr>';
+      for (var c = 0; c < nCols; c++) {
+        html += '<th>' + escapeHtml(headerRow[c] || ('Колонка ' + (c + 1))) + '</th>';
+      }
+      html += '</tr>';
+    } else {
+      html += '<thead>';
+    }
+    // role-mapping row
+    html += '<tr>';
+    for (var c2 = 0; c2 < nCols; c2++) {
+      html += '<th><select class="form-select csvi-role-sel" data-col="' + c2 + '" style="font-size:12px;padding:4px 6px;">';
+      for (var r = 0; r < COL_ROLES.length; r++) {
+        var sel = columnRoles[c2] === COL_ROLES[r].v ? ' selected' : '';
+        html += '<option value="' + COL_ROLES[r].v + '"' + sel + '>' + escapeHtml(COL_ROLES[r].label) + '</option>';
+      }
+      html += '</select></th>';
+    }
+    html += '</tr></thead>';
+
+    // sample rows (first 5)
+    html += '<tbody>';
+    var limit = Math.min(parsedRows.length, 5);
+    for (var ri = 0; ri < limit; ri++) {
+      html += '<tr>';
+      for (var ci = 0; ci < nCols; ci++) {
+        html += '<td>' + escapeHtml(parsedRows[ri][ci] || '') + '</td>';
+      }
+      html += '</tr>';
+    }
+    if (parsedRows.length > limit) {
+      html += '<tr><td colspan="' + nCols + '" style="text-align:center;color:var(--text-muted);font-size:11px;">… ещё ' + (parsedRows.length - limit) + ' строк</td></tr>';
+    }
+    html += '</tbody>';
+
+    table.innerHTML = html;
+
+    table.querySelectorAll('.csvi-role-sel').forEach(function(sel) {
+      sel.addEventListener('change', function() {
+        columnRoles[parseInt(sel.dataset.col, 10)] = sel.value;
+      });
+    });
+  }
+
+  function ensureRoleAssigned(role, nCols, alsoIfPresent) {
+    var any = columnRoles.indexOf(role) >= 0;
+    if (any) return;
+    if (alsoIfPresent) {
+      for (var k = 0; k < alsoIfPresent.length; k++) {
+        if (columnRoles.indexOf(alsoIfPresent[k]) >= 0) return;
+      }
+    }
+    // Назначить первой свободной (ignore) колонке
+    for (var i = 0; i < nCols; i++) {
+      if (columnRoles[i] === 'ignore') { columnRoles[i] = role; return; }
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  // ── Парсинг даты и суммы ────────────────────────────────────────────────
+  function parseDate(s, fmt) {
+    if (!s) return null;
+    s = s.trim();
+    if (fmt === 'auto') {
+      var fmts = ['YYYY-MM-DD', 'DD.MM.YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY', 'DD-MM-YYYY'];
+      for (var i = 0; i < fmts.length; i++) {
+        var d = parseDate(s, fmts[i]);
+        if (d) return d;
+      }
+      return null;
+    }
+    var parts;
+    if (fmt === 'YYYY-MM-DD') {
+      var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (!m) return null;
+      return m[1] + '-' + pad2(m[2]) + '-' + pad2(m[3]);
+    }
+    if (fmt === 'DD.MM.YYYY') {
+      var m2 = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+      if (!m2) return null;
+      return m2[3] + '-' + pad2(m2[2]) + '-' + pad2(m2[1]);
+    }
+    if (fmt === 'DD/MM/YYYY') {
+      var m3 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!m3) return null;
+      return m3[3] + '-' + pad2(m3[2]) + '-' + pad2(m3[1]);
+    }
+    if (fmt === 'MM/DD/YYYY') {
+      var m4 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!m4) return null;
+      return m4[3] + '-' + pad2(m4[1]) + '-' + pad2(m4[2]);
+    }
+    if (fmt === 'DD-MM-YYYY') {
+      var m5 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+      if (!m5) return null;
+      return m5[3] + '-' + pad2(m5[2]) + '-' + pad2(m5[1]);
+    }
+    return null;
+  }
+  function pad2(s) { s = String(s); return s.length < 2 ? '0' + s : s; }
+
+  function parseAmount(s, decimalSep) {
+    if (s === undefined || s === null) return NaN;
+    s = String(s).trim();
+    if (!s) return NaN;
+    // Удалим валютные символы и пробелы (включая неразрывные)
+    s = s.replace(/[\s ]/g, '').replace(/[^\d\-+,.]/g, '');
+    if (!s) return NaN;
+    var hasDot = s.indexOf('.') >= 0;
+    var hasComma = s.indexOf(',') >= 0;
+    if (decimalSep === 'auto') {
+      if (hasDot && hasComma) {
+        // Разделитель — тот, что последний (десятичный)
+        if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+          s = s.replace(/\./g, '').replace(',', '.');
+        } else {
+          s = s.replace(/,/g, '');
+        }
+      } else if (hasComma) {
+        // Если две и более запятые — это тысячи; иначе десятичный
+        var commaCount = (s.match(/,/g) || []).length;
+        if (commaCount === 1) s = s.replace(',', '.');
+        else s = s.replace(/,/g, '');
+      }
+      // hasDot only — оставляем как есть
+    } else if (decimalSep === '.') {
+      s = s.replace(/,/g, '');
+    } else if (decimalSep === ',') {
+      s = s.replace(/\./g, '').replace(',', '.');
+    }
+    var v = parseFloat(s);
+    return isNaN(v) ? NaN : Math.round(v * 100) / 100;
+  }
+
+  // ── Шаг 2 → подготовка строк для превью ──────────────────────────────────
+  function buildRowsForPreview() {
+    var dateCol = columnRoles.indexOf('date');
+    var amountCol = columnRoles.indexOf('amount');
+    var debitCol = columnRoles.indexOf('amount_debit');
+    var creditCol = columnRoles.indexOf('amount_credit');
+    var descCol = columnRoles.indexOf('description');
+
+    if (dateCol < 0) return { error: 'Не выбрана колонка с датой' };
+    if (amountCol < 0 && (debitCol < 0 || creditCol < 0) && debitCol < 0 && creditCol < 0)
+      return { error: 'Не выбрана колонка с суммой' };
+
+    var fmt = $('csvi-date-fmt').value;
+    var decSel = $('csvi-decimal').value;
+    var invert = $('csvi-invert').checked;
+
+    var out = [];
+    var skipped = 0;
+    for (var i = 0; i < parsedRows.length; i++) {
+      var r = parsedRows[i];
+      var dateStr = parseDate(r[dateCol] || '', fmt);
+      if (!dateStr) { skipped++; continue; }
+
+      var amount = NaN;
+      if (amountCol >= 0) {
+        amount = parseAmount(r[amountCol] || '', decSel);
+      } else {
+        var deb = debitCol >= 0 ? parseAmount(r[debitCol] || '', decSel) : NaN;
+        var cre = creditCol >= 0 ? parseAmount(r[creditCol] || '', decSel) : NaN;
+        if (!isNaN(deb) && deb !== 0) amount = Math.abs(deb);
+        else if (!isNaN(cre) && cre !== 0) amount = -Math.abs(cre);
+      }
+      if (isNaN(amount)) { skipped++; continue; }
+      if (invert) amount = -amount;
+
+      var desc = descCol >= 0 ? (r[descCol] || '').trim() : '';
+
+      out.push({ date: dateStr, amount: amount, description: desc });
+    }
+    return { rows: out, skipped: skipped };
+  }
+
+  $('csvi-preview-btn').addEventListener('click', function() {
+    showError('');
+    var srcID = parseInt($('csvi-source').value, 10);
+    if (!srcID) { showError('Выберите исходный счёт'); return; }
+    var built = buildRowsForPreview();
+    if (built.error) { showError(built.error); return; }
+    if (!built.rows.length) { showError('Не удалось разобрать ни одной строки'); return; }
+
+    var btn = $('csvi-preview-btn');
+    btn.disabled = true; btn.textContent = 'Загрузка превью…';
+
+    fetch('/api/v1/finance/import/csv/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_account_id: srcID, rows: built.rows })
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      btn.disabled = false; btn.textContent = 'Сформировать превью →';
+      if (!res.ok) { showError(res.data.error || 'Ошибка превью'); return; }
+      previewItems = (res.data.items || []).map(function(it) {
+        return Object.assign({}, it, { skip: it.is_duplicate });
+      });
+      renderPreview(res.data, built.skipped);
+      $('csvi-step3').style.display = '';
+      $('csvi-step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    })
+    .catch(function(err) {
+      btn.disabled = false; btn.textContent = 'Сформировать превью →';
+      showError('Ошибка: ' + err.message);
+    });
+  });
+
+  // ── Шаг 3: превью ────────────────────────────────────────────────────────
+  function renderPreview(data, parseSkipped) {
+    var stats = $('csvi-stats');
+    var total = previewItems.length;
+    var dups = previewItems.filter(function(it) { return it.is_duplicate; }).length;
+    stats.innerHTML =
+      '<b>Исходный счёт:</b> ' + escapeHtml(data.source_account_name || '') +
+      ' &nbsp; · &nbsp; <b>Строк:</b> ' + total +
+      ' &nbsp; · &nbsp; <b>Дубликатов:</b> ' + dups +
+      (parseSkipped ? ' &nbsp; · &nbsp; <b>Пропущено при парсинге:</b> ' + parseSkipped : '') +
+      ' &nbsp; · &nbsp; Счёт «Дисбаланс»: <b>' + escapeHtml(data.imbalance_account_nm || '') + '</b>';
+
+    var body = $('csvi-preview-body');
+    body.innerHTML = '';
+
+    previewItems.forEach(function(it, idx) {
+      var tr = document.createElement('tr');
+      if (it.error) tr.classList.add('err');
+      else if (it.is_duplicate) tr.classList.add('dup');
+      if (it.skip) tr.classList.add('csvi-row-skipped');
+
+      // skip checkbox
+      var tdSkip = document.createElement('td');
+      tdSkip.className = 'csvi-skip-cell';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !it.skip;
+      cb.title = 'Импортировать';
+      cb.addEventListener('change', function() {
+        it.skip = !cb.checked;
+        tr.classList.toggle('csvi-row-skipped', it.skip);
+      });
+      tdSkip.appendChild(cb);
+      tr.appendChild(tdSkip);
+
+      // date
+      var tdDate = document.createElement('td');
+      tdDate.textContent = it.date;
+      tr.appendChild(tdDate);
+
+      // amount
+      var tdAmt = document.createElement('td');
+      var amtCls = 'csvi-amt ' + (it.amount < 0 ? 'neg' : 'pos');
+      tdAmt.className = amtCls;
+      tdAmt.textContent = formatAmount(it.amount);
+      tr.appendChild(tdAmt);
+
+      // description
+      var tdDesc = document.createElement('td');
+      tdDesc.textContent = it.description || '';
+      tdDesc.style.maxWidth = '320px';
+      tdDesc.style.overflow = 'hidden';
+      tdDesc.style.textOverflow = 'ellipsis';
+      tdDesc.style.whiteSpace = 'nowrap';
+      tr.appendChild(tdDesc);
+
+      // other account select
+      var tdAcc = document.createElement('td');
+      var sel = document.createElement('select');
+      sel.className = 'form-select csvi-acct-select';
+      allAccounts.forEach(function(a) {
+        var opt = document.createElement('option');
+        opt.value = a.id;
+        opt.textContent = a.display || a.name;
+        if (a.id === it.other_account_id) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', function() {
+        it.other_account_id = parseInt(sel.value, 10);
+      });
+      tdAcc.appendChild(sel);
+      tr.appendChild(tdAcc);
+
+      // status
+      var tdSt = document.createElement('td');
+      if (it.error) {
+        tdSt.innerHTML = '<span class="csvi-badge dup">' + escapeHtml(it.error) + '</span>';
+      } else if (it.is_duplicate) {
+        tdSt.innerHTML = '<span class="csvi-badge dup">дубликат</span>';
+      } else {
+        tdSt.innerHTML = '<span class="csvi-badge new">новая</span>';
+      }
+      tr.appendChild(tdSt);
+
+      body.appendChild(tr);
+    });
+  }
+
+  function formatAmount(n) {
+    var sign = n < 0 ? '−' : '';
+    var v = Math.abs(n).toFixed(2);
+    return sign + v;
+  }
+
+  $('csvi-skip-dups').addEventListener('click', function() {
+    previewItems.forEach(function(it) { if (it.is_duplicate) it.skip = true; });
+    renderPreviewRefresh();
+  });
+  $('csvi-include-all').addEventListener('click', function() {
+    previewItems.forEach(function(it) { it.skip = false; });
+    renderPreviewRefresh();
+  });
+  function renderPreviewRefresh() {
+    // Обновим только чекбоксы и подсветку строк
+    var rows = $('csvi-preview-body').querySelectorAll('tr');
+    rows.forEach(function(tr, i) {
+      var it = previewItems[i];
+      if (!it) return;
+      var cb = tr.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = !it.skip;
+      tr.classList.toggle('csvi-row-skipped', !!it.skip);
+    });
+  }
+
+  $('csvi-save-btn').addEventListener('click', function() {
+    var msg = $('csvi-save-msg');
+    msg.style.display = 'none';
+    var srcID = parseInt($('csvi-source').value, 10);
+    if (!srcID) { showError('Исходный счёт сбросился'); return; }
+
+    var toSave = previewItems
+      .filter(function(it) { return !it.skip && !it.error; })
+      .map(function(it) {
+        return {
+          date: it.date,
+          amount: it.amount,
+          description: it.description,
+          other_account_id: it.other_account_id
+        };
+      });
+
+    if (!toSave.length) {
+      msg.style.display = '';
+      msg.className = 'csvi-msg err';
+      msg.textContent = 'Нечего сохранять';
+      return;
+    }
+
+    var btn = $('csvi-save-btn');
+    btn.disabled = true; btn.textContent = 'Сохранение…';
+
+    fetch('/api/v1/finance/import/csv/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_account_id: srcID, items: toSave })
+    })
+    .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+    .then(function(res) {
+      if (!res.ok) {
+        msg.style.display = '';
+        msg.className = 'csvi-msg err';
+        msg.textContent = 'Ошибка: ' + (res.data.error || 'неизвестная');
+        btn.disabled = false; btn.textContent = 'Сохранить транзакции';
+        return;
+      }
+      msg.style.display = '';
+      msg.className = 'csvi-msg ok';
+      msg.textContent = 'Сохранено транзакций: ' + (res.data.saved || 0) + '. Перенаправление…';
+      setTimeout(function() { window.location.href = '/finance/account/' + srcID; }, 1200);
+    })
+    .catch(function(err) {
+      msg.style.display = '';
+      msg.className = 'csvi-msg err';
+      msg.textContent = 'Ошибка: ' + err.message;
+      btn.disabled = false; btn.textContent = 'Сохранить транзакции';
+    });
+  });
+})();
+</script>
+
+{{template "footer" .}}
+{{end}}

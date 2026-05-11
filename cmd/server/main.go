@@ -84,6 +84,7 @@ func main() {
 	r.HandleFunc("/finance/transaction/{account_id}/{tx_id}", h.RequireAuth(h.FinanceTransaction)).Methods("GET")
 	r.HandleFunc("/finance/tag/{tag}", h.RequireAuth(h.FinanceTransactionsByTag)).Methods("GET")
 	r.HandleFunc("/finance/settings", h.RequireAuth(h.FinanceSettings)).Methods("GET")
+	r.HandleFunc("/finance/import/csv", h.RequireAuth(h.FinanceImportCSV)).Methods("GET")
 
 	// Админка
 	r.HandleFunc("/admin/", h.RequireAdmin(h.AdminIndex)).Methods("GET")
@@ -114,6 +115,8 @@ func main() {
 	api.HandleFunc("/finance/welcome/importjson", h.APIImportJSON).Methods("POST")
 	api.HandleFunc("/finance/welcome/import", h.APIImportGnuCash).Methods("POST")
 	api.HandleFunc("/finance/welcome/importxml", h.APIImportGnuCashXML).Methods("POST")
+	api.HandleFunc("/finance/import/csv/preview", h.APIImportCSVPreview).Methods("POST")
+	api.HandleFunc("/finance/import/csv/save", h.APIImportCSVSave).Methods("POST")
 
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)
