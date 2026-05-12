@@ -63,14 +63,12 @@ func InitDB(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS transactions (
 			id BIGINT PRIMARY KEY AUTO_INCREMENT,
 			user_id BIGINT NOT NULL,
-			currency_id BIGINT DEFAULT 1,
 			num VARCHAR(255),
 			post_date DATETIME NOT NULL,
 			enter_date DATETIME NOT NULL,
 			description TEXT,
 			tags TEXT,
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-			FOREIGN KEY (currency_id) REFERENCES commodities(id)
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 		`CREATE TABLE IF NOT EXISTS splits (
@@ -109,6 +107,23 @@ func InitDB(db *sql.DB) error {
 	for _, m := range migrations {
 		db.Exec(m) // игнорируем ошибки (колонка уже может существовать)
 	}
+
+	// Миграция: убираем transactions.currency_id (валюта теперь определяется
+	// через accounts.commodity_id каждого сплита). Сначала FK, потом колонку.
+	var fkName string
+	err := db.QueryRow(`
+		SELECT CONSTRAINT_NAME
+		FROM information_schema.KEY_COLUMN_USAGE
+		WHERE TABLE_SCHEMA = DATABASE()
+		  AND TABLE_NAME = 'transactions'
+		  AND COLUMN_NAME = 'currency_id'
+		  AND REFERENCED_TABLE_NAME IS NOT NULL
+		LIMIT 1
+	`).Scan(&fkName)
+	if err == nil && fkName != "" {
+		db.Exec(fmt.Sprintf("ALTER TABLE transactions DROP FOREIGN KEY %s", fkName))
+	}
+	db.Exec(`ALTER TABLE transactions DROP COLUMN IF EXISTS currency_id`)
 
 	// Создаём индексы для ускорения запросов
 	indexes := []string{

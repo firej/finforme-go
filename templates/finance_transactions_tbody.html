@@ -1,39 +1,58 @@
 {{define "finance_transactions_tbody.html"}}
 {{range .Transactions}}
-<tr class="clickable-row" onclick="openTransactionModal({{.id}}, {{$.Account.ID}})">
-  <td style="color:var(--text-secondary);white-space:nowrap;" class="mono">{{.post_date}}</td>
-  <td>{{.description}}</td>
-  <td>
+<tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
+    data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
+    onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
+  <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
+  <td class="tx-cell-desc" style="font-weight:450;">{{.description}}</td>
+  <td data-mlabel="Счёт">
     <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
-       style="color:var(--accent-text);text-decoration:none;font-size:12.5px;">{{.account_name}}</a>
+       style="color:var(--accent-text);font-size:12px;text-decoration:none;">
+      {{.account_name}}
+    </a>
   </td>
-  <td class="mono right">
-    {{if .plus_balance_changing}}<span class="amount-in">{{formatMoney .plus_balance_changing}}</span>{{end}}
+  <td class="mono right" data-mlabel="Приход"
+      {{if not .plus_balance_changing}}data-empty="1"{{end}}>
+    {{if .plus_balance_changing}}
+      <span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>
+    {{end}}
   </td>
-  <td class="mono right">
-    {{if .balance_changing}}<span class="amount-out">{{formatMoney .balance_changing}}</span>{{end}}
+  <td class="mono right" data-mlabel="Расход"
+      {{if not .balance_changing}}data-empty="1"{{end}}>
+    {{if .balance_changing}}
+      <span class="amount-out">−{{formatMoney .balance_changing}}</span>
+    {{end}}
   </td>
-  <td class="mono right">
-    <span class="{{if gt .account_balance 0.0}}bal-pos{{else if lt .account_balance 0.0}}bal-neg{{else}}bal-zero{{end}}">
-      {{formatMoney .account_balance}}
-    </span>
+  <td class="mono right" data-mlabel="Баланс">
+    {{if gt .account_balance 0.0}}
+      <span class="bal-pos">{{formatMoney .account_balance}}</span>
+    {{else if lt .account_balance 0.0}}
+      <span class="bal-neg">{{formatMoney .account_balance}}</span>
+    {{else}}
+      <span class="bal-zero">{{formatMoney .account_balance}}</span>
+    {{end}}
   </td>
-  <td>
-    {{range .tags}}<span class="tag">{{.}}</span>{{end}}
+  <td data-mlabel="Теги" {{if not .tags}}data-empty="1"{{end}}>
+    {{range .tags}}
+      <span class="tag">{{.}}</span>
+    {{end}}
   </td>
-  <td onclick="event.stopPropagation()">
+  <td onclick="event.stopPropagation()" data-empty="1">
     <div class="row-actions">
-      <button onclick="openTransactionModal({{.id}}, {{$.Account.ID}})" class="btn btn-ghost btn-sm">
-        Изменить
+      <button class="btn btn-ghost btn-sm btn-icon"
+        onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})" title="Редактировать">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M11 2l3 3-8 8H3v-3l8-8z"/>
+        </svg>
       </button>
-      <button
+      <button class="btn btn-danger btn-sm btn-icon"
         hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
-        hx-confirm="Вы уверены, что хотите удалить эту транзакцию?"
-        hx-target="closest tr"
-        hx-swap="outerHTML swap:0.5s"
-        hx-on::after-request="if(event.detail.successful) { var r=this.closest('tr'); r.style.transition='all 0.5s ease-out'; r.style.opacity='0'; r.style.transform='translateX(-100%)'; setTimeout(function(){r.remove()},500); }"
-        class="btn btn-danger btn-sm">
-        Удалить
+        hx-confirm="Удалить транзакцию?"
+        hx-on::after-request="if(event.detail.successful){const r=this.closest('tr');r.style.transition='all 0.3s';r.style.opacity='0';r.style.transform='translateX(-20px)';setTimeout(()=>r.remove(),300);}"
+        title="Удалить">
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
+        </svg>
       </button>
     </div>
   </td>

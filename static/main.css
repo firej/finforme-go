@@ -353,15 +353,6 @@ html, body {
 .data-table tbody tr:hover { background: var(--bg-row-hover); }
 .data-table tbody tr:last-child td { border-bottom: none; }
 
-/* Date group separator */
-.date-group-row td {
-  padding: 14px 12px 5px;
-  font-size: 11px; font-weight: 600;
-  letter-spacing: 0.05em; color: var(--text-muted);
-  text-transform: uppercase; border-bottom: none;
-  background: transparent !important; cursor: default;
-}
-
 /* Amount colors */
 .amount-in  { color: var(--green); font-weight: 500; }
 .amount-out { color: var(--red);   font-weight: 500; }
@@ -758,8 +749,6 @@ body.show-hidden .ptree-node.is-hidden > .ptree-row:hover { opacity: 0.85; }
   /* ─── Таблица транзакций → карточки (grid-layout) ─── */
   .data-table thead { display: none; }
   .data-table, .data-table tbody { display: block; width: 100%; }
-  .data-table tr.date-group-row { display: block; padding: 12px 4px 4px; }
-  .data-table tr.date-group-row td { display: block; padding: 0; border: none; width: 100%; }
   .data-table tbody tr.tx-row {
     display: grid;
     grid-template-columns: 1fr auto;

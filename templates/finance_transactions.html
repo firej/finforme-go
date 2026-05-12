@@ -133,14 +133,7 @@
         </tr>
       </thead>
       <tbody id="transactions-tbody">
-        {{$prevDate := ""}}
         {{range .Transactions}}
-          {{if ne .post_date $prevDate}}
-          <tr class="date-group-row">
-            <td colspan="8">{{formatDateGroup .post_date}}</td>
-          </tr>
-          {{end}}
-          {{$prevDate = .post_date}}
           <tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
               data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
               onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
@@ -262,21 +255,6 @@ function filterByPeriod() {
     row.style.display = show ? '' : 'none';
   });
 
-  // Hide date group rows that have no visible rows following them
-  var tbody = document.getElementById('transactions-tbody');
-  var allRows = tbody.querySelectorAll('tr');
-  allRows.forEach(function(row) {
-    if (row.classList.contains('date-group-row')) {
-      var next = row.nextElementSibling;
-      var hasVisible = false;
-      while (next && !next.classList.contains('date-group-row')) {
-        if (next.style.display !== 'none') { hasVisible = true; break; }
-        next = next.nextElementSibling;
-      }
-      row.style.display = hasVisible ? '' : 'none';
-    }
-  });
-
   recalcStats();
 }
 
@@ -335,6 +313,7 @@ function openTransactionDrawer(txId, accountId) {
     .then(function(html) {
       body.innerHTML = html;
       htmx.process(body);
+      updateModalCurrencyUI();
       var inp = document.getElementById('modal-description');
       if (inp) inp.focus();
     })
@@ -353,6 +332,44 @@ function closeTransactionDrawer() {
     drawer.classList.add('hidden');
     overlay.classList.add('hidden');
   }, 230);
+}
+
+// ── Cross-currency UI: показать второе поле суммы, если валюты счетов отличаются
+function updateModalCurrencyUI() {
+  var creditSel = document.getElementById('modal-credit_account');
+  var debitSel  = document.getElementById('modal-debit_account');
+  if (!creditSel || !debitSel) return;
+
+  var creditOpt = creditSel.options[creditSel.selectedIndex];
+  var debitOpt  = debitSel.options[debitSel.selectedIndex];
+  if (!creditOpt || !debitOpt) return;
+
+  var creditCommodity = creditOpt.dataset.commodityId;
+  var debitCommodity  = debitOpt.dataset.commodityId;
+  var creditSign      = creditOpt.dataset.commoditySign || '';
+  var debitSign       = debitOpt.dataset.commoditySign  || '';
+
+  var targetGroup = document.getElementById('modal-value-target-group');
+  var targetInput = document.getElementById('modal-value-target');
+  var valueLabel  = document.getElementById('modal-value-label');
+  var valueSign   = document.getElementById('modal-value-sign');
+  var targetSign  = document.getElementById('modal-value-target-sign');
+
+  var different = creditCommodity && debitCommodity && creditCommodity !== debitCommodity;
+
+  if (different) {
+    targetGroup.style.display = '';
+    targetInput.required = true;
+    valueLabel.textContent = 'Списано';
+    valueSign.textContent  = creditSign ? ' ' + creditSign : '';
+    targetSign.textContent = debitSign;
+  } else {
+    targetGroup.style.display = 'none';
+    targetInput.required = false;
+    targetInput.value = ''; // не отправляем, считаем как обычную одновалютную
+    valueLabel.textContent = 'Сумма';
+    valueSign.textContent  = creditSign ? ' ' + creditSign : '';
+  }
 }
 
 // ── Submit tx form ────────────────────────────────────────────────────────

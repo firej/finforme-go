@@ -397,11 +397,12 @@ func TestTemplates_FinanceTransactionModalForm(t *testing.T) {
 	tmpl := buildTestTemplates(t)
 	acc := testAccount(2, models.AccountTypeBank)
 	data := map[string]interface{}{
-		"Transaction": nil,
-		"Account":     acc,
-		"Accounts":    []*models.Account{testAccount(1, models.AccountTypeAsset), acc},
-		"Debit":       []map[string]interface{}{},
-		"Credit":      []map[string]interface{}{},
+		"Transaction":  nil,
+		"Account":      acc,
+		"Accounts":     []*models.Account{testAccount(1, models.AccountTypeAsset), acc},
+		"Debit":        []map[string]interface{}{},
+		"Credit":       []map[string]interface{}{},
+		"CommodityMap": map[int64]*models.Commodity{1: {ID: 1, Mnemonic: "RUB", Sign: "₽"}},
 	}
 	if err := render(tmpl, "finance_transaction_modal_form.html", data); err != nil {
 		t.Errorf("finance_transaction_modal_form.html: %v", err)

@@ -214,8 +214,8 @@ func (h *Handler) seedDemoTransactions(userID int64) error {
 		}
 		valueNum := int64(e.amount * 100)
 		res, err := tx.Exec(`
-			INSERT INTO transactions (user_id, currency_id, post_date, enter_date, description, tags)
-			VALUES (?, 1, ?, ?, ?, ?)
+			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
+			VALUES (?, ?, ?, ?, ?)
 		`, userID, e.date, e.date, e.desc, e.tags)
 		if err != nil {
 			return err

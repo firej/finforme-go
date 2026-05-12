@@ -963,18 +963,20 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 func (h *Handler) getTransaction(userID, txID int64) (*models.Transaction, []map[string]interface{}, []map[string]interface{}) {
 	var tx models.Transaction
 	err := h.db.QueryRow(`
-		SELECT id, description, post_date, enter_date, tags, currency_id
+		SELECT id, description, post_date, enter_date, tags
 		FROM transactions WHERE id = ? AND user_id = ?
-	`, txID, userID).Scan(&tx.ID, &tx.Description, &tx.PostDate, &tx.EnterDate, &tx.Tags, &tx.CurrencyID)
+	`, txID, userID).Scan(&tx.ID, &tx.Description, &tx.PostDate, &tx.EnterDate, &tx.Tags)
 
 	if err != nil {
 		return nil, nil, nil
 	}
 
 	rows, err := h.db.Query(`
-		SELECT s.id, s.account_id, s.value_num, s.value_denom, a.name
+		SELECT s.id, s.account_id, s.value_num, s.value_denom, a.name,
+		       a.commodity_id, COALESCE(c.sign, ''), COALESCE(c.mnemonic, '')
 		FROM splits s
 		LEFT JOIN accounts a ON s.account_id = a.id
+		LEFT JOIN commodities c ON a.commodity_id = c.id
 		WHERE s.tx_id = ? AND s.user_id = ?
 	`, txID, userID)
 
@@ -987,17 +989,21 @@ func (h *Handler) getTransaction(userID, txID int64) (*models.Transaction, []map
 	credit := []map[string]interface{}{}
 
 	for rows.Next() {
-		var splitID, accountID, valueNum, valueDenom int64
-		var accountName string
+		var splitID, accountID, valueNum, valueDenom, commodityID int64
+		var accountName, commoditySign, commodityMnemonic string
 
-		rows.Scan(&splitID, &accountID, &valueNum, &valueDenom, &accountName)
+		rows.Scan(&splitID, &accountID, &valueNum, &valueDenom, &accountName,
+			&commodityID, &commoditySign, &commodityMnemonic)
 
 		value := float64(valueNum) / float64(valueDenom)
 		split := map[string]interface{}{
-			"id":           splitID,
-			"account_id":   accountID,
-			"account_name": accountName,
-			"value":        value,
+			"id":                 splitID,
+			"account_id":         accountID,
+			"account_name":       accountName,
+			"value":              value,
+			"commodity_id":       commodityID,
+			"commodity_sign":     commoditySign,
+			"commodity_mnemonic": commodityMnemonic,
 		}
 
 		if value < 0 {
@@ -1223,6 +1229,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	postDateStr := r.FormValue("post_date")
 	tags := r.FormValue("tags")
 	valueStr := r.FormValue("value")
+	valueTargetStr := r.FormValue("value_target") // сумма в валюте счёта зачисления (для кросс-валютных)
 	debitAccountStr := r.FormValue("debit_account")
 	creditAccountStr := r.FormValue("credit_account")
 
@@ -1238,11 +1245,21 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Парсим сумму
+	// Парсим суммы
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
 		http.Error(w, "Invalid value", http.StatusBadRequest)
 		return
+	}
+
+	// value_target опциональный: если пусто — считаем что валюта одинакова и сумма та же
+	valueTarget := value
+	if valueTargetStr != "" {
+		valueTarget, err = strconv.ParseFloat(valueTargetStr, 64)
+		if err != nil {
+			http.Error(w, "Invalid target value", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Парсим ID счетов
@@ -1269,8 +1286,11 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Конвертируем сумму в целые числа (value_num / value_denom)
+	// Конвертируем суммы в целые числа (value_num / value_denom).
+	// valueNum — для счёта-источника (credit, в его валюте, с минусом).
+	// valueTargetNum — для счёта-получателя (debit, в его валюте, с плюсом).
 	valueNum := int64(value * 100)
+	valueTargetNum := int64(valueTarget * 100)
 	valueDenom := int64(100)
 
 	// Проверяем, это обновление или создание
@@ -1315,7 +1335,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(`
 			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
 			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, debitAccountID, valueNum, valueDenom)
+		`, userID, txID, debitAccountID, valueTargetNum, valueDenom)
 
 		if err != nil {
 			fmt.Printf("ERROR creating debit split: %v\n", err)
@@ -1355,8 +1375,8 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		defer tx.Rollback()
 
 		result, err := tx.Exec(`
-			INSERT INTO transactions (user_id, currency_id, post_date, enter_date, description, tags)
-			VALUES (?, 1, ?, ?, ?, ?)
+			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
+			VALUES (?, ?, ?, ?, ?)
 		`, userID, postDate, time.Now(), description, tags)
 
 		if err != nil {
@@ -1370,7 +1390,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		_, err = tx.Exec(`
 			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
 			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, debitAccountID, valueNum, valueDenom)
+		`, userID, txID, debitAccountID, valueTargetNum, valueDenom)
 
 		if err != nil {
 			fmt.Printf("ERROR creating debit split: %v\n", err)
@@ -2357,16 +2377,10 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 	// Import transactions
 	transactionMap := make(map[string]int64)
 	for _, t := range data.Transactions {
-		// Get currency ID
-		currencyID := int64(1)
-		if id, ok := commodityMap[t.CurrencyRef]; ok {
-			currencyID = id
-		}
-
 		result, err := tx.Exec(`
-			INSERT INTO transactions (user_id, currency_id, num, post_date, enter_date, description, tags)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, userID, currencyID, t.Num, t.PostDate, t.EnterDate, t.Description, "")
+			INSERT INTO transactions (user_id, num, post_date, enter_date, description, tags)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`, userID, t.Num, t.PostDate, t.EnterDate, t.Description, "")
 
 		if err != nil {
 			return fmt.Errorf("failed to insert transaction: %w", err)
@@ -2433,14 +2447,22 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 	}
 
 	accounts, _ := h.getAccounts(userID)
+	commodities, _ := h.getCommodities()
+
+	// Карта id → знак/мнемоника, чтобы шаблон мог разметить <option> data-атрибутами
+	commodityMap := make(map[int64]*models.Commodity, len(commodities))
+	for _, c := range commodities {
+		commodityMap[c.ID] = c
+	}
 
 	data := map[string]interface{}{
-		"Transaction": transaction,
-		"Debit":       debit,
-		"Credit":      credit,
-		"AccountID":   accountID,
-		"Accounts":    accounts,
-		"Today":       time.Now().Format("2006-01-02"),
+		"Transaction":  transaction,
+		"Debit":        debit,
+		"Credit":       credit,
+		"AccountID":    accountID,
+		"Accounts":     accounts,
+		"CommodityMap": commodityMap,
+		"Today":        time.Now().Format("2006-01-02"),
 	}
 
 	h.renderTemplate(w, "finance_transaction_modal_form.html", data)

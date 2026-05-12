@@ -224,9 +224,9 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 		valueNum := int64(it.Amount * 100)
 
 		res, err := tx.Exec(`
-			INSERT INTO transactions (user_id, currency_id, post_date, enter_date, description, tags)
-			VALUES (?, ?, ?, ?, ?, '')
-		`, userID, srcAcc.CommodityID, postDate, time.Now(), it.Description)
+			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
+			VALUES (?, ?, ?, ?, '')
+		`, userID, postDate, time.Now(), it.Description)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})

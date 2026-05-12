@@ -9,7 +9,7 @@
   {{end}}
   <input type="hidden" name="account_id" value="{{.AccountID}}">
 
-  <!-- Date + Amount -->
+  <!-- Date + Amounts -->
   <div class="form-row">
     <div class="form-group">
       <label class="form-label" for="modal-post_date">Дата</label>
@@ -17,9 +17,20 @@
              value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{else}}{{.Today}}{{end}}">
     </div>
     <div class="form-group">
-      <label class="form-label" for="modal-value">Сумма</label>
+      <label class="form-label" for="modal-value">
+        <span id="modal-value-label">Сумма</span>
+        <span id="modal-value-sign" style="color:var(--text-secondary);"></span>
+      </label>
       <input class="form-input form-input-mono" type="number" step="0.01"
              id="modal-value" name="value" required placeholder="0.00"
+             value="{{if .Credit}}{{with index .Credit 0}}{{.value}}{{end}}{{end}}">
+    </div>
+    <div class="form-group" id="modal-value-target-group" style="display:none;">
+      <label class="form-label" for="modal-value-target">
+        Зачислено <span id="modal-value-target-sign" style="color:var(--text-secondary);"></span>
+      </label>
+      <input class="form-input form-input-mono" type="number" step="0.01"
+             id="modal-value-target" name="value_target" placeholder="0.00"
              value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}">
     </div>
   </div>
@@ -36,12 +47,17 @@
   <div class="form-row">
     <div class="form-group">
       <label class="form-label" for="modal-credit_account">Счёт списания</label>
-      <select class="form-select" id="modal-credit_account" name="credit_account" required>
+      <select class="form-select" id="modal-credit_account" name="credit_account" required
+              onchange="updateModalCurrencyUI()">
         {{$creditAccountID := .AccountID}}
         {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
         {{if eq .Placeholder 0}}
-        <option value="{{.ID}}" {{if eq .ID $creditAccountID}}selected{{end}}>
+        {{$c := index $.CommodityMap .CommodityID}}
+        <option value="{{.ID}}"
+                data-commodity-id="{{.CommodityID}}"
+                data-commodity-sign="{{if $c}}{{$c.Sign}}{{end}}"
+                {{if eq .ID $creditAccountID}}selected{{end}}>
           {{.DisplayName}}
         </option>
         {{end}}
@@ -50,12 +66,17 @@
     </div>
     <div class="form-group">
       <label class="form-label" for="modal-debit_account">Счёт зачисления</label>
-      <select class="form-select" id="modal-debit_account" name="debit_account" required>
+      <select class="form-select" id="modal-debit_account" name="debit_account" required
+              onchange="updateModalCurrencyUI()">
         {{$debitAccountID := 0}}
         {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
         {{if eq .Placeholder 0}}
-        <option value="{{.ID}}" {{if eq .ID $debitAccountID}}selected{{end}}>
+        {{$c := index $.CommodityMap .CommodityID}}
+        <option value="{{.ID}}"
+                data-commodity-id="{{.CommodityID}}"
+                data-commodity-sign="{{if $c}}{{$c.Sign}}{{end}}"
+                {{if eq .ID $debitAccountID}}selected{{end}}>
           {{.DisplayName}}
         </option>
         {{end}}
