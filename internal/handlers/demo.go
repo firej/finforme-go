@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"net/http"
 	"time"
@@ -212,7 +213,7 @@ func (h *Handler) seedDemoTransactions(userID int64) error {
 		if !ok1 || !ok2 {
 			continue
 		}
-		valueNum := int64(e.amount * 100)
+		valueNum := int64(math.Round(e.amount * 100))
 		res, err := tx.Exec(`
 			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
 			VALUES (?, ?, ?, ?, ?)

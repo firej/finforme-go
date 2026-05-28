@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -1289,8 +1290,8 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	// Конвертируем суммы в целые числа (value_num / value_denom).
 	// valueNum — для счёта-источника (credit, в его валюте, с минусом).
 	// valueTargetNum — для счёта-получателя (debit, в его валюте, с плюсом).
-	valueNum := int64(value * 100)
-	valueTargetNum := int64(valueTarget * 100)
+	valueNum := int64(math.Round(value * 100))
+	valueTargetNum := int64(math.Round(valueTarget * 100))
 	valueDenom := int64(100)
 
 	// Проверяем, это обновление или создание
@@ -1924,7 +1925,7 @@ func (h *Handler) APIImportGnuCash(w http.ResponseWriter, r *http.Request) {
 // importFromGnuCash imports data from GnuCash SQLite database
 func (h *Handler) importFromGnuCash(userID int64, filename string) error {
 	// Open GnuCash database
-	importDB, err := sql.Open("sqlite3", filename)
+	importDB, err := sql.Open("sqlite", filename)
 	if err != nil {
 		return fmt.Errorf("failed to open GnuCash database: %w", err)
 	}
@@ -2083,7 +2084,7 @@ func (h *Handler) importFromGnuCash(userID int64, filename string) error {
 				}
 
 				result, err := tx.Exec(`
-					INSERT INTO accounts (user_id, name, type, commodity_id, commodity_scu,
+					INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
 					                     non_std_scu, parent_id, code, description, hidden, placeholder)
 					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`, userID, acc.name, acc.accountType, commodityID,

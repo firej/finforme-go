@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -107,7 +108,7 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Проверка на дубликат на исходном счёте: та же дата + та же сумма
-		valueNum := int64(row.Amount * 100)
+		valueNum := int64(math.Round(row.Amount * 100))
 		dupTxID := h.findDuplicateTransaction(userID, req.SourceAccountID, row.Date, valueNum)
 		if dupTxID > 0 {
 			item.IsDuplicate = true
@@ -221,7 +222,7 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		valueNum := int64(it.Amount * 100)
+		valueNum := int64(math.Round(it.Amount * 100))
 
 		res, err := tx.Exec(`
 			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
