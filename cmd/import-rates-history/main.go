@@ -298,8 +298,8 @@ type bcraHistoryResponse struct {
 	} `json:"results"`
 }
 
-// importBCRAHistoricalChunk загружает исторические курсы ARS/USD из BCRA за период [from, to].
-// tipoCotizacion — количество песо за 1 USD, поэтому ARS/USD = 1 / tipoCotizacion.
+// importBCRAHistoricalChunk загружает исторические курсы USD/ARS из BCRA за период [from, to].
+// tipoCotizacion — количество песо за 1 USD, сохраняем USD/ARS = tipoCotizacion.
 func importBCRAHistoricalChunk(
 	db *sql.DB,
 	client *http.Client,

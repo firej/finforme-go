@@ -87,10 +87,10 @@ func (h *Handler) seedDemoTransactions(userID int64) error {
 	startDate := now.AddDate(0, 0, -90)
 
 	type entry struct {
-		date  time.Time
-		desc  string
-		tags  string
-		debit string  // куда деньги пришли (увеличивается)
+		date   time.Time
+		desc   string
+		tags   string
+		debit  string // куда деньги пришли (увеличивается)
 		credit string // откуда ушли (уменьшается)
 		amount float64
 	}
@@ -167,9 +167,9 @@ func (h *Handler) seedDemoTransactions(userID int64) error {
 
 	// Развлечения, одежда, здоровье — несколько раз в месяц
 	misc := []struct {
-		debit string
-		desc  string
-		tag   string
+		debit    string
+		desc     string
+		tag      string
 		min, max float64
 	}{
 		{"Развлечения", "Кино", "fun", 400, 1200},

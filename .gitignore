@@ -42,6 +42,11 @@ Thumbs.db
 # Logs
 *.log
 
-# Go binaries
-telegram-bot
-import-rates
+# Go binaries (только в корне, не каталоги в cmd/)
+/telegram-bot
+/import-rates
+/import-rates-history
+/server
+
+# Claude Code local settings and worktrees
+.claude/

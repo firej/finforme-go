@@ -2,10 +2,17 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/evbogdanov/finforme/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// safeNextURL возвращает true, если next — внутренний путь сайта
+// (защита от open redirect на внешние домены после логина)
+func safeNextURL(next string) bool {
+	return strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") && !strings.HasPrefix(next, "/\\")
+}
 
 // Index - главная страница
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +86,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if next != "" && next != "False" {
+	if safeNextURL(next) {
 		http.Redirect(w, r, next, http.StatusSeeOther)
 	} else {
 		http.Redirect(w, r, "/accounts/info/", http.StatusSeeOther)

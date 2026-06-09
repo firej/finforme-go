@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"time"
-
 )
 
 // CurrencyRateRow — одна строка курса из БД (последний курс)

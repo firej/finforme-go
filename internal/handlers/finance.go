@@ -693,18 +693,32 @@ func (h *Handler) sortAccountsByName(accounts []*models.Account) {
 	}
 }
 
-// isPlaceholderAccount возвращает true, если счёт принадлежит userID и помечен как контейнерный (placeholder=1).
-// При ошибках/отсутствии возвращает false (валидация ID идёт отдельно).
-func (h *Handler) isPlaceholderAccount(userID, accountID int64) bool {
-	var ph int
-	err := h.db.QueryRow(
-		`SELECT placeholder FROM accounts WHERE id = ? AND user_id = ?`,
-		accountID, userID,
-	).Scan(&ph)
-	if err != nil {
-		return false
+// validateParentAccount проверяет, что родительский счёт принадлежит пользователю
+// и не создаёт цикл (родитель не является самим счётом или его потомком).
+// accountID = 0 при создании нового счёта.
+func (h *Handler) validateParentAccount(userID, accountID, parentID int64) error {
+	current := parentID
+	for i := 0; i < 100 && current != 0; i++ {
+		if current == accountID {
+			return fmt.Errorf("родительский счёт не может быть самим счётом или его потомком")
+		}
+		var next sql.NullInt64
+		err := h.db.QueryRow(
+			`SELECT parent_id FROM accounts WHERE id = ? AND user_id = ?`,
+			current, userID,
+		).Scan(&next)
+		if err != nil {
+			return fmt.Errorf("родительский счёт не найден")
+		}
+		if !next.Valid {
+			return nil
+		}
+		current = next.Int64
 	}
-	return ph == 1
+	if current != 0 {
+		return fmt.Errorf("слишком глубокая иерархия счетов")
+	}
+	return nil
 }
 
 func (h *Handler) getCommodities() ([]*models.Commodity, error) {
@@ -1079,6 +1093,19 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	// Проверяем родителя: принадлежность пользователю и отсутствие циклов
+	if parentID.Valid {
+		var selfID int64
+		if idStr != "" {
+			selfID, _ = strconv.ParseInt(idStr, 10, 64)
+		}
+		if err := h.validateParentAccount(userID, selfID, parentID.Int64); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	if idStr == "" {
 		// Создание нового счета
 		result, err := h.db.Exec(`
@@ -1164,6 +1191,15 @@ func (h *Handler) APIAccountDelete(w http.ResponseWriter, r *http.Request) {
 	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
 	if err != nil {
 		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		return
+	}
+
+	// Счёт с дочерними счетами удалить нельзя (FK parent_id)
+	var kids int
+	h.db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
+		accountID, userID).Scan(&kids)
+	if kids > 0 {
+		http.Error(w, "Сначала удалите или перенесите дочерние счета", http.StatusBadRequest)
 		return
 	}
 
@@ -1278,8 +1314,22 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	// Счета должны принадлежать пользователю
+	debitAcc, err := h.getAccountByID(userID, debitAccountID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Счёт зачисления не найден"})
+		return
+	}
+	creditAcc, err := h.getAccountByID(userID, creditAccountID)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Счёт списания не найден"})
+		return
+	}
+
 	// Контейнерные (placeholder) счета не могут участвовать в транзакциях
-	if h.isPlaceholderAccount(userID, debitAccountID) || h.isPlaceholderAccount(userID, creditAccountID) {
+	if debitAcc.Placeholder == 1 || creditAcc.Placeholder == 1 {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{
 			"error": "Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт",
@@ -2178,6 +2228,15 @@ func (h *Handler) importFromGnuCash(userID int64, filename string) error {
 		accountID, accExists := accountMap[accountGuid]
 
 		if txExists && accExists {
+			// Normalize value_denom to 100 (balances are computed as SUM(value_num)/100)
+			if valueDenom == 0 {
+				valueDenom = 100
+			}
+			if valueDenom != 100 {
+				valueNum = valueNum * 100 / valueDenom
+				valueDenom = 100
+			}
+
 			_, err := tx.Exec(`
 				INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
 				VALUES (?, ?, ?, ?, ?)

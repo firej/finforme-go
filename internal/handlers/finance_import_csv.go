@@ -25,8 +25,8 @@ func (h *Handler) FinanceImportCSV(w http.ResponseWriter, r *http.Request) {
 
 // csvImportRow - одна строка для превью/сохранения
 type csvImportRow struct {
-	Date        string  `json:"date"`        // YYYY-MM-DD
-	Amount      float64 `json:"amount"`      // знаковая сумма со стороны source_account
+	Date        string  `json:"date"`   // YYYY-MM-DD
+	Amount      float64 `json:"amount"` // знаковая сумма со стороны source_account
 	Description string  `json:"description"`
 	OtherID     int64   `json:"other_account_id,omitempty"`
 }
@@ -136,18 +136,18 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"items":                 items,
-		"imbalance_account_id":  imbID,
-		"imbalance_account_nm":  imbName,
-		"source_account_id":     req.SourceAccountID,
-		"source_account_name":   srcAcc.Name,
+		"items":                items,
+		"imbalance_account_id": imbID,
+		"imbalance_account_nm": imbName,
+		"source_account_id":    req.SourceAccountID,
+		"source_account_name":  srcAcc.Name,
 	})
 }
 
 // csvImportSaveReq - запрос сохранения
 type csvImportSaveReq struct {
-	SourceAccountID int64                `json:"source_account_id"`
-	Items           []csvImportSaveItem  `json:"items"`
+	SourceAccountID int64               `json:"source_account_id"`
+	Items           []csvImportSaveItem `json:"items"`
 }
 
 type csvImportSaveItem struct {

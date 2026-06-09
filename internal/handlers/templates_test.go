@@ -40,11 +40,17 @@ func buildTestTemplates(t *testing.T) *template.Template {
 			}
 			return d
 		},
-		"add":      func(a, b int) int { return a + b },
-		"mul":      func(a, b int) int { return a * b },
-		"iterate":  func(n int) []int { s := make([]int, n); for i := range s { s[i] = i }; return s },
-		"upper":    strings.ToUpper,
-		"eqStr":    func(a, b string) bool { return a == b },
+		"add": func(a, b int) int { return a + b },
+		"mul": func(a, b int) int { return a * b },
+		"iterate": func(n int) []int {
+			s := make([]int, n)
+			for i := range s {
+				s[i] = i
+			}
+			return s
+		},
+		"upper": strings.ToUpper,
+		"eqStr": func(a, b string) bool { return a == b },
 		"derefInt64": func(p *int64) int64 {
 			if p != nil {
 				return *p
@@ -155,26 +161,26 @@ func testAccountTree() []*models.Account {
 func testTransactions() []map[string]interface{} {
 	return []map[string]interface{}{
 		{
-			"id":                   int64(1),
-			"post_date":            "2024-03-15",
-			"description":          "Test transaction",
-			"account_id":           int64(2),
-			"account_name":         "Bank",
+			"id":                    int64(1),
+			"post_date":             "2024-03-15",
+			"description":           "Test transaction",
+			"account_id":            int64(2),
+			"account_name":          "Bank",
 			"plus_balance_changing": 500.0,
 			"balance_changing":      0.0,
 			"account_balance":       1234.56,
-			"tags":                 []string{"food"},
+			"tags":                  []string{"food"},
 		},
 		{
-			"id":                   int64(2),
-			"post_date":            "2024-03-14",
-			"description":          "Expense",
-			"account_id":           int64(3),
-			"account_name":         "Cash",
+			"id":                    int64(2),
+			"post_date":             "2024-03-14",
+			"description":           "Expense",
+			"account_id":            int64(3),
+			"account_name":          "Cash",
 			"plus_balance_changing": 0.0,
 			"balance_changing":      200.0,
 			"account_balance":       734.56,
-			"tags":                 []string{},
+			"tags":                  []string{},
 		},
 	}
 }
@@ -540,7 +546,6 @@ func TestModels_FieldsExist(t *testing.T) {
 	_ = a.Hidden
 	_ = a.ParentID
 }
-
 
 // Заглушка — чтобы компилятор не ругался на неиспользуемый импорт sql.
 var _ = sql.ErrNoRows

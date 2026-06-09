@@ -119,8 +119,26 @@ func (h *Handler) AdminUserDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.db.Exec("DELETE FROM users WHERE id = ?", userID)
+	tx, err := h.db.Begin()
 	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Обнуляем parent_id у счетов: самоссылающийся FK без CASCADE
+	// иначе блокирует каскадное удаление иерархии счетов вместе с пользователем
+	if _, err := tx.Exec("UPDATE accounts SET parent_id = NULL WHERE user_id = ?", userID); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := tx.Exec("DELETE FROM users WHERE id = ?", userID); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}

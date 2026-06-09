@@ -27,7 +27,7 @@ func importBitcoin(db *sql.DB) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Coinbase returned status %d", resp.StatusCode)
+		return fmt.Errorf("coinbase returned status %d", resp.StatusCode)
 	}
 
 	var result struct {
