@@ -1,0 +1,40 @@
+{{define "news_section"}}
+{{if .News}}
+<div class="card" style="padding:16px 18px;text-align:left;">
+  <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Новости</div>
+  {{range $i, $n := .News}}
+  <div style="{{if gt $i 0}}border-top:1px solid var(--border-light);padding-top:12px;margin-top:12px;{{end}}">
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+      <span style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);flex-shrink:0;">{{$n.Date}}</span>
+      <span style="font-size:13px;font-weight:600;">{{$n.Title}}</span>
+    </div>
+    <div class="news-body" style="font-size:12.5px;color:var(--text-secondary);line-height:1.65;">
+      {{$n.Body}}
+    </div>
+  </div>
+  {{end}}
+</div>
+<style>
+  .news-body p { margin: 0 0 8px; }
+  .news-body p:last-child { margin-bottom: 0; }
+  .news-body ol { padding-left: 18px; margin: 0 0 8px; }
+  .news-body li { margin-bottom: 6px; }
+  .news-body code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    background: var(--accent-subtle);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  .news-body code.news-code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-all;
+    padding: 8px 10px;
+    margin: 6px 0;
+    border-radius: var(--radius-sm);
+  }
+  .news-body a { color: var(--accent); }
+</style>
+{{end}}
+{{end}}

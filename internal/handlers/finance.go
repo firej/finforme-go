@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -503,6 +504,9 @@ func (h *Handler) FinanceSettings(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 	data := h.pageData(userID, "settings")
 	data["Title"] = "Настройки"
+	if tokens, err := h.getAPITokens(userID); err == nil {
+		data["Tokens"] = tokens
+	}
 	h.renderTemplate(w, "finance_settings.html", data)
 }
 
@@ -773,6 +777,7 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID int64) {
 	data := h.pageData(userID, "dashboard")
 	data["Title"] = "Дашборд"
+	data["News"] = h.latestNews()
 
 	// Загружаем балансы счетов, сгруппированные по типу
 	rows, err := h.db.Query(`
@@ -1246,9 +1251,194 @@ func (h *Handler) APIAccountDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// APITransactionsGet — JSON-список транзакций с фильтрами.
+// Параметры: account_id, from, to (YYYY-MM-DD), tag, search, limit, offset.
 func (h *Handler) APITransactionsGet(w http.ResponseWriter, r *http.Request) {
+	userID, _ := h.getUserID(r)
+
+	q := r.URL.Query()
+	f := txListFilter{
+		Tag:    q.Get("tag"),
+		Search: q.Get("search"),
+	}
+	if v := q.Get("account_id"); v != "" {
+		id, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			http.Error(w, "Invalid account_id", http.StatusBadRequest)
+			return
+		}
+		f.AccountID = id
+	}
+	if v := q.Get("from"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			http.Error(w, "Invalid 'from' date, expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		f.From = t
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := time.Parse("2006-01-02", v)
+		if err != nil {
+			http.Error(w, "Invalid 'to' date, expected YYYY-MM-DD", http.StatusBadRequest)
+			return
+		}
+		f.To = t
+	}
+	if v := q.Get("limit"); v != "" {
+		f.Limit, _ = strconv.Atoi(v)
+	}
+	if v := q.Get("offset"); v != "" {
+		f.Offset, _ = strconv.Atoi(v)
+	}
+
+	transactions, err := h.listTransactions(userID, f)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode([]interface{}{})
+	json.NewEncoder(w).Encode(transactions)
+}
+
+// txListFilter — фильтры списка транзакций
+type txListFilter struct {
+	AccountID int64     // 0 — все счета
+	From      time.Time // zero — без нижней границы
+	To        time.Time // zero — без верхней границы (дата включительно)
+	Tag       string
+	Search    string
+	Limit     int // по умолчанию 50, максимум 500
+	Offset    int
+}
+
+// listTransactions возвращает транзакции пользователя со сплитами (новые сверху).
+// Используется API и MCP-инструментами.
+func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]interface{}, error) {
+	if f.Limit <= 0 {
+		f.Limit = 50
+	}
+	if f.Limit > 500 {
+		f.Limit = 500
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+
+	// Сначала отбираем ID транзакций по фильтрам
+	query := `SELECT DISTINCT t.id, t.post_date FROM transactions t`
+	args := []interface{}{}
+	if f.AccountID != 0 {
+		query += ` JOIN splits fs ON fs.tx_id = t.id AND fs.account_id = ?`
+		args = append(args, f.AccountID)
+	}
+	query += ` WHERE t.user_id = ?`
+	args = append(args, userID)
+	if !f.From.IsZero() {
+		query += ` AND t.post_date >= ?`
+		args = append(args, f.From)
+	}
+	if !f.To.IsZero() {
+		query += ` AND t.post_date < ?`
+		args = append(args, f.To.AddDate(0, 0, 1))
+	}
+	if f.Tag != "" {
+		query += ` AND t.tags LIKE ?`
+		args = append(args, "%"+f.Tag+"%")
+	}
+	if f.Search != "" {
+		query += ` AND t.description LIKE ?`
+		args = append(args, "%"+f.Search+"%")
+	}
+	query += ` ORDER BY t.post_date DESC, t.id DESC LIMIT ? OFFSET ?`
+	args = append(args, f.Limit, f.Offset)
+
+	rows, err := h.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	txIDs := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		var postDate time.Time
+		if err := rows.Scan(&id, &postDate); err != nil {
+			continue
+		}
+		txIDs = append(txIDs, id)
+	}
+	if len(txIDs) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
+	// Загружаем отобранные транзакции вместе со сплитами
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(txIDs)), ",")
+	splitArgs := make([]interface{}, 0, len(txIDs)+1)
+	splitArgs = append(splitArgs, userID)
+	for _, id := range txIDs {
+		splitArgs = append(splitArgs, id)
+	}
+	splitRows, err := h.db.Query(fmt.Sprintf(`
+		SELECT t.id, t.description, t.post_date, t.tags,
+		       s.account_id, COALESCE(a.name, ''), s.value_num, s.value_denom,
+		       COALESCE(c.mnemonic, '')
+		FROM transactions t
+		JOIN splits s ON s.tx_id = t.id
+		LEFT JOIN accounts a ON a.id = s.account_id
+		LEFT JOIN commodities c ON c.id = a.commodity_id
+		WHERE t.user_id = ? AND t.id IN (%s)
+	`, placeholders), splitArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer splitRows.Close()
+
+	txMap := make(map[int64]map[string]interface{}, len(txIDs))
+	for splitRows.Next() {
+		var txID, accountID, valueNum, valueDenom int64
+		var description, tags, accountName, currency string
+		var postDate time.Time
+
+		if err := splitRows.Scan(&txID, &description, &postDate, &tags,
+			&accountID, &accountName, &valueNum, &valueDenom, &currency); err != nil {
+			continue
+		}
+
+		if _, exists := txMap[txID]; !exists {
+			tagList := make([]string, 0)
+			for _, t := range strings.Split(tags, ",") {
+				if t = strings.TrimSpace(t); t != "" {
+					tagList = append(tagList, t)
+				}
+			}
+			txMap[txID] = map[string]interface{}{
+				"id":          txID,
+				"date":        postDate.Format("2006-01-02"),
+				"description": description,
+				"tags":        tagList,
+				"splits":      []map[string]interface{}{},
+			}
+		}
+
+		split := map[string]interface{}{
+			"account_id":   accountID,
+			"account_name": accountName,
+			"amount":       float64(valueNum) / float64(valueDenom),
+			"currency":     currency,
+		}
+		txMap[txID]["splits"] = append(txMap[txID]["splits"].([]map[string]interface{}), split)
+	}
+
+	// Возвращаем в порядке исходной выборки
+	result := make([]map[string]interface{}, 0, len(txIDs))
+	for _, id := range txIDs {
+		if tx, ok := txMap[id]; ok {
+			result = append(result, tx)
+		}
+	}
+	return result, nil
 }
 
 func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
@@ -1314,163 +1504,142 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	// Счета должны принадлежать пользователю
-	debitAcc, err := h.getAccountByID(userID, debitAccountID)
+	// Проверяем, это обновление или создание
+	var txID int64
+	if idStr != "" && idStr != "0" {
+		txID, err = strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid transaction ID"})
+			return
+		}
+	}
+
+	savedID, err := h.saveTransaction(userID, txSaveInput{
+		TxID:            txID,
+		Description:     description,
+		PostDate:        postDate,
+		Tags:            tags,
+		Value:           value,
+		ValueTarget:     valueTarget,
+		DebitAccountID:  debitAccountID,
+		CreditAccountID: creditAccountID,
+	})
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Счёт зачисления не найден"})
+		var vErr validationError
+		if errors.As(err, &vErr) {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
-	creditAcc, err := h.getAccountByID(userID, creditAccountID)
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"result": "ok",
+		"id":     savedID,
+	})
+}
+
+// txSaveInput — данные для создания/обновления транзакции
+type txSaveInput struct {
+	TxID            int64 // 0 — создать новую
+	Description     string
+	PostDate        time.Time
+	Tags            string
+	Value           float64 // сумма списания (в валюте счёта списания)
+	ValueTarget     float64 // сумма зачисления (в валюте счёта зачисления)
+	DebitAccountID  int64   // счёт зачисления
+	CreditAccountID int64   // счёт списания
+}
+
+// validationError — ошибка входных данных (API отдаёт её с кодом 400)
+type validationError string
+
+func (e validationError) Error() string { return string(e) }
+
+// saveTransaction валидирует и сохраняет транзакцию с двумя сплитами.
+// Используется API и MCP-инструментами.
+func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
+	// Счета должны принадлежать пользователю
+	debitAcc, err := h.getAccountByID(userID, in.DebitAccountID)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Счёт списания не найден"})
-		return
+		return 0, validationError("Счёт зачисления не найден")
+	}
+	creditAcc, err := h.getAccountByID(userID, in.CreditAccountID)
+	if err != nil {
+		return 0, validationError("Счёт списания не найден")
 	}
 
 	// Контейнерные (placeholder) счета не могут участвовать в транзакциях
 	if debitAcc.Placeholder == 1 || creditAcc.Placeholder == 1 {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт",
-		})
-		return
+		return 0, validationError("Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт")
 	}
 
 	// Конвертируем суммы в целые числа (value_num / value_denom).
 	// valueNum — для счёта-источника (credit, в его валюте, с минусом).
 	// valueTargetNum — для счёта-получателя (debit, в его валюте, с плюсом).
-	valueNum := int64(math.Round(value * 100))
-	valueTargetNum := int64(math.Round(valueTarget * 100))
+	valueNum := int64(math.Round(in.Value * 100))
+	valueTargetNum := int64(math.Round(in.ValueTarget * 100))
 	valueDenom := int64(100)
 
-	// Проверяем, это обновление или создание
-	if idStr != "" && idStr != "0" {
-		// Обновление существующей транзакции
-		txID, err := strconv.ParseInt(idStr, 10, 64)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid transaction ID"})
-			return
+	tx, err := h.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	txID := in.TxID
+	if txID != 0 {
+		// Обновление: транзакция должна принадлежать пользователю
+		var exists int64
+		if err := tx.QueryRow(`SELECT id FROM transactions WHERE id = ? AND user_id = ?`,
+			txID, userID).Scan(&exists); err != nil {
+			return 0, validationError("Транзакция не найдена")
 		}
 
-		// Начинаем транзакцию БД
-		tx, err := h.db.Begin()
-		if err != nil {
-			fmt.Printf("ERROR starting transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-		defer tx.Rollback()
-
-		// Обновляем транзакцию
 		_, err = tx.Exec(`
 			UPDATE transactions SET description = ?, post_date = ?, tags = ?
 			WHERE id = ? AND user_id = ?
-		`, description, postDate, tags, txID, userID)
-
+		`, in.Description, in.PostDate, in.Tags, txID, userID)
 		if err != nil {
-			fmt.Printf("ERROR updating transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
+			return 0, err
 		}
 
-		// Удаляем старые splits
-		_, err = tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID)
-		if err != nil {
-			fmt.Printf("ERROR deleting old splits: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
+		// Удаляем старые splits, ниже создадим новые
+		if _, err := tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID); err != nil {
+			return 0, err
 		}
-
-		// Создаем новые splits
-		_, err = tx.Exec(`
-			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, debitAccountID, valueTargetNum, valueDenom)
-
-		if err != nil {
-			fmt.Printf("ERROR creating debit split: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		_, err = tx.Exec(`
-			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, creditAccountID, -valueNum, valueDenom)
-
-		if err != nil {
-			fmt.Printf("ERROR creating credit split: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			fmt.Printf("ERROR committing transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"result": "ok",
-			"id":     txID,
-		})
 	} else {
-		// Создание новой транзакции
-		tx, err := h.db.Begin()
-		if err != nil {
-			fmt.Printf("ERROR starting transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-		defer tx.Rollback()
-
 		result, err := tx.Exec(`
 			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
 			VALUES (?, ?, ?, ?, ?)
-		`, userID, postDate, time.Now(), description, tags)
-
+		`, userID, in.PostDate, time.Now(), in.Description, in.Tags)
 		if err != nil {
-			fmt.Printf("ERROR creating transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
+			return 0, err
 		}
-
-		txID, _ := result.LastInsertId()
-
-		_, err = tx.Exec(`
-			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, debitAccountID, valueTargetNum, valueDenom)
-
-		if err != nil {
-			fmt.Printf("ERROR creating debit split: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		_, err = tx.Exec(`
-			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, txID, creditAccountID, -valueNum, valueDenom)
-
-		if err != nil {
-			fmt.Printf("ERROR creating credit split: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		if err := tx.Commit(); err != nil {
-			fmt.Printf("ERROR committing transaction: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-			return
-		}
-
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"result": "ok",
-			"id":     txID,
-		})
+		txID, _ = result.LastInsertId()
 	}
+
+	_, err = tx.Exec(`
+		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+		VALUES (?, ?, ?, ?, ?)
+	`, userID, txID, in.DebitAccountID, valueTargetNum, valueDenom)
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
+		VALUES (?, ?, ?, ?, ?)
+	`, userID, txID, in.CreditAccountID, -valueNum, valueDenom)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return txID, nil
 }
 
 func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
@@ -1489,47 +1658,44 @@ func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Начинаем транзакцию
-	tx, err := h.db.Begin()
-	if err != nil {
-		fmt.Printf("ERROR starting transaction: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	// Сначала удаляем все splits, связанные с транзакцией
-	_, err = tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting splits: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Затем удаляем саму транзакцию
-	result, err := tx.Exec("DELETE FROM transactions WHERE id = ? AND user_id = ?", txID, userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting transaction: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Проверяем, была ли удалена транзакция
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		http.Error(w, "Transaction not found", http.StatusNotFound)
-		return
-	}
-
-	// Коммитим транзакцию
-	if err := tx.Commit(); err != nil {
-		fmt.Printf("ERROR committing transaction: %v\n", err)
+	if err := h.deleteTransaction(userID, txID); err != nil {
+		var vErr validationError
+		if errors.As(err, &vErr) {
+			http.Error(w, "Transaction not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	// Возвращаем пустой ответ для HTMX
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// deleteTransaction удаляет транзакцию пользователя вместе со сплитами.
+// Используется API и MCP-инструментами.
+func (h *Handler) deleteTransaction(userID, txID int64) error {
+	tx, err := h.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Сначала удаляем все splits, связанные с транзакцией
+	if _, err := tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID); err != nil {
+		return err
+	}
+
+	// Затем удаляем саму транзакцию
+	result, err := tx.Exec("DELETE FROM transactions WHERE id = ? AND user_id = ?", txID, userID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
+		return validationError("Транзакция не найдена")
+	}
+
+	return tx.Commit()
 }
 
 func (h *Handler) APIExportJSON(w http.ResponseWriter, r *http.Request) {

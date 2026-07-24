@@ -11,11 +11,15 @@
     <a href="/accounts/register/" class="btn btn-ghost">Регистрация</a>
   </div>
 
-  <form method="POST" action="/accounts/login-demo/" style="margin:0;">
+  <form method="POST" action="/accounts/login-demo/" style="margin:0 0 28px;">
     <button type="submit" class="btn btn-ghost" style="font-size:12.5px;">
       Или попробуйте демо-аккаунт
     </button>
   </form>
+
+  <div style="width:100%;max-width:560px;">
+    {{template "news_section" .}}
+  </div>
 </div>
 
 {{template "footer" .}}

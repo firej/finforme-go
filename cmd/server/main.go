@@ -85,6 +85,8 @@ func main() {
 	r.HandleFunc("/finance/transaction/{account_id}/{tx_id}", h.RequireAuth(h.FinanceTransaction)).Methods("GET")
 	r.HandleFunc("/finance/tag/{tag}", h.RequireAuth(h.FinanceTransactionsByTag)).Methods("GET")
 	r.HandleFunc("/finance/settings", h.RequireAuth(h.FinanceSettings)).Methods("GET")
+	r.HandleFunc("/finance/settings/tokens/create", h.RequireAuth(h.APITokenCreate)).Methods("POST")
+	r.HandleFunc("/finance/settings/tokens/delete", h.RequireAuth(h.APITokenDelete)).Methods("POST")
 	r.HandleFunc("/finance/import/csv", h.RequireAuth(h.FinanceImportCSV)).Methods("GET")
 
 	// Админка
@@ -118,6 +120,9 @@ func main() {
 	api.HandleFunc("/finance/welcome/importxml", h.APIImportGnuCashXML).Methods("POST")
 	api.HandleFunc("/finance/import/csv/preview", h.APIImportCSVPreview).Methods("POST")
 	api.HandleFunc("/finance/import/csv/save", h.APIImportCSVSave).Methods("POST")
+
+	// MCP-сервер (Streamable HTTP, авторизация через Bearer API-токен)
+	r.PathPrefix("/mcp").Handler(h.MCPHandler())
 
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)

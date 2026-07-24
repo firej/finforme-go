@@ -147,6 +147,63 @@ make docker
 - `POST /api/v1/finance/transaction/save` - сохранение транзакции
 - `POST /api/v1/finance/welcome/import` - импорт из GnuCash
 
+## API-токены
+
+Программный доступ к `/api/v1/…` и MCP-серверу работает по токенам.
+
+1. Откройте **Настройки → API-токены** и создайте токен (показывается один раз,
+   в БД хранится только SHA-256 хеш).
+2. Передавайте токен в заголовке `Authorization: Bearer <токен>` — работает
+   для всех эндпоинтов `/api/v1` наравне с cookie-сессией.
+
+```bash
+# Список счетов
+curl https://finfor.me/api/v1/finance/accounts/get \
+  -H "Authorization: Bearer finforme_XXXX"
+
+# Транзакции с фильтрами: account_id, from, to, tag, search, limit, offset
+curl "https://finfor.me/api/v1/finance/transactions/get?from=2026-07-01&tag=продукты" \
+  -H "Authorization: Bearer finforme_XXXX"
+```
+
+## MCP-сервер (доступ из Claude)
+
+Приложение отдаёт MCP-сервер (Streamable HTTP, stateless) на `/mcp`.
+Авторизация — тем же Bearer-токеном. Это позволяет Claude просматривать счета,
+добавлять транзакции и строить отчёты по вашим данным.
+
+### Подключение
+
+**Claude Code (CLI):**
+
+```bash
+claude mcp add --transport http finforme https://finfor.me/mcp \
+  --header "Authorization: Bearer finforme_XXXX"
+```
+
+**Claude Desktop** — Settings → Connectors → Add custom connector,
+URL: `https://finfor.me/mcp`, заголовок `Authorization: Bearer finforme_XXXX`.
+
+**Локальная разработка** — тот же способ, но URL `http://localhost:8080/mcp`.
+
+Проверить подключение можно запросом: «покажи мои счета в finforme».
+
+### Инструменты
+
+| Инструмент | Описание |
+|------------|----------|
+| `list_accounts` | Счета с балансами и валютой |
+| `list_transactions` | Транзакции с фильтрами (счёт, даты, тег, поиск, пагинация) |
+| `get_transaction` | Одна транзакция со сплитами (дебет/кредит) |
+| `create_transaction` | Создать транзакцию: `from_account_id` → `to_account_id`, суммы в валюте счёта, поддержка кросс-валютных (`amount_to`) |
+| `update_transaction` | Обновить транзакцию по id |
+| `delete_transaction` | Удалить транзакцию (необратимо) |
+| `get_report` | Доходы/расходы по категориям за период |
+| `get_currency_rates` | Актуальные курсы валют с дневным изменением |
+
+Все инструменты работают строго в рамках пользователя, которому принадлежит
+токен. Отозвать доступ можно удалением токена в настройках.
+
 ## Курсы валют
 
 Раздел `/currency/` показывает курсы USD/RUB и EUR/RUB с графиками за последние 14 дней.

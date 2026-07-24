@@ -235,11 +235,28 @@ func TestTemplates_Register(t *testing.T) {
 	}
 }
 
+func TestTemplates_Welcome(t *testing.T) {
+	tmpl := buildTestTemplates(t)
+	data := map[string]interface{}{
+		"Title":         "Добро пожаловать",
+		"Authenticated": false,
+		"AccountTree":   nil,
+		"User":          nil,
+		"IsAdmin":       false,
+		"ActivePage":    "",
+		"News":          newsItems,
+	}
+	if err := render(tmpl, "welcome.html", data); err != nil {
+		t.Errorf("welcome.html: %v", err)
+	}
+}
+
 func TestTemplates_Index(t *testing.T) {
 	tmpl := buildTestTemplates(t)
 	u := testUser()
 	data := baseData(u, testAccountTree())
 	data["Title"] = "Дашборд"
+	data["News"] = newsItems
 	data["TotalAssets"] = 150000.0
 	data["TotalLiabilities"] = 30000.0
 	data["NetWorth"] = 120000.0

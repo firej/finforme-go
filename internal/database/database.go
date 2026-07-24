@@ -83,6 +83,17 @@ func InitDB(db *sql.DB) error {
 			FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+		`CREATE TABLE IF NOT EXISTS api_tokens (
+			id BIGINT PRIMARY KEY AUTO_INCREMENT,
+			user_id BIGINT NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			token_hash CHAR(64) NOT NULL UNIQUE,
+			prefix VARCHAR(20) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			last_used_at DATETIME NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
 		`CREATE TABLE IF NOT EXISTS currency_rates (
 			code VARCHAR(20) NOT NULL COMMENT 'Например: USD/RUB, EUR/RUB, USDT/RUB',
 			name VARCHAR(255) NOT NULL COMMENT 'Название валюты',

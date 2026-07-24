@@ -143,8 +143,12 @@ func (h *Handler) getIsAdmin(userID int64) bool {
 	return isAdmin
 }
 
-// getUserID получает ID пользователя из сессии
+// getUserID получает ID пользователя из Bearer-токена или сессии
 func (h *Handler) getUserID(r *http.Request) (int64, bool) {
+	if userID, ok := h.userIDFromBearer(r); ok {
+		return userID, true
+	}
+
 	session, err := h.store.Get(r, "session")
 	if err != nil {
 		return 0, false

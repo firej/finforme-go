@@ -20,6 +20,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	if !authenticated {
 		data := map[string]interface{}{
 			"Title": "Добро пожаловать",
+			"News":  h.latestNews(),
 		}
 		h.renderTemplate(w, "welcome.html", data)
 		return

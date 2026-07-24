@@ -64,6 +64,34 @@
     </div>
   </div>
 
+  <!-- API-токены -->
+  <div class="card" style="overflow:hidden;margin-bottom:12px;max-width:600px;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">API-токены</div>
+    <div style="padding:20px;">
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">
+        Токены дают программный доступ к вашим данным через REST API (<code>/api/v1/…</code>)
+        и MCP-сервер (для Claude и других AI-ассистентов). Передавайте токен в заголовке
+        <code>Authorization: Bearer &lt;токен&gt;</code>.
+      </p>
+
+      <form hx-post="/finance/settings/tokens/create"
+            hx-target="#apiTokensSection"
+            hx-swap="outerHTML"
+            style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <input class="form-input" type="text" name="token_name" placeholder="Название (напр. «Claude»)"
+               style="flex:1;min-width:180px;" maxlength="255">
+        <button type="submit" class="btn btn-primary">Создать токен</button>
+      </form>
+
+      {{template "api_tokens_section" dict "Tokens" .Tokens "NewToken" "" "Error" ""}}
+
+      <div style="margin-top:16px;padding:12px;background:var(--accent-subtle);border-radius:var(--radius-sm);font-size:12px;color:var(--text-secondary);line-height:1.7;">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--text-primary);">Подключение к Claude Code:</div>
+        <code style="display:block;white-space:pre-wrap;word-break:break-all;">claude mcp add --transport http finforme https://finfor.me/mcp --header "Authorization: Bearer ВАШ_ТОКЕН"</code>
+      </div>
+    </div>
+  </div>
+
   <!-- Опасная зона -->
   <div class="card" style="overflow:hidden;max-width:600px;border-color:oklch(0.85 0.06 25);">
     <div style="padding:14px 16px;border-bottom:1px solid oklch(0.85 0.06 25);font-size:13px;font-weight:600;background:var(--red);color:white;">Опасная зона</div>
