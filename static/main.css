@@ -62,7 +62,7 @@
   --radius-sm: 6px;
   --sidebar-w: 272px;
   --topbar-h:  52px;
-  --content-max-w: 1440px; /* дальше контент не растягивается — по бокам поля */
+  --layout-max-w: 1760px; /* дальше макет не растягивается — по бокам поля */
 }
 
 /* ─── DARK THEME ─── */
@@ -107,10 +107,14 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
 
 /* ─── APP LAYOUT ─── */
+/* На широких мониторах весь макет (сайдбар + контент) центрируется,
+   по бокам остаются поля. На обычных — растянут во всю ширину, как раньше. */
 .app-layout {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  max-width: var(--layout-max-w);
+  margin-inline: auto;
 }
 
 /* ─── SIDEBAR ─── */
@@ -292,12 +296,7 @@ html, body {
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 
 /* ─── CONTENT AREA ─── */
-/* Боковые поля растут вместе с шириной окна: на 24" и больше строки таблиц
-   не растягиваются во всю ширину, на обычных мониторах отступ остаётся 20px. */
-.content-area {
-  flex: 1; overflow: auto;
-  padding: 0 max(20px, (100% - var(--content-max-w)) / 2) 20px;
-}
+.content-area { flex: 1; overflow: auto; padding: 0 20px 20px; }
 
 /* ─── BUTTONS ─── */
 .btn {
