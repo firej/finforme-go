@@ -55,12 +55,49 @@
     </div>
   </div>
 
-  <!-- Экспорт данных -->
+  <!-- Резервная копия -->
   <div class="card" style="overflow:hidden;margin-bottom:12px;max-width:600px;">
-    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">Экспорт данных</div>
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600;">Резервная копия</div>
     <div style="padding:20px;">
-      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">Экспортировать все данные в JSON формате</p>
-      <a href="/api/v1/finance/export/json" download class="btn btn-primary">Экспортировать JSON</a>
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Скачать копию</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">Все счета и транзакции в одном JSON-файле. Из него можно восстановить данные здесь же.</p>
+      <a href="/api/v1/finance/export/json" class="btn btn-primary" style="margin-bottom:24px;">Экспортировать JSON</a>
+
+      <div style="border-top:1px solid var(--border);margin:20px 0 16px;"></div>
+
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px;">Восстановить из копии</div>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;">Загрузите файл, скачанный кнопкой выше.</p>
+
+      <form id="restoreForm">
+        <div class="form-group">
+          <label class="form-label" for="restoreFile">Файл резервной копии</label>
+          <input class="form-input" type="file" id="restoreFile" name="file" accept=".json,application/json" required>
+          <div class="form-hint">Поддерживаются JSON-файлы формата Finforme</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="restoreMode">Что делать с текущими данными</label>
+          <select class="form-input" id="restoreMode" name="mode">
+            <option value="replace">Заменить — удалить текущие счета и транзакции</option>
+            <option value="merge">Добавить — сохранить текущие данные и дополнить их</option>
+          </select>
+        </div>
+
+        <div id="restoreProgressDiv" style="display:none;margin-bottom:16px;">
+          <div style="height:8px;background:var(--border);border-radius:99px;overflow:hidden;">
+            <div style="width:100%;height:100%;background:var(--accent);border-radius:99px;"></div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">Восстановление данных...</div>
+        </div>
+
+        <div id="restoreMessageDiv" style="display:none;margin-bottom:16px;padding:10px 12px;border-radius:var(--radius-sm);font-size:12.5px;"></div>
+
+        <button type="submit" id="restoreBtn" class="btn btn-primary">Восстановить</button>
+      </form>
+
+      <div style="margin-top:16px;padding:10px 12px;background:var(--amber-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--text-secondary);">
+        <span style="font-weight:600;color:var(--amber);">Внимание!</span> В режиме «Заменить» текущие счета и транзакции будут удалены безвозвратно. Сделайте свежую копию перед восстановлением.
+      </div>
     </div>
   </div>
 
@@ -142,7 +179,7 @@ document.getElementById('importForm').addEventListener('submit', async function(
       messageDiv.style.color = 'var(--green)';
       messageDiv.textContent = 'Импорт успешно завершён! Перенаправление...';
       fileInput.value = '';
-      setTimeout(function() { window.location.href = '/finance/view'; }, 2000);
+      setTimeout(function() { window.location.href = '/finance/'; }, 2000);
     } else {
       messageDiv.style.display = '';
       messageDiv.style.background = 'var(--red-subtle)';
@@ -157,6 +194,61 @@ document.getElementById('importForm').addEventListener('submit', async function(
     messageDiv.style.color = 'var(--red)';
     messageDiv.textContent = 'Ошибка при отправке: ' + error.message;
     submitBtn.disabled = false;
+  }
+});
+
+document.getElementById('restoreForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var fileInput = document.getElementById('restoreFile');
+  var mode = document.getElementById('restoreMode').value;
+  var btn = document.getElementById('restoreBtn');
+  var progressDiv = document.getElementById('restoreProgressDiv');
+  var messageDiv = document.getElementById('restoreMessageDiv');
+
+  function showError(text) {
+    messageDiv.style.display = '';
+    messageDiv.style.background = 'var(--red-subtle)';
+    messageDiv.style.color = 'var(--red)';
+    messageDiv.textContent = text;
+  }
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    showError('Пожалуйста, выберите файл резервной копии');
+    return;
+  }
+
+  if (mode === 'replace' && !confirm('Текущие счета и транзакции будут удалены и заменены данными из файла. Продолжить?')) {
+    return;
+  }
+
+  var fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  fd.append('mode', mode);
+  btn.disabled = true;
+  progressDiv.style.display = '';
+  messageDiv.style.display = 'none';
+
+  try {
+    var response = await fetch('/api/v1/finance/import/json', { method: 'POST', body: fd });
+    var data = await response.json();
+    progressDiv.style.display = 'none';
+
+    if (response.ok && data.result === 'ok') {
+      messageDiv.style.display = '';
+      messageDiv.style.background = 'var(--green-subtle)';
+      messageDiv.style.color = 'var(--green)';
+      messageDiv.textContent = 'Восстановлено: счетов — ' + data.accounts +
+        ', транзакций — ' + data.transactions + '. Перенаправление...';
+      fileInput.value = '';
+      setTimeout(function() { window.location.href = '/finance/'; }, 2000);
+    } else {
+      showError('Ошибка восстановления: ' + (data.message || 'Неизвестная ошибка'));
+      btn.disabled = false;
+    }
+  } catch(error) {
+    progressDiv.style.display = 'none';
+    showError('Ошибка при отправке: ' + error.message);
+    btn.disabled = false;
   }
 });
 </script>

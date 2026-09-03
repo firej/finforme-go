@@ -112,6 +112,7 @@ func main() {
 	api.HandleFunc("/finance/transaction/table", h.APITransactionTableGet).Methods("GET")
 	api.HandleFunc("/finance/transaction/delete", h.APITransactionDelete).Methods("DELETE")
 	api.HandleFunc("/finance/export/json", h.APIExportJSON).Methods("GET")
+	api.HandleFunc("/finance/import/json", h.APIImportJSON).Methods("POST")
 	api.HandleFunc("/finance/delete", h.APIDataDelete).Methods("DELETE")
 	api.HandleFunc("/finance/welcome/createempty", h.APIWelcomeCreateEmpty).Methods("POST")
 	api.HandleFunc("/finance/welcome/createbase", h.APIWelcomeCreateBase).Methods("POST")

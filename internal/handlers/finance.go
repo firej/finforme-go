@@ -1698,11 +1698,6 @@ func (h *Handler) deleteTransaction(userID, txID int64) error {
 	return tx.Commit()
 }
 
-func (h *Handler) APIExportJSON(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{})
-}
-
 func (h *Handler) APIDataDelete(w http.ResponseWriter, r *http.Request) {
 	userID, authenticated := h.getUserID(r)
 	if !authenticated {
@@ -1721,37 +1716,9 @@ func (h *Handler) APIDataDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Удаляем все splits пользователя
-	_, err = tx.Exec("DELETE FROM splits WHERE user_id = ?", userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting splits: %v\n", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
-		return
-	}
-
-	// Удаляем все транзакции пользователя
-	_, err = tx.Exec("DELETE FROM transactions WHERE user_id = ?", userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting transactions: %v\n", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
-		return
-	}
-
-	// Сначала обнуляем parent_id у всех счетов, чтобы избежать ошибки foreign key
-	_, err = tx.Exec("UPDATE accounts SET parent_id = NULL WHERE user_id = ?", userID)
-	if err != nil {
-		fmt.Printf("ERROR clearing parent_id: %v\n", err)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
-		return
-	}
-
-	// Удаляем все счета пользователя
-	_, err = tx.Exec("DELETE FROM accounts WHERE user_id = ?", userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting accounts: %v\n", err)
+	// Удаляем счета, транзакции и сплиты пользователя
+	if err := deleteUserFinanceData(tx, userID); err != nil {
+		fmt.Printf("ERROR deleting user data: %v\n", err)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{"result": "error", "message": err.Error()})
 		return
@@ -2065,11 +2032,6 @@ func (h *Handler) createBaseAccounts(userID int64) error {
 	}
 
 	return nil
-}
-
-func (h *Handler) APIImportJSON(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
 }
 
 // APIImportGnuCash handles GnuCash SQLite database import
