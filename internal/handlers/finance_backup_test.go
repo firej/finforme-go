@@ -49,13 +49,13 @@ func TestNormalizeSplitValue(t *testing.T) {
 	}{
 		{12345, 100, 12345, 100},     // уже в копейках
 		{-500, 100, -500, 100},       // отрицательные не ломаются
-		{7, 0, 7, 100},               // нулевой знаменатель считаем сотыми
-		{1234567, 1000, 123456, 100}, // тысячные приводятся к сотым
+		{7, 100, 7, 100},             // небольшая сумма в сотых
+		{1234560, 1000, 123456, 100}, // точное преобразование тысячных
 		{5, 1, 500, 100},             // целые единицы
 	}
 	for _, c := range cases {
-		gotNum, gotDenom := normalizeSplitValue(c.num, c.denom)
-		if gotNum != c.wantNum || gotDenom != c.wantD {
+		gotNum, gotDenom, err := normalizeSplitValue(c.num, c.denom)
+		if err != nil || gotNum != c.wantNum || gotDenom != c.wantD {
 			t.Errorf("normalizeSplitValue(%d, %d) = (%d, %d), ожидалось (%d, %d)",
 				c.num, c.denom, gotNum, gotDenom, c.wantNum, c.wantD)
 		}
@@ -66,8 +66,8 @@ func TestNormalizeBackupMode(t *testing.T) {
 	if normalizeBackupMode("merge") != "merge" || normalizeBackupMode(" MERGE ") != "merge" {
 		t.Error("merge должен распознаваться независимо от регистра и пробелов")
 	}
-	// Всё остальное — включая пустое и мусорное значение — это полное восстановление
-	for _, in := range []string{"", "replace", "что-то ещё"} {
+	// Пустое значение сохраняет прежний режим по умолчанию.
+	for _, in := range []string{"", "replace"} {
 		if got := normalizeBackupMode(in); got != "replace" {
 			t.Errorf("normalizeBackupMode(%q) = %q, ожидалось replace", in, got)
 		}

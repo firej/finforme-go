@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evbogdanov/finforme/internal/gnucash"
 	"github.com/evbogdanov/finforme/internal/models"
 )
 
@@ -97,6 +98,12 @@ func (h *Handler) APIExportJSON(w http.ResponseWriter, r *http.Request) {
 
 // exportBackup собирает все счета и транзакции пользователя в структуру резервной копии.
 func (h *Handler) exportBackup(userID int64) (*backupData, error) {
+	// Share the finance lock so every part belongs to the same snapshot.
+	tx, err := h.beginFinanceWrite(userID)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
 	data := &backupData{
 		Format:       backupFormat,
 		Version:      backupFormatVersion,
@@ -105,7 +112,7 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		Transactions: []backupTransaction{},
 	}
 
-	accountRows, err := h.db.Query(`
+	accountRows, err := tx.Query(`
 		SELECT a.id, a.name, a.account_type, COALESCE(c.mnemonic, ''), a.commodity_scu,
 		       a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder
 		FROM accounts a
@@ -118,6 +125,7 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 	}
 	defer accountRows.Close()
 
+	exportedAccounts := map[int64]bool{}
 	for accountRows.Next() {
 		var acc backupAccount
 		var parentID sql.NullInt64
@@ -136,13 +144,14 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		acc.Code = code.String
 		acc.Description = description.String
 
+		exportedAccounts[acc.ID] = true
 		data.Accounts = append(data.Accounts, acc)
 	}
 	if err := accountRows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to read accounts: %w", err)
 	}
 
-	txRows, err := h.db.Query(`
+	txRows, err := tx.Query(`
 		SELECT id, num, post_date, enter_date, description, tags
 		FROM transactions
 		WHERE user_id = ?
@@ -177,7 +186,7 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		return nil, fmt.Errorf("failed to read transactions: %w", err)
 	}
 
-	splitRows, err := h.db.Query(`
+	splitRows, err := tx.Query(`
 		SELECT tx_id, account_id, value_num, value_denom
 		FROM splits
 		WHERE user_id = ?
@@ -194,9 +203,12 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		if err := splitRows.Scan(&txID, &s.AccountID, &s.ValueNum, &s.ValueDenom); err != nil {
 			return nil, fmt.Errorf("failed to scan split: %w", err)
 		}
+		if !exportedAccounts[s.AccountID] {
+			return nil, fmt.Errorf("split references an account outside the backup")
+		}
 		idx, ok := txIndex[txID]
 		if !ok {
-			continue // сплит осиротел — в копию не попадает
+			return nil, fmt.Errorf("orphan split in backup")
 		}
 		data.Transactions[idx].Splits = append(data.Transactions[idx].Splits, s)
 	}
@@ -204,6 +216,9 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		return nil, fmt.Errorf("failed to read splits: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return data, nil
 }
 
@@ -218,6 +233,7 @@ func (h *Handler) APIImportJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, backupMaxUploadSize+(1<<20))
 	body, mode, err := readBackupRequest(r)
 	if err != nil {
 		writeBackupError(w, http.StatusBadRequest, err.Error())
@@ -257,6 +273,11 @@ func (h *Handler) APIImportJSON(w http.ResponseWriter, r *http.Request) {
 
 // readBackupRequest достаёт содержимое файла резервной копии и режим восстановления.
 func readBackupRequest(r *http.Request) ([]byte, string, error) {
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
 	mode := "replace"
 
 	contentType := r.Header.Get("Content-Type")
@@ -282,7 +303,11 @@ func readBackupRequest(r *http.Request) ([]byte, string, error) {
 		if len(body) > backupMaxUploadSize {
 			return nil, "", validationError("Файл слишком большой (максимум 64 МБ)")
 		}
-		return body, normalizeBackupMode(mode), nil
+		mode = normalizeBackupMode(mode)
+		if mode == "" {
+			return nil, "", validationError("Неизвестный режим восстановления")
+		}
+		return body, mode, nil
 	}
 
 	if m := r.URL.Query().Get("mode"); m != "" {
@@ -298,14 +323,22 @@ func readBackupRequest(r *http.Request) ([]byte, string, error) {
 	if len(body) == 0 {
 		return nil, "", validationError("Пустой запрос: нужен файл резервной копии")
 	}
-	return body, normalizeBackupMode(mode), nil
+	mode = normalizeBackupMode(mode)
+	if mode == "" {
+		return nil, "", validationError("Неизвестный режим восстановления")
+	}
+	return body, mode, nil
 }
 
 func normalizeBackupMode(mode string) string {
-	if strings.ToLower(strings.TrimSpace(mode)) == "merge" {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "replace":
+		return "replace"
+	case "merge":
 		return "merge"
+	default:
+		return ""
 	}
-	return "replace"
 }
 
 func writeBackupError(w http.ResponseWriter, status int, message string) {
@@ -328,6 +361,13 @@ var validAccountTypes = map[string]bool{
 
 // restoreBackup записывает данные из резервной копии в БД одной транзакцией.
 func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*backupRestoreResult, error) {
+	mode = normalizeBackupMode(mode)
+	if mode == "" {
+		return nil, validationError("Неизвестный режим восстановления")
+	}
+	if data == nil {
+		return nil, validationError("Пустая резервная копия")
+	}
 	if data.Format != "" && data.Format != backupFormat {
 		return nil, validationError("Это не резервная копия Finforme")
 	}
@@ -342,7 +382,7 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 	// Предварительная проверка: типы счетов и ссылки внутри файла
 	fileAccounts := make(map[int64]bool, len(data.Accounts))
 	for _, acc := range data.Accounts {
-		if acc.ID == 0 {
+		if acc.ID <= 0 {
 			return nil, validationError("У счёта в файле отсутствует id")
 		}
 		if fileAccounts[acc.ID] {
@@ -361,8 +401,24 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 			return nil, validationError(fmt.Sprintf("Счёт «%s» ссылается на отсутствующий родительский счёт %d", acc.Name, *acc.ParentID))
 		}
 	}
+	seenTransactions := map[int64]bool{}
 	for _, t := range data.Transactions {
+		if t.ID <= 0 || seenTransactions[t.ID] {
+			return nil, validationError("Пустой или повторный id операции")
+		}
+		seenTransactions[t.ID] = true
+		if _, err := parseBackupTime(t.PostDate); err != nil {
+			return nil, validationError("Некорректная дата операции")
+		}
+		if t.EnterDate != "" {
+			if _, err := parseBackupTime(t.EnterDate); err != nil {
+				return nil, validationError("Некорректная дата создания операции")
+			}
+		}
 		for _, s := range t.Splits {
+			if _, _, err := normalizeSplitValue(s.ValueNum, s.ValueDenom); err != nil {
+				return nil, validationError(err.Error())
+			}
 			if !fileAccounts[s.AccountID] {
 				return nil, validationError(fmt.Sprintf(
 					"Транзакция «%s» ссылается на отсутствующий счёт %d", t.Description, s.AccountID))
@@ -486,7 +542,10 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		result.Transactions++
 
 		for _, s := range t.Splits {
-			valueNum, valueDenom := normalizeSplitValue(s.ValueNum, s.ValueDenom)
+			valueNum, valueDenom, err := normalizeSplitValue(s.ValueNum, s.ValueDenom)
+			if err != nil {
+				return nil, validationError(err.Error())
+			}
 			if _, err := tx.Exec(`
 				INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
 				VALUES (?, ?, ?, ?, ?)
@@ -505,14 +564,9 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 }
 
 // normalizeSplitValue приводит сумму сплита к знаменателю 100 (балансы считаются как SUM(value_num)/100)
-func normalizeSplitValue(valueNum, valueDenom int64) (int64, int64) {
-	if valueDenom == 0 {
-		return valueNum, models.DefaultDenom
-	}
-	if valueDenom != models.DefaultDenom {
-		return valueNum * models.DefaultDenom / valueDenom, models.DefaultDenom
-	}
-	return valueNum, valueDenom
+func normalizeSplitValue(valueNum, valueDenom int64) (int64, int64, error) {
+	cents, err := gnucash.Cents(valueNum, valueDenom)
+	return cents, models.DefaultDenom, err
 }
 
 // parseBackupTime разбирает дату из резервной копии в одном из поддерживаемых форматов
@@ -528,7 +582,7 @@ func parseBackupTime(value string) (time.Time, error) {
 		"2006-01-02",
 	}
 	for _, layout := range layouts {
-		if t, err := time.Parse(layout, value); err == nil {
+		if t, err := time.Parse(layout, value); err == nil && t.Year() >= 1000 && t.Year() <= 9999 {
 			return t, nil
 		}
 	}
