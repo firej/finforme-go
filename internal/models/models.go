@@ -1,6 +1,8 @@
 package models
 
 import (
+	"fmt"
+	"sort"
 	"time"
 )
 
@@ -24,6 +26,7 @@ type Account struct {
 	Name         string     `json:"name"`
 	AccountType  string     `json:"account_type"`
 	CommodityID  int64      `json:"commodity_id"`
+	Currency     string     `json:"currency,omitempty"`
 	CommoditySCU int        `json:"commodity_scu"`
 	NonStdSCU    int        `json:"non_std_scu"`
 	ParentID     *int64     `json:"parent_id"`
@@ -107,22 +110,43 @@ const (
 	AccountTypeEquity    = "EQUITY"
 )
 
-// GetBalance вычисляет баланс счета
-func (a *Account) GetBalance() float64 {
-	if a.Balance != 0 {
-		return a.Balance
-	}
+// CurrencyBalance is a sum in one currency; currencies are never converted implicitly.
+type CurrencyBalance struct {
+	Currency string  `json:"currency"`
+	Amount   float64 `json:"amount"`
+}
 
-	if len(a.Childs) > 0 {
-		balance := 0.0
-		for _, child := range a.Childs {
-			balance += child.GetBalance()
+// GetBalance returns the account's own balance, without mixing descendant currencies.
+func (a *Account) GetBalance() float64 { return a.Balance }
+
+// GetBalances sums this account and its descendants by currency without caching
+// or mutating Balance. Hidden accounts still contribute to financial totals.
+func (a *Account) GetBalances() []CurrencyBalance {
+	totals := make(map[string]float64)
+	var visit func(*Account)
+	visit = func(acc *Account) {
+		currency := acc.Currency
+		if currency == "" {
+			currency = fmt.Sprintf("Валюта #%d", acc.CommodityID)
 		}
-		a.Balance = balance
-		return balance
+		if len(acc.Childs) == 0 || acc.Balance != 0 {
+			totals[currency] += acc.Balance
+		}
+		for _, child := range acc.Childs {
+			visit(child)
+		}
 	}
-
-	return a.Balance
+	visit(a)
+	keys := make([]string, 0, len(totals))
+	for c := range totals {
+		keys = append(keys, c)
+	}
+	sort.Strings(keys)
+	result := make([]CurrencyBalance, 0, len(keys))
+	for _, c := range keys {
+		result = append(result, CurrencyBalance{Currency: c, Amount: totals[c]})
+	}
+	return result
 }
 
 // IsNegativeBalance проверяет, нужно ли инвертировать баланс для данного типа счета

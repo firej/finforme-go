@@ -379,7 +379,7 @@ function submitTransactionForm(event) {
   var btn  = document.getElementById('modal-submit-btn');
   btn.disabled = true; btn.textContent = 'Сохранение...';
 
-  fetch('/api/v1/finance/transaction/save', {
+  fetch(form.action, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(new FormData(form)).toString()

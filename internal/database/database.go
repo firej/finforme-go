@@ -18,6 +18,9 @@ func InitDB(db *sql.DB) error {
 			last_name VARCHAR(255),
 			is_active TINYINT DEFAULT 1,
 			is_admin TINYINT DEFAULT 0,
+ session_version BIGINT NOT NULL DEFAULT 1,
+ password_change_required TINYINT NOT NULL DEFAULT 0,
+ password_expires_at DATETIME NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
@@ -114,9 +117,14 @@ func InitDB(db *sql.DB) error {
 	// Миграции: добавляем новые колонки если их нет (для существующих БД)
 	migrations := []string{
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin TINYINT DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_required TINYINT NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_expires_at DATETIME NULL`,
 	}
 	for _, m := range migrations {
-		db.Exec(m) // игнорируем ошибки (колонка уже может существовать)
+		if _, err := db.Exec(m); err != nil {
+			return fmt.Errorf("failed to migrate users: %w", err)
+		}
 	}
 
 	// Миграция: убираем transactions.currency_id (валюта теперь определяется

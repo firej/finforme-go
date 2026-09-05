@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/evbogdanov/finforme/internal/models"
 	"github.com/gorilla/mux"
@@ -13,7 +16,7 @@ import (
 func (h *Handler) RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := h.getUserID(r); !ok {
-			http.Redirect(w, r, "/accounts/login/?next="+r.URL.Path, http.StatusSeeOther)
+			h.redirectToLogin(w, r)
 			return
 		}
 		userID, _ := h.getUserID(r)
@@ -86,21 +89,54 @@ func (h *Handler) AdminUserRequestPasswordChange(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Генерируем временный пароль
-	tempPassword := "ChangeMe123!"
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	currentID, _ := h.getUserID(r)
+	if userID == currentID || h.isDemo(userID) {
+		http.Error(w, "Для своего аккаунта используйте смену пароля; сброс демо-аккаунта недоступен.", http.StatusBadRequest)
 		return
 	}
-
-	_, err = h.db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hashedPassword), userID)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		http.Error(w, "Internal server error", 500)
 		return
 	}
-
-	http.Redirect(w, r, "/admin/users/?msg=password_reset&uid="+vars["id"], http.StatusSeeOther)
+	tempPassword := hex.EncodeToString(random[:])
+	hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	tx, err := h.db.Begin()
+	if err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	defer tx.Rollback()
+	res, err := tx.Exec(`UPDATE users SET password_hash = ?, session_version = session_version + 1,
+  password_change_required = 1, password_expires_at = ? WHERE id = ? AND is_active = 1`,
+		string(hash), time.Now().UTC().Add(30*time.Minute), userID)
+	if err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n != 1 {
+		http.Error(w, "Активный пользователь не найден", 404)
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM api_tokens WHERE user_id = ?`, userID); err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
+	// Never put the credential in URLs, cookies, logs or persistent flash messages.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	h.renderTemplate(w, "password_reset_result.html", map[string]interface{}{
+		"Title": "Пароль сброшен", "TemporaryPassword": tempPassword, "ResetUserID": userID,
+	})
 }
 
 // AdminUserDelete — удалить пользователя

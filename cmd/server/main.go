@@ -18,6 +18,9 @@ import (
 func main() {
 	// Загрузка конфигурации
 	cfg := config.Load()
+	if err := cfg.ValidateServer(); err != nil {
+		log.Fatal(err)
+	}
 
 	// Подключение к базе данных MariaDB
 	db, err := sql.Open("mysql", cfg.DatabaseDSN)
@@ -107,6 +110,7 @@ func main() {
 	api.HandleFunc("/finance/account/form", h.APIAccountFormGet).Methods("GET")
 	api.HandleFunc("/finance/account/delete", h.APIAccountDelete).Methods("DELETE")
 	api.HandleFunc("/finance/transactions/get", h.APITransactionsGet).Methods("GET")
+	api.HandleFunc("/finance/transaction/metadata", h.APITransactionMetadataSave).Methods("POST")
 	api.HandleFunc("/finance/transaction/save", h.APITransactionSave).Methods("POST")
 	api.HandleFunc("/finance/transaction/form", h.APITransactionFormGet).Methods("GET")
 	api.HandleFunc("/finance/transaction/table", h.APITransactionTableGet).Methods("GET")
@@ -128,7 +132,7 @@ func main() {
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	log.Printf("Starting server on http://localhost:%s", cfg.Port)
-	if err := http.ListenAndServe(addr, r); err != nil {
+	if err := http.ListenAndServe(addr, http.NewCrossOriginProtection().Handler(r)); err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }

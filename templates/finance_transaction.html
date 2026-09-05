@@ -8,7 +8,7 @@
 
 
   <div class="card" style="max-width:480px;padding:24px;">
-    <form method="POST" hx-post="/api/v1/finance/transaction/save" hx-target="#result">
+    <form method="POST" hx-post="{{if .MetadataOnly}}/api/v1/finance/transaction/metadata{{else}}/api/v1/finance/transaction/save{{end}}" hx-target="#result">
       {{if .Transaction}}
       <input type="hidden" name="id" value="{{.Transaction.ID}}">
       {{end}}
@@ -31,10 +31,13 @@
                value="{{if .Transaction}}{{.Transaction.Tags}}{{end}}">
       </div>
 
+      {{if .MetadataOnly}}
+      {{template "transaction_readonly_splits" .}}
+      {{else}}
       <div class="form-group">
         <label class="form-label" for="value">Сумма</label>
         <input class="form-input form-input-mono" type="number" step="0.01" id="value" name="value"
-               value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}" required>
+               value="{{if .Credit}}{{with index .Credit 0}}{{.value}}{{end}}{{end}}" required>
       </div>
 
       <div class="form-group">
@@ -59,6 +62,13 @@
         </select>
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="value_target">Сумма зачисления (обязательна при разных валютах)</label>
+        <input class="form-input" type="number" step="0.01" min="0.01" id="value_target" name="value_target"
+          value="{{if .CrossCurrency}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}">
+        <p>Для одной валюты оставьте пустой: сумма будет равна списанию.</p>
+      </div>
+      {{end}}
       <div style="display:flex;gap:8px;margin-top:20px;">
         <button type="submit" class="btn btn-primary">Сохранить</button>
         <a href="/finance/account/{{.AccountID}}" class="btn btn-ghost">Отмена</a>
@@ -69,13 +79,12 @@
 
     <script>
     document.body.addEventListener('htmx:afterRequest', function(evt) {
-      if (evt.detail.successful) {
+      if (evt.detail.elt && evt.detail.elt.matches('form')) {
         try {
           var r = JSON.parse(evt.detail.xhr.responseText);
           if (r.result === 'ok') { window.location.href = '/finance/account/{{.AccountID}}'; }
           else if (r.error) {
-            document.getElementById('result').innerHTML =
-              '<div style="padding:10px 12px;background:var(--red-subtle);border-radius:var(--radius-sm);font-size:12.5px;color:var(--red);">Ошибка: ' + r.error + '</div>';
+            document.getElementById('result').textContent = 'Ошибка: ' + r.error;
           }
         } catch(e) {}
       }

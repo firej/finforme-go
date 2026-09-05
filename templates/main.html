@@ -392,11 +392,11 @@ document.addEventListener('keydown', function(e) {
     {{end}}
     <span class="account-dot dot-{{.AccountType}}"></span>
     <span class="stree-name">{{.Name}}</span>
-    {{if ne .Balance 0.0}}
-    <span class="stree-bal" style="color:{{if gt .Balance 0.0}}var(--green){{else}}var(--red){{end}}">
-      {{formatMoneyShort .Balance}}
+    <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
+    {{range .GetBalances}}{{if ne .Amount 0.0}}
+      <span style="color:{{if gt .Amount 0.0}}var(--green){{else}}var(--red){{end}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
+    {{end}}{{end}}
     </span>
-    {{end}}
   </a>
   {{if .Childs}}
   <div class="stree-children" data-parent="{{.ID}}">

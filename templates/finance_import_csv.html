@@ -62,11 +62,11 @@
         <option value="">— выберите счёт —</option>
         {{range .Accounts}}
         {{if eq .Placeholder 0}}
-        <option value="{{.ID}}">{{.DisplayName}}</option>
+        <option value="{{.ID}}">{{.DisplayName}} ({{.Currency}})</option>
         {{end}}
         {{end}}
       </select>
-      <div class="form-hint">Куда относятся строки CSV. Контейнерные счета скрыты.</div>
+      <div class="form-hint">Суммы CSV должны быть в валюте этого счёта. Второй счёт выбирается в той же валюте; обмен валют добавляйте отдельной операцией.</div>
     </div>
 
     <div class="form-group" style="margin-bottom:0;">
@@ -187,7 +187,7 @@
   var allAccounts = [
     {{range .Accounts}}
     {{if eq .Placeholder 0}}
-    { id: {{.ID}}, name: {{.Name | printf "%q"}}, display: {{.DisplayName | printf "%q"}} },
+    { id: {{.ID}}, name: {{.Name}}, display: {{.DisplayName}}, commodity_id: {{.CommodityID}}, currency: {{.Currency}} },
     {{end}}
     {{end}}
   ];
@@ -207,6 +207,7 @@
   var hasHeader = true;
   var headerRow = null;
   var columnRoles = [];    // одна роль на колонку
+  var previewSourceID = 0;
   var previewItems = [];   // данные с сервера
 
   // ── DOM refs ─────────────────────────────────────────────────────────────
@@ -519,6 +520,7 @@
     var debitCol = columnRoles.indexOf('amount_debit');
     var creditCol = columnRoles.indexOf('amount_credit');
     var descCol = columnRoles.indexOf('description');
+    var currencyCol = columnRoles.indexOf('currency');
 
     if (dateCol < 0) return { error: 'Не выбрана колонка с датой' };
     if (amountCol < 0 && (debitCol < 0 || creditCol < 0) && debitCol < 0 && creditCol < 0)
@@ -549,7 +551,7 @@
 
       var desc = descCol >= 0 ? (r[descCol] || '').trim() : '';
 
-      out.push({ date: dateStr, amount: amount, description: desc });
+      out.push({ date: dateStr, amount: amount, description: desc, currency: currencyCol >= 0 ? (r[currencyCol] || '').trim() : '' });
     }
     return { rows: out, skipped: skipped };
   }
@@ -574,8 +576,13 @@
     .then(function(res) {
       btn.disabled = false; btn.textContent = 'Сформировать превью →';
       if (!res.ok) { showError(res.data.error || 'Ошибка превью'); return; }
+      if (parseInt($('csvi-source').value, 10) !== srcID) return;
+      previewSourceID = srcID;
+      if (!allAccounts.some(function(a) { return a.id === res.data.imbalance_account_id; })) {
+        allAccounts.push({id:res.data.imbalance_account_id, name:res.data.imbalance_account_nm, display:res.data.imbalance_account_nm, commodity_id:res.data.source_commodity_id, currency:res.data.source_currency});
+      }
       previewItems = (res.data.items || []).map(function(it) {
-        return Object.assign({}, it, { skip: it.is_duplicate });
+        return Object.assign({}, it, { skip: it.is_duplicate || !!it.error });
       });
       renderPreview(res.data, built.skipped);
       $('csvi-step3').style.display = '';
@@ -647,10 +654,10 @@
       var tdAcc = document.createElement('td');
       var sel = document.createElement('select');
       sel.className = 'form-select csvi-acct-select';
-      allAccounts.forEach(function(a) {
+      allAccounts.filter(function(a) { return a.id !== data.source_account_id && a.commodity_id === data.source_commodity_id; }).forEach(function(a) {
         var opt = document.createElement('option');
         opt.value = a.id;
-        opt.textContent = a.display || a.name;
+        opt.textContent = (a.display || a.name) + " (" + a.currency + ")";
         if (a.id === it.other_account_id) opt.selected = true;
         sel.appendChild(opt);
       });
@@ -701,11 +708,15 @@
     });
   }
 
+  $('csvi-source').addEventListener('change', function() {
+    previewSourceID = 0; previewItems = []; $('csvi-step3').style.display = 'none';
+  });
+
   $('csvi-save-btn').addEventListener('click', function() {
     var msg = $('csvi-save-msg');
     msg.style.display = 'none';
     var srcID = parseInt($('csvi-source').value, 10);
-    if (!srcID) { showError('Исходный счёт сбросился'); return; }
+    if (!srcID || srcID !== previewSourceID) { showError('Сформируйте превью для выбранного счёта заново'); return; }
 
     var toSave = previewItems
       .filter(function(it) { return !it.skip && !it.error; })
@@ -714,6 +725,7 @@
           date: it.date,
           amount: it.amount,
           description: it.description,
+          currency: it.currency,
           other_account_id: it.other_account_id
         };
       });

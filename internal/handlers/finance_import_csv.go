@@ -15,7 +15,11 @@ import (
 // FinanceImportCSV - страница импорта транзакций из CSV (GET)
 func (h *Handler) FinanceImportCSV(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
-	accounts, _ := h.getAccounts(userID)
+	accounts, err := h.getAccountsWithBalance(userID)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить счета", 500)
+		return
+	}
 
 	data := h.pageData(userID, "import_csv")
 	data["Title"] = "Импорт транзакций из CSV"
@@ -25,6 +29,7 @@ func (h *Handler) FinanceImportCSV(w http.ResponseWriter, r *http.Request) {
 
 // csvImportRow - одна строка для превью/сохранения
 type csvImportRow struct {
+	Currency    string  `json:"currency,omitempty"`
 	Date        string  `json:"date"`   // YYYY-MM-DD
 	Amount      float64 `json:"amount"` // знаковая сумма со стороны source_account
 	Description string  `json:"description"`
@@ -39,6 +44,7 @@ type csvImportPreviewReq struct {
 
 // csvImportPreviewItem - результат превью одной строки
 type csvImportPreviewItem struct {
+	Currency         string  `json:"currency,omitempty"`
 	Index            int     `json:"index"`
 	Date             string  `json:"date"`
 	Amount           float64 `json:"amount"`
@@ -75,6 +81,11 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var sourceCurrency string
+	if err := h.db.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency); err != nil {
+		writeFinanceError(w, err)
+		return
+	}
 	// Получаем/создаём счёт «Дисбаланс»
 	imbID, imbName, err := h.getOrCreateImbalanceAccount(userID, srcAcc.CommodityID)
 	if err != nil {
@@ -98,6 +109,7 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 			Date:        row.Date,
 			Amount:      row.Amount,
 			Description: strings.TrimSpace(row.Description),
+			Currency:    row.Currency,
 		}
 
 		// Валидируем дату
@@ -108,7 +120,17 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Проверка на дубликат на исходном счёте: та же дата + та же сумма
-		valueNum := int64(math.Round(row.Amount * 100))
+		valueNum, err := csvAmountCents(row.Amount)
+		if err != nil {
+			item.Error = err.Error()
+			items = append(items, item)
+			continue
+		}
+		if err := validateCSVCurrency(row.Currency, sourceCurrency); err != nil {
+			item.Error = err.Error()
+			items = append(items, item)
+			continue
+		}
 		dupTxID := h.findDuplicateTransaction(userID, req.SourceAccountID, row.Date, valueNum)
 		if dupTxID > 0 {
 			item.IsDuplicate = true
@@ -122,14 +144,23 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		} else {
 			otherID = h.guessOtherAccount(userID, req.SourceAccountID, item.Description, row.Amount)
 		}
-		if otherID == 0 {
-			otherID = imbID
+		if row.OtherID == 0 {
+			acc, ok := accountsByID[otherID]
+			if !ok || acc.CommodityID != srcAcc.CommodityID || acc.Placeholder != 0 || acc.ID == req.SourceAccountID {
+				otherID = imbID
+			}
 		}
 		item.OtherAccountID = otherID
 		if acc, ok := accountsByID[otherID]; ok {
 			item.OtherAccountName = acc.Name
+			if acc.CommodityID != srcAcc.CommodityID {
+				item.Error = "В CSV второй счёт должен быть в валюте исходного счёта"
+			}
+			if acc.Placeholder != 0 || acc.ID == req.SourceAccountID {
+				item.Error = "Выберите другой конечный счёт"
+			}
 		} else {
-			item.OtherAccountName = imbName
+			item.Error = "Второй счёт не найден"
 		}
 
 		items = append(items, item)
@@ -141,6 +172,8 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		"imbalance_account_nm": imbName,
 		"source_account_id":    req.SourceAccountID,
 		"source_account_name":  srcAcc.Name,
+		"source_commodity_id":  srcAcc.CommodityID,
+		"source_currency":      sourceCurrency,
 	})
 }
 
@@ -151,6 +184,7 @@ type csvImportSaveReq struct {
 }
 
 type csvImportSaveItem struct {
+	Currency       string  `json:"currency,omitempty"`
 	Date           string  `json:"date"`
 	Amount         float64 `json:"amount"`
 	Description    string  `json:"description"`
@@ -169,8 +203,16 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tx, err := h.beginFinanceWrite(userID)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	defer tx.Rollback()
+
 	// Проверяем источник
-	srcAcc, err := h.getAccountByID(userID, req.SourceAccountID)
+	srcAcc, err := getAccountByIDFrom(tx, userID, req.SourceAccountID)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Исходный счёт не найден"})
@@ -188,14 +230,11 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := h.db.Begin()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+	var sourceCurrency string
+	if err := tx.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency); err != nil {
+		writeFinanceError(w, err)
 		return
 	}
-	defer tx.Rollback()
-
 	saved := 0
 	for i, it := range req.Items {
 		postDate, err := time.Parse("2006-01-02", it.Date)
@@ -210,7 +249,7 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Проверяем, что other принадлежит юзеру и не контейнерный
-		otherAcc, err := h.getAccountByID(userID, it.OtherAccountID)
+		otherAcc, err := getAccountByIDFrom(tx, userID, it.OtherAccountID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Строка %d: счёт-контрагент не найден", i+1)})
@@ -222,7 +261,19 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		valueNum := int64(math.Round(it.Amount * 100))
+		if otherAcc.CommodityID != srcAcc.CommodityID {
+			writeFinanceError(w, validationError(fmt.Sprintf("Строка %d: второй счёт должен быть в валюте исходного счёта", i+1)))
+			return
+		}
+		if err := validateCSVCurrency(it.Currency, sourceCurrency); err != nil {
+			writeFinanceError(w, validationError(fmt.Sprintf("Строка %d: %s", i+1, err)))
+			return
+		}
+		valueNum, err := csvAmountCents(it.Amount)
+		if err != nil {
+			writeFinanceError(w, validationError(fmt.Sprintf("Строка %d: %s", i+1, err)))
+			return
+		}
 
 		res, err := tx.Exec(`
 			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
@@ -316,46 +367,69 @@ func (h *Handler) guessOtherAccount(userID, sourceAccountID int64, description s
 // getOrCreateImbalanceAccount - находит или создаёт счёт «Дисбаланс»
 // для размещения транзакций, у которых не определён второй счёт.
 func (h *Handler) getOrCreateImbalanceAccount(userID, commodityID int64) (int64, string, error) {
+	tx, err := h.beginFinanceWrite(userID)
+	if err != nil {
+		return 0, "", err
+	}
+	defer tx.Rollback()
 	var id int64
 	var name string
-	err := h.db.QueryRow(`
-		SELECT id, name FROM accounts
-		WHERE user_id = ?
-		  AND placeholder = 0
-		  AND (name = 'Дисбаланс' OR name LIKE 'Дисбаланс-%' OR name = 'Imbalance' OR name LIKE 'Imbalance-%')
-		ORDER BY id
-		LIMIT 1
-	`, userID).Scan(&id, &name)
+	err = tx.QueryRow(`SELECT id,name FROM accounts WHERE user_id=? AND commodity_id=? AND placeholder=0
+ AND (name='Дисбаланс' OR name LIKE 'Дисбаланс-%' OR name='Imbalance' OR name LIKE 'Imbalance-%') ORDER BY id LIMIT 1`, userID, commodityID).Scan(&id, &name)
 	if err == nil {
-		return id, name, nil
+		return id, name, tx.Commit()
 	}
 	if err != sql.ErrNoRows {
 		return 0, "", err
 	}
+	var currency string
+	if err := tx.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, commodityID).Scan(&currency); err != nil {
+		return 0, "", err
+	}
+	name = "Дисбаланс-" + currency
+	res, err := tx.Exec(`INSERT INTO accounts(user_id,name,account_type,commodity_id,commodity_scu,non_std_scu,description,hidden,placeholder)
+ VALUES(?,?,'EQUITY',?,100,0,'Счёт для несбалансированных импортированных транзакций',0,0)`, userID, name, commodityID)
+	if err != nil {
+		return 0, "", err
+	}
+	id, err = res.LastInsertId()
+	if err != nil {
+		return 0, "", err
+	}
+	return id, name, tx.Commit()
+}
 
-	// Создаём как EQUITY на верхнем уровне (как в GnuCash для Imbalance)
-	res, err := h.db.Exec(`
-		INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
-		                     non_std_scu, description, hidden, placeholder)
-		VALUES (?, 'Дисбаланс', 'EQUITY', ?, 100, 0,
-		        'Счёт для несбалансированных импортированных транзакций', 0, 0)
-	`, userID, commodityID)
+func csvAmountCents(amount float64) (int64, error) {
+	cents, err := transactionCents(math.Abs(amount))
 	if err != nil {
-		return 0, "", err
+		return 0, err
 	}
-	newID, err := res.LastInsertId()
-	if err != nil {
-		return 0, "", err
+	if amount < 0 {
+		cents = -cents
 	}
-	return newID, "Дисбаланс", nil
+	return cents, nil
+}
+
+func validateCSVCurrency(currency, source string) error {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency != "" && currency != strings.ToUpper(source) {
+		return validationError("Валюта строки CSV не совпадает с валютой исходного счёта")
+	}
+	return nil
 }
 
 // getAccountByID - возвращает счёт пользователя по ID
 func (h *Handler) getAccountByID(userID, accountID int64) (*models.Account, error) {
+	return getAccountByIDFrom(h.db, userID, accountID)
+}
+
+func getAccountByIDFrom(q interface {
+	QueryRow(string, ...interface{}) *sql.Row
+}, userID, accountID int64) (*models.Account, error) {
 	var acc models.Account
 	var parentID sql.NullInt64
 	var code, description sql.NullString
-	err := h.db.QueryRow(`
+	err := q.QueryRow(`
 		SELECT id, name, account_type, commodity_id, commodity_scu, non_std_scu,
 		       parent_id, code, description, hidden, placeholder
 		FROM accounts WHERE id = ? AND user_id = ?

@@ -1,0 +1,9 @@
+{{define "transaction_readonly_splits"}}
+<p class="form-hint">У этой операции несколько проводок или нестандартное распределение сумм. Здесь можно изменить описание, дату и теги. Счета и суммы сохранятся.</p>
+<table class="data-table">
+<thead><tr><th>Счёт</th><th>Списание</th><th>Зачисление</th></tr></thead>
+<tbody>
+{{range .Credit}}<tr><td>{{.account_name}}</td><td>{{formatMoney .value}} {{.commodity_mnemonic}}</td><td>—</td></tr>{{end}}
+{{range .Debit}}<tr><td>{{.account_name}}</td><td>—</td><td>{{formatMoney .value}} {{.commodity_mnemonic}}</td></tr>{{end}}
+</tbody></table>
+{{end}}

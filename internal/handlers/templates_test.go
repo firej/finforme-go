@@ -257,11 +257,10 @@ func TestTemplates_Index(t *testing.T) {
 	data := baseData(u, testAccountTree())
 	data["Title"] = "Дашборд"
 	data["News"] = newsItems
-	data["TotalAssets"] = 150000.0
-	data["TotalLiabilities"] = 30000.0
-	data["NetWorth"] = 120000.0
-	data["TotalIncome"] = 50000.0
-	data["TotalExpense"] = 20000.0
+	data["CurrencyTotals"] = []DashboardCurrencyTotal{
+		{Currency: "RUB", TotalAssets: 150000, TotalLiabilities: 30000, NetWorth: 120000, TotalIncome: 50000, TotalExpense: 20000},
+		{Currency: "USD", TotalAssets: 100, NetWorth: 100},
+	}
 	data["TopAccounts"] = []map[string]interface{}{
 		{"ID": int64(1), "Name": "Сбербанк", "AccountType": "BANK", "Balance": 100000.0},
 	}

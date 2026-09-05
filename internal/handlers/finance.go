@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"strconv"
@@ -38,60 +37,14 @@ func (h *Handler) MortgageCalculator(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) FinanceIndex(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 
-	// Получаем все счета пользователя
-	rows, err := h.db.Query(`
-		SELECT a.id, a.name, a.account_type, a.commodity_id, a.commodity_scu,
-		       a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder,
-		       COALESCE(SUM(s.value_num), 0) as balance
-		FROM accounts a
-		LEFT JOIN splits s ON a.id = s.account_id
-		WHERE a.user_id = ?
-		GROUP BY a.id
-	`, userID)
-
+	accounts, err := h.getAccountsWithBalance(userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Не удалось загрузить счета", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-
-	accounts := make([]*models.Account, 0)
-	accountsMap := make(map[int64]*models.Account)
-
-	for rows.Next() {
-		var acc models.Account
-		var balance int64
-		var parentID sql.NullInt64
-		var code, description sql.NullString
-
-		err := rows.Scan(&acc.ID, &acc.Name, &acc.AccountType, &acc.CommodityID,
-			&acc.CommoditySCU, &acc.NonStdSCU, &parentID, &code, &description,
-			&acc.Hidden, &acc.Placeholder, &balance)
-
-		if err != nil {
-			fmt.Printf("ERROR scanning account: %v\n", err)
-			continue
-		}
-
-		if parentID.Valid {
-			acc.ParentID = &parentID.Int64
-		}
-		if code.Valid {
-			acc.Code = code.String
-		}
-		if description.Valid {
-			acc.Description = description.String
-		}
-
-		// Вычисляем баланс с учетом типа счета
-		fraction := 100.0
-		acc.Balance = float64(balance) / fraction
-		if acc.IsNegativeBalance() {
-			acc.Balance = -acc.Balance
-		}
-
-		accounts = append(accounts, &acc)
-		accountsMap[acc.ID] = &acc
+	accountsMap := make(map[int64]*models.Account, len(accounts))
+	for _, acc := range accounts {
+		accountsMap[acc.ID] = acc
 	}
 
 	// Если нет счетов, показываем welcome страницу
@@ -419,6 +372,10 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 	if txIDStr != "" {
 		txID, _ := strconv.ParseInt(txIDStr, 10, 64)
 		transaction, debit, credit = h.getTransaction(userID, txID)
+		if transaction == nil {
+			http.Error(w, "Транзакция не найдена", http.StatusNotFound)
+			return
+		}
 	}
 
 	accounts, _ := h.getAccounts(userID)
@@ -426,6 +383,8 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 	data := h.pageData(userID, "transactions")
 	data["Title"] = "Транзакция"
 	data["Transaction"] = transaction
+	data["MetadataOnly"] = transaction != nil && (len(debit) != 1 || len(credit) != 1)
+	data["CrossCurrency"] = len(debit) == 1 && len(credit) == 1 && debit[0]["commodity_id"] != credit[0]["commodity_id"]
 	data["Debit"] = debit
 	data["Credit"] = credit
 	data["AccountID"] = accountID
@@ -517,11 +476,12 @@ func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error
 	rows, err := h.db.Query(`
 		SELECT a.id, a.name, a.account_type, a.commodity_id, a.commodity_scu,
 		       a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder,
-		       COALESCE(SUM(s.value_num), 0) AS balance
+		       COALESCE(SUM(s.value_num), 0) AS balance, c.mnemonic
 		FROM accounts a
-		LEFT JOIN splits s ON a.id = s.account_id
+		LEFT JOIN splits s ON a.id = s.account_id AND s.user_id = a.user_id
+		JOIN commodities c ON c.id = a.commodity_id
 		WHERE a.user_id = ?
-		GROUP BY a.id
+		GROUP BY a.id, a.name, a.account_type, a.commodity_id, a.commodity_scu, a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder, c.mnemonic
 		ORDER BY a.name
 	`, userID)
 	if err != nil {
@@ -540,9 +500,9 @@ func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error
 
 		err := rows.Scan(&acc.ID, &acc.Name, &acc.AccountType, &acc.CommodityID,
 			&acc.CommoditySCU, &acc.NonStdSCU, &parentID, &code, &description,
-			&acc.Hidden, &acc.Placeholder, &balanceRaw)
+			&acc.Hidden, &acc.Placeholder, &balanceRaw, &acc.Currency)
 		if err != nil {
-			continue
+			return nil, err
 		}
 
 		if parentID.Valid {
@@ -564,6 +524,9 @@ func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error
 		accountsMap[acc.ID] = &acc
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	result := h.flattenAccountsHierarchy(allAccounts, accountsMap)
 	return result, nil
 }
@@ -700,14 +663,16 @@ func (h *Handler) sortAccountsByName(accounts []*models.Account) {
 // validateParentAccount проверяет, что родительский счёт принадлежит пользователю
 // и не создаёт цикл (родитель не является самим счётом или его потомком).
 // accountID = 0 при создании нового счёта.
-func (h *Handler) validateParentAccount(userID, accountID, parentID int64) error {
+func validateParentAccount(q interface {
+	QueryRow(string, ...interface{}) *sql.Row
+}, userID, accountID, parentID int64) error {
 	current := parentID
 	for i := 0; i < 100 && current != 0; i++ {
 		if current == accountID {
 			return fmt.Errorf("родительский счёт не может быть самим счётом или его потомком")
 		}
 		var next sql.NullInt64
-		err := h.db.QueryRow(
+		err := q.QueryRow(
 			`SELECT parent_id FROM accounts WHERE id = ? AND user_id = ?`,
 			current, userID,
 		).Scan(&next)
@@ -779,55 +744,26 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 	data["Title"] = "Дашборд"
 	data["News"] = h.latestNews()
 
-	// Загружаем балансы счетов, сгруппированные по типу
-	rows, err := h.db.Query(`
-		SELECT a.account_type, SUM(s.value_num) / 100.0 AS balance
-		FROM accounts a
-		LEFT JOIN splits s ON a.id = s.account_id
-		WHERE a.user_id = ? AND a.account_type IN ('ASSET','BANK','CASH','LIABILITY','INCOME','EXPENSE','EQUITY')
-		GROUP BY a.account_type
-	`, userID)
-
-	var totalAssets, totalLiabilities, totalIncome, totalExpense float64
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var accountType string
-			var balance float64
-			if err := rows.Scan(&accountType, &balance); err != nil {
-				continue
-			}
-			switch accountType {
-			case "ASSET", "BANK", "CASH":
-				totalAssets += balance
-			case "LIABILITY":
-				// LIABILITY в GnuCash хранится отрицательным — инвертируем
-				totalLiabilities += -balance
-			case "INCOME":
-				totalIncome += -balance
-			case "EXPENSE":
-				totalExpense += balance
-			}
-		}
+	totals, err := h.dashboardTotals(userID)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить итоги", http.StatusInternalServerError)
+		return
 	}
-	data["TotalAssets"] = totalAssets
-	data["TotalLiabilities"] = totalLiabilities
-	data["NetWorth"] = totalAssets - totalLiabilities
-	data["TotalIncome"] = totalIncome
-	data["TotalExpense"] = totalExpense
+	data["CurrencyTotals"] = totals
 
 	// 7 счетов-активов с самой свежей транзакционной активностью
 	topRows, err := h.db.Query(`
 		SELECT a.id, a.name, a.account_type,
 		       COALESCE(SUM(s.value_num), 0) / 100.0 AS balance,
-		       MAX(t.post_date) AS last_tx
+		       MAX(t.post_date) AS last_tx, c.mnemonic
 		FROM accounts a
 		JOIN splits s ON s.account_id = a.id
 		JOIN transactions t ON t.id = s.tx_id
+		JOIN commodities c ON c.id = a.commodity_id
 		WHERE a.user_id = ?
 		  AND a.account_type IN ('ASSET','BANK','CASH')
 		  AND a.hidden = 0
-		GROUP BY a.id, a.name, a.account_type
+		GROUP BY a.id, a.name, a.account_type, c.mnemonic
 		ORDER BY last_tx DESC
 		LIMIT 7
 	`, userID)
@@ -838,10 +774,10 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 		defer topRows.Close()
 		for topRows.Next() {
 			var id int64
-			var name, accountType string
+			var name, accountType, currency string
 			var balance float64
 			var lastTx sql.NullTime
-			if err := topRows.Scan(&id, &name, &accountType, &balance, &lastTx); err != nil {
+			if err := topRows.Scan(&id, &name, &accountType, &balance, &lastTx, &currency); err != nil {
 				fmt.Printf("ERROR scanning top account row: %v\n", err)
 				continue
 			}
@@ -850,6 +786,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 				"Name":        name,
 				"AccountType": accountType,
 				"Balance":     balance,
+				"Currency":    currency,
 			})
 		}
 	}
@@ -859,10 +796,11 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 	recentRows, err := h.db.Query(`
 		SELECT DISTINCT t.id, t.description, DATE_FORMAT(t.post_date, '%Y-%m-%d') AS post_date,
 		       s.value_num / 100.0 AS amount,
-		       a.name AS account_name, a.account_type
+		       a.name AS account_name, a.account_type, c.mnemonic
 		FROM transactions t
 		JOIN splits s ON s.tx_id = t.id
 		JOIN accounts a ON a.id = s.account_id
+		JOIN commodities c ON c.id = a.commodity_id
 		WHERE t.user_id = ?
 		  AND a.account_type NOT IN ('ROOT','EQUITY')
 		  AND s.value_num > 0
@@ -874,9 +812,9 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 		defer recentRows.Close()
 		for recentRows.Next() {
 			var txID int64
-			var description, postDate, accountName, accountType string
+			var description, postDate, accountName, accountType, currency string
 			var amount float64
-			if err := recentRows.Scan(&txID, &description, &postDate, &amount, &accountName, &accountType); err != nil {
+			if err := recentRows.Scan(&txID, &description, &postDate, &amount, &accountName, &accountType, &currency); err != nil {
 				continue
 			}
 			if description == "" {
@@ -887,6 +825,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 				"Description": description,
 				"PostDate":    postDate,
 				"Amount":      amount,
+				"Currency":    currency,
 				"AccountName": accountName,
 				"AccountType": accountType,
 			})
@@ -1098,22 +1037,28 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
+	tx, err := h.beginFinanceWrite(userID)
+	if err != nil {
+		writeFinanceError(w, err)
+		return
+	}
+	defer tx.Rollback()
+
 	// Проверяем родителя: принадлежность пользователю и отсутствие циклов
 	if parentID.Valid {
 		var selfID int64
 		if idStr != "" {
 			selfID, _ = strconv.ParseInt(idStr, 10, 64)
 		}
-		if err := h.validateParentAccount(userID, selfID, parentID.Int64); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		if err := validateParentAccount(tx, userID, selfID, parentID.Int64); err != nil {
+			writeFinanceError(w, validationError(err.Error()))
 			return
 		}
 	}
 
 	if idStr == "" {
 		// Создание нового счета
-		result, err := h.db.Exec(`
+		result, err := tx.Exec(`
 			INSERT INTO accounts (user_id, name, account_type, commodity_id, commodity_scu,
 			                      non_std_scu, parent_id, description, hidden, placeholder)
 			VALUES (?, ?, ?, ?, 100, 0, ?, ?, ?, ?)
@@ -1121,11 +1066,15 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			fmt.Printf("ERROR creating account: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			writeFinanceError(w, err)
 			return
 		}
 
 		accountID, _ := result.LastInsertId()
+		if err := tx.Commit(); err != nil {
+			writeFinanceError(w, err)
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"result": "ok",
 			"id":     accountID,
@@ -1138,11 +1087,34 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		var oldCurrency int64
+		if err := tx.QueryRow(`SELECT commodity_id FROM accounts WHERE id = ? AND user_id = ?`, accountID, userID).Scan(&oldCurrency); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeFinanceError(w, validationError("Счёт не найден"))
+			} else {
+				writeFinanceError(w, err)
+			}
+			return
+		}
+		if oldCurrency != commodityID {
+			var used int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ?`, accountID).Scan(&used); err != nil {
+				writeFinanceError(w, err)
+				return
+			}
+			if used != 0 {
+				writeFinanceError(w, validationError("Нельзя менять валюту счёта с операциями. Создайте отдельный счёт в нужной валюте."))
+				return
+			}
+		}
 		// Защита от противоречивых состояний placeholder
 		if placeholder == 1 {
 			var splits int
-			h.db.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ? AND user_id = ?`,
-				accountID, userID).Scan(&splits)
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ? AND user_id = ?`,
+				accountID, userID).Scan(&splits); err != nil {
+				writeFinanceError(w, err)
+				return
+			}
 			if splits > 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -1152,8 +1124,11 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			var kids int
-			h.db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
-				accountID, userID).Scan(&kids)
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
+				accountID, userID).Scan(&kids); err != nil {
+				writeFinanceError(w, err)
+				return
+			}
 			if kids > 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -1163,7 +1138,7 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		_, err = h.db.Exec(`
+		_, err = tx.Exec(`
 			UPDATE accounts
 			SET name = ?, account_type = ?, commodity_id = ?, parent_id = ?, description = ?,
 			    hidden = ?, placeholder = ?
@@ -1172,10 +1147,14 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 
 		if err != nil {
 			fmt.Printf("ERROR updating account: %v\n", err)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			writeFinanceError(w, err)
 			return
 		}
 
+		if err := tx.Commit(); err != nil {
+			writeFinanceError(w, err)
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"result": "ok",
 			"id":     accountID,
@@ -1185,69 +1164,51 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) APIAccountDelete(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
-
-	// Получаем ID счета из параметров запроса
-	accountIDStr := r.URL.Query().Get("id")
-	if accountIDStr == "" {
-		http.Error(w, "Missing account ID", http.StatusBadRequest)
+	accountID, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		writeFinanceError(w, validationError("Некорректный ID счёта"))
 		return
 	}
-
-	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
-		http.Error(w, "Invalid account ID", http.StatusBadRequest)
-		return
-	}
-
-	// Счёт с дочерними счетами удалить нельзя (FK parent_id)
-	var kids int
-	h.db.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
-		accountID, userID).Scan(&kids)
-	if kids > 0 {
-		http.Error(w, "Сначала удалите или перенесите дочерние счета", http.StatusBadRequest)
-		return
-	}
-
-	// Начинаем транзакцию
-	tx, err := h.db.Begin()
-	if err != nil {
-		fmt.Printf("ERROR starting transaction: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeFinanceError(w, err)
 		return
 	}
 	defer tx.Rollback()
-
-	// Сначала удаляем все splits, связанные со счетом
-	_, err = tx.Exec("DELETE FROM splits WHERE account_id = ? AND user_id = ?", accountID, userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting splits: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	var id int64
+	if err := tx.QueryRow(`SELECT id FROM accounts WHERE id = ? AND user_id = ?`, accountID, userID).Scan(&id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeFinanceError(w, validationError("Счёт не найден"))
+		} else {
+			writeFinanceError(w, err)
+		}
 		return
 	}
-
-	// Затем удаляем сам счет
-	result, err := tx.Exec("DELETE FROM accounts WHERE id = ? AND user_id = ?", accountID, userID)
-	if err != nil {
-		fmt.Printf("ERROR deleting account: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	var splits, kids int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ?`, accountID).Scan(&splits); err != nil {
+		writeFinanceError(w, err)
 		return
 	}
-
-	// Проверяем, был ли удален счет
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		http.Error(w, "Account not found", http.StatusNotFound)
+	if splits != 0 {
+		writeFinanceError(w, validationError("Нельзя удалить счёт с операциями. Скройте его в настройках счёта."))
 		return
 	}
-
-	// Коммитим транзакцию
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ?`, accountID).Scan(&kids); err != nil {
+		writeFinanceError(w, err)
+		return
+	}
+	if kids != 0 {
+		writeFinanceError(w, validationError("Сначала удалите или перенесите дочерние счета"))
+		return
+	}
+	if _, err := tx.Exec(`DELETE FROM accounts WHERE id = ? AND user_id = ?`, accountID, userID); err != nil {
+		writeFinanceError(w, err)
+		return
+	}
 	if err := tx.Commit(); err != nil {
-		fmt.Printf("ERROR committing transaction: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeFinanceError(w, err)
 		return
 	}
-
-	// Возвращаем пустой ответ для HTMX
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1446,7 +1407,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 
 	// Парсим форму
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form data", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Invalid form data"))
 		return
 	}
 
@@ -1461,30 +1422,32 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	creditAccountStr := r.FormValue("credit_account")
 
 	if description == "" || postDateStr == "" || valueStr == "" || debitAccountStr == "" || creditAccountStr == "" {
-		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Missing required fields"))
 		return
 	}
 
 	// Парсим дату
 	postDate, err := time.Parse("2006-01-02", postDateStr)
 	if err != nil {
-		http.Error(w, "Invalid date format", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Invalid date format"))
 		return
 	}
 
 	// Парсим суммы
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {
-		http.Error(w, "Invalid value", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Invalid value"))
 		return
 	}
 
 	// value_target опциональный: если пусто — считаем что валюта одинакова и сумма та же
-	valueTarget := value
+	var valueTarget *float64
 	if valueTargetStr != "" {
-		valueTarget, err = strconv.ParseFloat(valueTargetStr, 64)
+		var parsed float64
+		parsed, err = strconv.ParseFloat(valueTargetStr, 64)
+		valueTarget = &parsed
 		if err != nil {
-			http.Error(w, "Invalid target value", http.StatusBadRequest)
+			writeFinanceError(w, validationError("Invalid target value"))
 			return
 		}
 	}
@@ -1492,13 +1455,13 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	// Парсим ID счетов
 	debitAccountID, err := strconv.ParseInt(debitAccountStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid debit account ID", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Invalid debit account ID"))
 		return
 	}
 
 	creditAccountID, err := strconv.ParseInt(creditAccountStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid credit account ID", http.StatusBadRequest)
+		writeFinanceError(w, validationError("Invalid credit account ID"))
 		return
 	}
 
@@ -1509,7 +1472,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	if idStr != "" && idStr != "0" {
 		txID, err = strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			json.NewEncoder(w).Encode(map[string]string{"error": "Invalid transaction ID"})
+			writeFinanceError(w, validationError("Invalid transaction ID"))
 			return
 		}
 	}
@@ -1525,11 +1488,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		CreditAccountID: creditAccountID,
 	})
 	if err != nil {
-		var vErr validationError
-		if errors.As(err, &vErr) {
-			w.WriteHeader(http.StatusBadRequest)
-		}
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		writeFinanceError(w, err)
 		return
 	}
 
@@ -1545,102 +1504,16 @@ type txSaveInput struct {
 	Description     string
 	PostDate        time.Time
 	Tags            string
-	Value           float64 // сумма списания (в валюте счёта списания)
-	ValueTarget     float64 // сумма зачисления (в валюте счёта зачисления)
-	DebitAccountID  int64   // счёт зачисления
-	CreditAccountID int64   // счёт списания
+	Value           float64  // сумма списания (в валюте счёта списания)
+	ValueTarget     *float64 // сумма зачисления (в валюте счёта зачисления)
+	DebitAccountID  int64    // счёт зачисления
+	CreditAccountID int64    // счёт списания
 }
 
 // validationError — ошибка входных данных (API отдаёт её с кодом 400)
 type validationError string
 
 func (e validationError) Error() string { return string(e) }
-
-// saveTransaction валидирует и сохраняет транзакцию с двумя сплитами.
-// Используется API и MCP-инструментами.
-func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
-	// Счета должны принадлежать пользователю
-	debitAcc, err := h.getAccountByID(userID, in.DebitAccountID)
-	if err != nil {
-		return 0, validationError("Счёт зачисления не найден")
-	}
-	creditAcc, err := h.getAccountByID(userID, in.CreditAccountID)
-	if err != nil {
-		return 0, validationError("Счёт списания не найден")
-	}
-
-	// Контейнерные (placeholder) счета не могут участвовать в транзакциях
-	if debitAcc.Placeholder == 1 || creditAcc.Placeholder == 1 {
-		return 0, validationError("Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт")
-	}
-
-	// Конвертируем суммы в целые числа (value_num / value_denom).
-	// valueNum — для счёта-источника (credit, в его валюте, с минусом).
-	// valueTargetNum — для счёта-получателя (debit, в его валюте, с плюсом).
-	valueNum := int64(math.Round(in.Value * 100))
-	valueTargetNum := int64(math.Round(in.ValueTarget * 100))
-	valueDenom := int64(100)
-
-	tx, err := h.db.Begin()
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	txID := in.TxID
-	if txID != 0 {
-		// Обновление: транзакция должна принадлежать пользователю
-		var exists int64
-		if err := tx.QueryRow(`SELECT id FROM transactions WHERE id = ? AND user_id = ?`,
-			txID, userID).Scan(&exists); err != nil {
-			return 0, validationError("Транзакция не найдена")
-		}
-
-		_, err = tx.Exec(`
-			UPDATE transactions SET description = ?, post_date = ?, tags = ?
-			WHERE id = ? AND user_id = ?
-		`, in.Description, in.PostDate, in.Tags, txID, userID)
-		if err != nil {
-			return 0, err
-		}
-
-		// Удаляем старые splits, ниже создадим новые
-		if _, err := tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID); err != nil {
-			return 0, err
-		}
-	} else {
-		result, err := tx.Exec(`
-			INSERT INTO transactions (user_id, post_date, enter_date, description, tags)
-			VALUES (?, ?, ?, ?, ?)
-		`, userID, in.PostDate, time.Now(), in.Description, in.Tags)
-		if err != nil {
-			return 0, err
-		}
-		txID, _ = result.LastInsertId()
-	}
-
-	_, err = tx.Exec(`
-		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-		VALUES (?, ?, ?, ?, ?)
-	`, userID, txID, in.DebitAccountID, valueTargetNum, valueDenom)
-	if err != nil {
-		return 0, err
-	}
-
-	_, err = tx.Exec(`
-		INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-		VALUES (?, ?, ?, ?, ?)
-	`, userID, txID, in.CreditAccountID, -valueNum, valueDenom)
-	if err != nil {
-		return 0, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-
-	return txID, nil
-}
 
 func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
@@ -1675,7 +1548,7 @@ func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
 // deleteTransaction удаляет транзакцию пользователя вместе со сплитами.
 // Используется API и MCP-инструментами.
 func (h *Handler) deleteTransaction(userID, txID int64) error {
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return err
 	}
@@ -1707,7 +1580,7 @@ func (h *Handler) APIDataDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Начинаем транзакцию
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		fmt.Printf("ERROR starting transaction: %v\n", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -1781,7 +1654,7 @@ func (h *Handler) APIWelcomeCreateBase(w http.ResponseWriter, r *http.Request) {
 // createBaseAccounts создает базовый набор счетов для пользователя
 func (h *Handler) createBaseAccounts(userID int64) error {
 	// Начинаем транзакцию
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -2110,7 +1983,7 @@ func (h *Handler) importFromGnuCash(userID int64, filename string) error {
 	defer importDB.Close()
 
 	// Start transaction
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -2455,7 +2328,7 @@ func (h *Handler) APIImportGnuCashXML(w http.ResponseWriter, r *http.Request) {
 // importFromGnuCashXML imports data from parsed GnuCash XML
 func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) error {
 	// Start transaction
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
@@ -2632,6 +2505,10 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 	if txIDStr != "" && txIDStr != "0" {
 		txID, _ := strconv.ParseInt(txIDStr, 10, 64)
 		transaction, debit, credit = h.getTransaction(userID, txID)
+		if transaction == nil {
+			http.Error(w, "Транзакция не найдена", http.StatusNotFound)
+			return
+		}
 	}
 
 	accounts, _ := h.getAccounts(userID)
@@ -2645,6 +2522,7 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 
 	data := map[string]interface{}{
 		"Transaction":  transaction,
+		"MetadataOnly": transaction != nil && (len(debit) != 1 || len(credit) != 1),
 		"Debit":        debit,
 		"Credit":       credit,
 		"AccountID":    accountID,

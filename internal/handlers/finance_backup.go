@@ -379,7 +379,7 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		return nil, err
 	}
 
-	tx, err := h.db.Begin()
+	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return nil, err
 	}

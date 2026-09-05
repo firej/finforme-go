@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strings"
 )
 
 // Config содержит конфигурацию приложения
@@ -17,7 +19,7 @@ func Load() *Config {
 	return &Config{
 		Port:          getEnv("PORT", "8080"),
 		DatabaseDSN:   getEnv("DATABASE_DSN", "finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"),
-		SessionSecret: getEnv("SESSION_SECRET", "change-me-in-production"),
+		SessionSecret: os.Getenv("SESSION_SECRET"),
 		SecureCookie:  getEnv("SECURE_COOKIE", "false") == "true",
 	}
 }
@@ -27,4 +29,13 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// ValidateServer validates secrets only for the HTTP server; rate importers do not use sessions.
+func (c *Config) ValidateServer() error {
+	secret := strings.TrimSpace(c.SessionSecret)
+	if len(secret) < 32 || strings.Contains(strings.ToLower(secret), "change-me") {
+		return fmt.Errorf("SESSION_SECRET must be a random secret of at least 32 bytes; generate one with openssl rand -hex 32")
+	}
+	return nil
 }

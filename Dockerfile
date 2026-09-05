@@ -42,7 +42,6 @@ COPY templates/ ./templates/
 # Переменные окружения по умолчанию
 ENV PORT=8080
 ENV DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
-ENV SESSION_SECRET=change-me-in-production
 ENV SECURE_COOKIE=false
 
 # Открываем порт

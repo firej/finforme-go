@@ -53,7 +53,7 @@ func (h *Handler) userIDFromBearer(r *http.Request) (int64, bool) {
 		SELECT t.id, t.user_id
 		FROM api_tokens t
 		JOIN users u ON u.id = t.user_id
-		WHERE t.token_hash = ? AND u.is_active = 1
+		WHERE t.token_hash = ? AND u.is_active = 1 AND u.password_change_required = 0
 	`, hashAPIToken(token)).Scan(&tokenID, &userID)
 	if err != nil {
 		return 0, false

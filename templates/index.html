@@ -8,45 +8,23 @@
 
 <div style="display:flex;flex-direction:column;gap:14px;">
 
-  <!-- KPI row -->
-  <div class="dash-kpi" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Чистый капитал</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:{{if ge .NetWorth 0.0}}var(--green){{else}}var(--red){{end}};margin-bottom:2px;">
-        {{formatMoney .NetWorth}}
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);">Активы − Обязательства</div>
-    </div>
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Активы</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:var(--green);margin-bottom:2px;">
-        {{formatMoney .TotalAssets}}
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);">ASSET + BANK + CASH</div>
-    </div>
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Обязательства</div>
-      <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;letter-spacing:-0.5px;color:{{if gt .TotalLiabilities 0.0}}var(--red){{else}}var(--text-primary){{end}};margin-bottom:2px;">
-        {{formatMoney .TotalLiabilities}}
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);">LIABILITY</div>
-    </div>
-  </div>
-
-  <!-- Income / Expense -->
-  <div class="dash-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Доходы (всего)</div>
-      <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--green);">
-        {{formatMoney .TotalIncome}}
-      </div>
-    </div>
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-size:11px;color:var(--text-muted);font-weight:500;margin-bottom:6px;">Расходы (всего)</div>
-      <div style="font-family:var(--font-mono);font-size:18px;font-weight:600;color:var(--red);">
-        {{formatMoney .TotalExpense}}
-      </div>
-    </div>
+  <div class="card" style="padding:16px 18px;overflow-x:auto;">
+    <div style="font-weight:600;margin-bottom:8px;">Итоги по валютам</div>
+    <p class="form-hint">Каждая валюта считается отдельно. Скрытые счета включены в итоги.</p>
+    {{if .CurrencyTotals}}
+    <table class="data-table" style="min-width:660px;">
+      <thead><tr><th>Валюта</th><th>Активы</th><th>Обязательства</th><th>Чистый капитал</th><th>Доходы (всего)</th><th>Расходы (всего)</th></tr></thead>
+      <tbody>{{range .CurrencyTotals}}
+        <tr data-currency="{{.Currency}}">
+          <td><strong>{{.Currency}}</strong></td>
+          <td class="mono">{{formatMoney .TotalAssets}}</td>
+          <td class="mono">{{formatMoney .TotalLiabilities}}</td>
+          <td class="mono" style="color:{{if ge .NetWorth 0.0}}var(--green){{else}}var(--red){{end}};">{{formatMoney .NetWorth}}</td>
+          <td class="mono">{{formatMoney .TotalIncome}}</td><td class="mono">{{formatMoney .TotalExpense}}</td>
+        </tr>
+      {{end}}</tbody>
+    </table>
+    {{else}}<p class="form-hint">Пока нет счетов для расчёта итогов.</p>{{end}}
   </div>
 
   <!-- Top accounts + Recent transactions -->
@@ -62,7 +40,7 @@
           <span class="account-dot dot-{{.AccountType}}" style="width:8px;height:8px;flex-shrink:0;"></span>
           <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Name}}</span>
           <span style="font-family:var(--font-mono);font-size:12px;color:{{if ge .Balance 0.0}}var(--green){{else}}var(--red){{end}};font-weight:500;flex-shrink:0;">
-            {{formatMoneyShort .Balance}}
+            {{formatMoneyShort .Balance}} {{.Currency}}
           </span>
         </a>
         {{end}}
@@ -91,7 +69,7 @@
               </td>
               <td style="padding:7px 0 7px 8px;text-align:right;white-space:nowrap;">
                 <span style="font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);">
-                  {{formatMoneyShort .Amount}}
+                  {{formatMoneyShort .Amount}} {{.Currency}}
                 </span>
               </td>
             </tr>

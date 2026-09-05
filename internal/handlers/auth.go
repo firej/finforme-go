@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/evbogdanov/finforme/internal/models"
 	"golang.org/x/crypto/bcrypt"
@@ -45,45 +48,45 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 	next := r.FormValue("next")
 
-	var user models.User
-	err := h.db.QueryRow(`
-		SELECT id, username, email, password_hash, is_active
-		FROM users WHERE username = ?
-	`, username).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.IsActive)
-
-	if err != nil {
-		data := map[string]interface{}{
-			"Title": "Вход",
-			"Error": "Неверный логин или пароль",
-			"Next":  next,
-		}
-		h.renderTemplate(w, "login.html", data)
+	var id, version int64
+	var hash string
+	var active, required bool
+	var expires sql.NullTime
+	err := h.db.QueryRow(`SELECT id, password_hash, is_active, session_version,
+ password_change_required, password_expires_at FROM users WHERE username = ?`, username).
+		Scan(&id, &hash, &active, &version, &required, &expires)
+	invalid := func() {
+		h.renderTemplate(w, "login.html", map[string]interface{}{"Title": "Вход", "Next": next,
+			"Error": "Неверный логин или пароль. Временный пароль мог истечь или уже использован."})
+	}
+	if err != nil || !active || (required && (!expires.Valid || !time.Now().Before(expires.Time))) ||
+		bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
+		invalid()
 		return
 	}
-
-	if !user.IsActive {
-		data := map[string]interface{}{
-			"Title": "Вход",
-			"Error": "Аккаунт отключен",
-			"Next":  next,
+	if required {
+		// Consume the temporary credential atomically. Only the newly issued restricted
+		// session can now finish recovery; a second login with this password fails.
+		res, err := h.db.Exec(`UPDATE users SET password_hash = '', session_version = session_version + 1
+   WHERE id = ? AND session_version = ? AND password_hash = ? AND is_active = 1
+   AND password_change_required = 1 AND password_expires_at > ?`, id, version, hash, time.Now().UTC())
+		if err != nil {
+			http.Error(w, "Internal server error", 500)
+			return
 		}
-		h.renderTemplate(w, "login.html", data)
+		n, err := res.RowsAffected()
+		if err != nil || n != 1 {
+			invalid()
+			return
+		}
+		version++
+	}
+	if err := h.writeSession(w, r, id, version); err != nil {
+		http.Error(w, "Internal server error", 500)
 		return
 	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		data := map[string]interface{}{
-			"Title": "Вход",
-			"Error": "Неверный логин или пароль",
-			"Next":  next,
-		}
-		h.renderTemplate(w, "login.html", data)
-		return
-	}
-
-	// Успешная аутентификация
-	if err := h.setUserID(w, r, user.ID); err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	if required {
+		http.Redirect(w, r, "/accounts/password_change/", http.StatusSeeOther)
 		return
 	}
 
@@ -196,48 +199,59 @@ func (h *Handler) AccountInfo(w http.ResponseWriter, r *http.Request) {
 
 // PasswordChange - смена пароля
 func (h *Handler) PasswordChange(w http.ResponseWriter, r *http.Request) {
-	userID, _ := h.getUserID(r)
-
-	if r.Method == "GET" {
-		data := h.pageData(userID, "")
+	// Password changes require a browser session, including the restricted recovery session.
+	userID, version, required, ok := h.sessionUser(r)
+	if !ok {
+		h.redirectToLogin(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	data := map[string]interface{}{"Title": "Смена пароля", "Required": required}
+	if !required {
+		data = h.pageData(userID, "")
 		data["Title"] = "Смена пароля"
+	}
+	if r.Method == http.MethodGet {
 		h.renderTemplate(w, "password_change_form.html", data)
 		return
 	}
-
-	// POST
-	oldPassword := r.FormValue("old_password")
 	newPassword := r.FormValue("new_password")
-
-	var passwordHash string
-	err := h.db.QueryRow("SELECT password_hash FROM users WHERE id = ?", userID).Scan(&passwordHash)
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(oldPassword)); err != nil {
-		data := map[string]interface{}{
-			"Title":         "Смена пароля",
-			"Error":         "Неверный текущий пароль",
-			"Authenticated": true,
-		}
+	if utf8.RuneCountInString(newPassword) < 8 || len(newPassword) > 72 {
+		data["Error"] = "Введите не меньше 8 символов. Если пароль очень длинный, сократите его."
 		h.renderTemplate(w, "password_change_form.html", data)
 		return
 	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if !required {
+		var hash string
+		err := h.db.QueryRow(`SELECT password_hash FROM users WHERE id = ? AND session_version = ?`, userID, version).Scan(&hash)
+		if err != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(r.FormValue("old_password"))) != nil {
+			data["Error"] = "Неверный текущий пароль"
+			h.renderTemplate(w, "password_change_form.html", data)
+			return
+		}
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal server error", 500)
 		return
 	}
-
-	_, err = h.db.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hashedPassword), userID)
+	res, err := h.db.Exec(`UPDATE users SET password_hash = ?, session_version = session_version + 1,
+  password_change_required = 0, password_expires_at = NULL
+  WHERE id = ? AND session_version = ? AND is_active = 1
+  AND (password_change_required = 0 OR password_expires_at > ?)`, string(hash), userID, version, time.Now().UTC())
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal server error", 500)
 		return
 	}
-
+	n, err := res.RowsAffected()
+	if err != nil || n != 1 {
+		http.Error(w, "Сессия истекла. Войдите заново.", http.StatusUnauthorized)
+		return
+	}
+	if err := h.writeSession(w, r, userID, version+1); err != nil {
+		http.Error(w, "Internal server error", 500)
+		return
+	}
 	http.Redirect(w, r, "/accounts/info/", http.StatusSeeOther)
 }
 

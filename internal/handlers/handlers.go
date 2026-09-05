@@ -143,45 +143,72 @@ func (h *Handler) getIsAdmin(userID int64) bool {
 	return isAdmin
 }
 
-// getUserID получает ID пользователя из Bearer-токена или сессии
-func (h *Handler) getUserID(r *http.Request) (int64, bool) {
-	if userID, ok := h.userIDFromBearer(r); ok {
-		return userID, true
-	}
-
+// sessionUser validates the cookie against current account state. Legacy cookies
+// without a version are deliberately rejected after this migration.
+func (h *Handler) sessionUser(r *http.Request) (int64, int64, bool, bool) {
 	session, err := h.store.Get(r, "session")
 	if err != nil {
-		return 0, false
+		return 0, 0, false, false
 	}
-
 	userID, ok := session.Values["user_id"].(int64)
-	if !ok {
-		return 0, false
+	version, versionOK := session.Values["session_version"].(int64)
+	if !ok || !versionOK {
+		return 0, 0, false, false
 	}
-
-	return userID, true
+	var current int64
+	var active, required bool
+	var expires sql.NullTime
+	err = h.db.QueryRow(`SELECT session_version, is_active, password_change_required, password_expires_at FROM users WHERE id = ?`, userID).Scan(&current, &active, &required, &expires)
+	if err != nil || !active || current != version || (required && (!expires.Valid || !time.Now().Before(expires.Time))) {
+		return 0, 0, false, false
+	}
+	return userID, version, required, true
 }
 
-// setUserID устанавливает ID пользователя в сессию
-func (h *Handler) setUserID(w http.ResponseWriter, r *http.Request, userID int64) error {
-	session, err := h.store.Get(r, "session")
-	if err != nil {
-		return err
+func (h *Handler) getUserID(r *http.Request) (int64, bool) {
+	if r.Header.Get("Authorization") != "" {
+		return h.userIDFromBearer(r)
 	}
+	id, _, required, ok := h.sessionUser(r)
+	if required && r.URL.Path != "/accounts/password_change/" {
+		return 0, false
+	}
+	return id, ok
+}
 
+func (h *Handler) redirectToLogin(w http.ResponseWriter, r *http.Request) {
+	_, _, required, ok := h.sessionUser(r)
+	if ok && required {
+		http.Redirect(w, r, "/accounts/password_change/", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/accounts/login/?next="+r.URL.Path, http.StatusSeeOther)
+}
+
+// writeSession uses the version from credential verification, so a concurrent
+// password reset cannot accidentally issue a session for the new version.
+func (h *Handler) writeSession(w http.ResponseWriter, r *http.Request, userID, version int64) error {
+	session := sessions.NewSession(h.store, "session")
+	options := *h.store.Options
+	session.Options = &options
 	session.Values["user_id"] = userID
+	session.Values["session_version"] = version
 	return session.Save(r, w)
 }
 
-// clearSession очищает сессию
-func (h *Handler) clearSession(w http.ResponseWriter, r *http.Request) error {
-	session, err := h.store.Get(r, "session")
-	if err != nil {
+func (h *Handler) setUserID(w http.ResponseWriter, r *http.Request, userID int64) error {
+	var version int64
+	if err := h.db.QueryRow(`SELECT session_version FROM users WHERE id = ? AND is_active = 1 AND password_change_required = 0`, userID).Scan(&version); err != nil {
 		return err
 	}
+	return h.writeSession(w, r, userID, version)
+}
 
-	session.Values = make(map[interface{}]interface{})
-	session.Options.MaxAge = -1
+func (h *Handler) clearSession(w http.ResponseWriter, r *http.Request) error {
+	session := sessions.NewSession(h.store, "session")
+	options := *h.store.Options
+	options.MaxAge = -1
+	session.Options = &options
 	return session.Save(r, w)
 }
 
@@ -222,7 +249,7 @@ func (h *Handler) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := h.getUserID(r)
 		if !ok {
-			http.Redirect(w, r, "/accounts/login/?next="+r.URL.Path, http.StatusSeeOther)
+			h.redirectToLogin(w, r)
 			return
 		}
 		if h.isDemoWrite(r, userID) {

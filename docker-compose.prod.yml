@@ -10,7 +10,7 @@ services:
     environment:
       - PORT=8080
       - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
-      - SESSION_SECRET=change-me-in-production
+      - SESSION_SECRET=${SESSION_SECRET:?Set a random SESSION_SECRET of at least 32 bytes}
       - SECURE_COOKIE=true
     labels:
       - "traefik.enable=true"

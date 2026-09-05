@@ -3,7 +3,7 @@
   Этот шаблон рендерится внутри drawer.
   Вызывается через /api/v1/finance/transaction/form?tx_id=N&account_id=M
 */}}
-<form id="modal-transaction-form" onsubmit="return submitTransactionForm(event)">
+<form action="{{if .MetadataOnly}}/api/v1/finance/transaction/metadata{{else}}/api/v1/finance/transaction/save{{end}}" id="modal-transaction-form" onsubmit="return submitTransactionForm(event)">
   {{if .Transaction}}
   <input type="hidden" name="id" value="{{.Transaction.ID}}">
   {{end}}
@@ -16,12 +16,13 @@
       <input class="form-input" type="date" id="modal-post_date" name="post_date" required
              value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{else}}{{.Today}}{{end}}">
     </div>
+    {{if not .MetadataOnly}}
     <div class="form-group">
       <label class="form-label" for="modal-value">
         <span id="modal-value-label">Сумма</span>
         <span id="modal-value-sign" style="color:var(--text-secondary);"></span>
       </label>
-      <input class="form-input form-input-mono" type="number" step="0.01"
+      <input class="form-input form-input-mono" type="number" step="0.01" min="0.01"
              id="modal-value" name="value" required placeholder="0.00"
              value="{{if .Credit}}{{with index .Credit 0}}{{.value}}{{end}}{{end}}">
     </div>
@@ -29,11 +30,14 @@
       <label class="form-label" for="modal-value-target">
         Зачислено <span id="modal-value-target-sign" style="color:var(--text-secondary);"></span>
       </label>
-      <input class="form-input form-input-mono" type="number" step="0.01"
+      <input class="form-input form-input-mono" type="number" step="0.01" min="0.01"
              id="modal-value-target" name="value_target" placeholder="0.00"
              value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}">
     </div>
+    {{end}}
   </div>
+
+  {{if .MetadataOnly}}{{template "transaction_readonly_splits" .}}{{end}}
 
   <!-- Description -->
   <div class="form-group">
@@ -43,6 +47,7 @@
            value="{{if .Transaction}}{{.Transaction.Description}}{{end}}">
   </div>
 
+  {{if not .MetadataOnly}}
   <!-- From / To accounts: контейнерные (placeholder) счета не доступны -->
   <div class="form-row">
     <div class="form-group">
@@ -85,6 +90,7 @@
     </div>
   </div>
 
+  {{end}}
   <!-- Tags -->
   <div class="form-group">
     <label class="form-label" for="modal-tags">Теги</label>
