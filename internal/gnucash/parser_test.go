@@ -26,28 +26,6 @@ func TestParseGnuCashDate(t *testing.T) {
 	}
 }
 
-func TestParseGnuCashValue(t *testing.T) {
-	tests := []struct {
-		input         string
-		expectedNum   int64
-		expectedDenom int64
-	}{
-		{"10000/100", 10000, 100},
-		{"-5000/100", -5000, 100},
-		{"100", 100, 1},
-		{"", 0, 100},
-		{"invalid", 0, 100},
-	}
-
-	for _, test := range tests {
-		num, denom := parseGnuCashValue(test.input)
-		if num != test.expectedNum || denom != test.expectedDenom {
-			t.Errorf("parseGnuCashValue(%q) = (%d, %d), expected (%d, %d)",
-				test.input, num, denom, test.expectedNum, test.expectedDenom)
-		}
-	}
-}
-
 func TestParseXML(t *testing.T) {
 	xmlData := `<?xml version="1.0" encoding="utf-8" ?>
 <gnc-v2>

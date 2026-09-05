@@ -10,7 +10,36 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_ROOT_PASSWORD: isolated-ci-test
+          MARIADB_ROOT_HOST: '%'
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests and race checks
+        run: go test -race ./...
+      - name: Static checks
+        run: go vet ./...
+      - name: MariaDB integration tests
+        env:
+          FINFORME_TEST_MYSQL_DSN: root:isolated-ci-test@tcp(127.0.0.1:3306)/?parseTime=true
+        run: go test ./internal/handlers -run 'TestFinance|TestAuth' -count=1
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:

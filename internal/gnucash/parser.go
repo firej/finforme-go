@@ -1,10 +1,12 @@
 package gnucash
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -143,6 +145,7 @@ type ParsedCommodity struct {
 	Space       string
 	Mnemonic    string
 	Fullname    string
+	Cusip       string
 	Fraction    int
 	QuoteSource string
 	QuoteTZ     string
@@ -176,12 +179,14 @@ type ParsedTransaction struct {
 
 // ParsedSplit представляет распарсенный сплит
 type ParsedSplit struct {
-	GUID        string
-	AccountGUID string
-	ValueNum    int64
-	ValueDenom  int64
-	Memo        string
-	Action      string
+	GUID          string
+	AccountGUID   string
+	ValueNum      int64
+	ValueDenom    int64
+	QuantityNum   int64
+	QuantityDenom int64
+	Memo          string
+	Action        string
 }
 
 // ParseFile парсит .gnucash файл (сжатый gzip XML)
@@ -212,25 +217,44 @@ func ParseReader(r io.Reader) (*ParsedData, error) {
 // ParseReaderWithFallback парсит данные, пробуя сначала gzip, потом обычный XML
 func ParseReaderWithFallback(data []byte) (*ParsedData, error) {
 	// Пробуем как gzip
-	gzReader, err := gzip.NewReader(strings.NewReader(string(data)))
+	gzReader, err := gzip.NewReader(bytes.NewReader(data))
 	if err == nil {
 		defer gzReader.Close()
 		return parseXML(gzReader)
 	}
 
 	// Пробуем как обычный XML
-	return parseXML(strings.NewReader(string(data)))
+	return parseXML(bytes.NewReader(data))
 }
 
 // parseXML парсит XML данные
 func parseXML(r io.Reader) (*ParsedData, error) {
 	var gnucash GnuCashBook
-	decoder := xml.NewDecoder(r)
+	payload, err := io.ReadAll(io.LimitReader(r, (64<<20)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(payload) > 64<<20 {
+		return nil, fmt.Errorf("распакованный файл превышает 64 МБ")
+	}
+	decoder := xml.NewDecoder(bytes.NewReader(payload))
 
 	if err := decoder.Decode(&gnucash); err != nil {
 		return nil, fmt.Errorf("failed to decode XML: %w", err)
 	}
 
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if text, ok := token.(xml.CharData); !ok || strings.TrimSpace(string(text)) != "" {
+			return nil, fmt.Errorf("данные после конца XML")
+		}
+	}
 	result := &ParsedData{
 		Commodities:  make([]ParsedCommodity, 0),
 		Accounts:     make([]ParsedAccount, 0),
@@ -249,6 +273,7 @@ func parseXML(r io.Reader) (*ParsedData, error) {
 			Space:       c.Space,
 			Mnemonic:    c.ID,
 			Fullname:    c.Name,
+			Cusip:       c.XCode,
 			Fraction:    c.Fraction,
 			QuoteSource: c.QuoteSource,
 			QuoteTZ:     c.QuoteTZ,
@@ -289,6 +314,9 @@ func parseXML(r io.Reader) (*ParsedData, error) {
 	for _, t := range allTransactions {
 		postDate := parseGnuCashDate(t.DatePosted.Date)
 		enterDate := parseGnuCashDate(t.DateEntered.Date)
+		if postDate.IsZero() || enterDate.IsZero() {
+			return nil, fmt.Errorf("операция %s: неверная дата", t.ID.Value)
+		}
 
 		parsedTx := ParsedTransaction{
 			GUID:        t.ID.Value,
@@ -302,15 +330,23 @@ func parseXML(r io.Reader) (*ParsedData, error) {
 
 		// Парсим сплиты
 		for _, s := range t.Splits.Split {
-			valueNum, valueDenom := parseGnuCashValue(s.Value)
+			valueNum, valueDenom, err := parseStrictValue(s.Value)
+			if err != nil {
+				return nil, fmt.Errorf("проводка %s value: %w", s.ID.Value, err)
+			}
+			quantityNum, quantityDenom, err := parseStrictValue(s.Quantity)
+			if err != nil {
+				return nil, fmt.Errorf("проводка %s quantity: %w", s.ID.Value, err)
+			}
 
 			parsedTx.Splits = append(parsedTx.Splits, ParsedSplit{
 				GUID:        s.ID.Value,
 				AccountGUID: s.Account.Value,
 				ValueNum:    valueNum,
 				ValueDenom:  valueDenom,
-				Memo:        s.Memo,
-				Action:      s.Action,
+				QuantityNum: quantityNum, QuantityDenom: quantityDenom,
+				Memo:   s.Memo,
+				Action: s.Action,
 			})
 		}
 
@@ -333,6 +369,7 @@ func parseGnuCashDate(dateStr string) time.Time {
 		"2006-01-02 15:04:05 -0700",
 		"2006-01-02 15:04:05",
 		"2006-01-02",
+		"20060102150405",
 	}
 
 	for _, format := range formats {
@@ -344,32 +381,33 @@ func parseGnuCashDate(dateStr string) time.Time {
 	return time.Time{}
 }
 
-// parseGnuCashValue парсит значение в формате GnuCash (например, "10000/100")
-func parseGnuCashValue(valueStr string) (int64, int64) {
-	valueStr = strings.TrimSpace(valueStr)
-	if valueStr == "" {
-		return 0, 100
+// parseStrictValue rejects malformed numbers instead of silently replacing them with zero.
+func parseStrictValue(value string) (int64, int64, error) {
+	parts := strings.Split(strings.TrimSpace(value), "/")
+	if len(parts) == 1 {
+		parts = append(parts, "1")
 	}
-
-	parts := strings.Split(valueStr, "/")
 	if len(parts) != 2 {
-		// Пробуем как целое число
-		if num, err := strconv.ParseInt(valueStr, 10, 64); err == nil {
-			return num, 1
-		}
-		return 0, 100
+		return 0, 0, fmt.Errorf("неверная дробь")
 	}
-
-	num, err1 := strconv.ParseInt(parts[0], 10, 64)
-	denom, err2 := strconv.ParseInt(parts[1], 10, 64)
-
-	if err1 != nil || err2 != nil {
-		return 0, 100
+	n, e1 := strconv.ParseInt(parts[0], 10, 64)
+	d, e2 := strconv.ParseInt(parts[1], 10, 64)
+	if e1 != nil || e2 != nil || d <= 0 {
+		return 0, 0, fmt.Errorf("неверная дробь или знаменатель")
 	}
+	return n, d, nil
+}
 
-	if denom == 0 {
-		denom = 100
+// Cents converts account quantity exactly; the application stores hundredths.
+func Cents(n, d int64) (int64, error) {
+	if d <= 0 {
+		return 0, fmt.Errorf("неверный знаменатель")
 	}
-
-	return num, denom
+	scaled := new(big.Int).Mul(big.NewInt(n), big.NewInt(100))
+	q, r := new(big.Int), new(big.Int)
+	q.QuoRem(scaled, big.NewInt(d), r)
+	if r.Sign() != 0 || !q.IsInt64() || new(big.Int).Abs(q).Cmp(big.NewInt(1<<53-1)) > 0 {
+		return 0, fmt.Errorf("сумма не представима точно с двумя десятичными знаками или слишком велика")
+	}
+	return q.Int64(), nil
 }
