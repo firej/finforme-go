@@ -22,7 +22,7 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 	}
 	accounts := map[string]gnucash.ParsedAccount{}
 	for _, a := range data.Accounts {
-		if a.GUID == "" {
+		if a.GUID == "" || len(a.GUID) > 255 {
 			return fmt.Errorf("счёт без идентификатора")
 		}
 		if _, ok := accounts[a.GUID]; ok {
@@ -32,7 +32,7 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 	}
 	seenTx, seenSplit := map[string]bool{}, map[string]bool{}
 	for _, t := range data.Transactions {
-		if t.GUID == "" || seenTx[t.GUID] {
+		if t.GUID == "" || len(t.GUID) > 255 || seenTx[t.GUID] {
 			return fmt.Errorf("пустой или повторный идентификатор операции")
 		}
 		seenTx[t.GUID] = true
@@ -69,6 +69,37 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 		return err
 	}
 	defer tx.Rollback()
+	// The user lock makes checking and recording source identities atomic even
+	// for concurrent uploads. Retain identities after local edits/deletions.
+	importedRows, err := tx.Query(`SELECT entity_kind,source_id FROM gnucash_import_ids WHERE user_id=?`, userID)
+	if err != nil {
+		return err
+	}
+	overlap := false
+	for importedRows.Next() {
+		var kind, source string
+		if err := importedRows.Scan(&kind, &source); err != nil {
+			importedRows.Close()
+			return err
+		}
+		if kind == "account" {
+			if _, ok := accounts[source]; ok {
+				overlap = true
+			}
+		}
+		if kind == "transaction" && seenTx[source] {
+			overlap = true
+		}
+	}
+	err = importedRows.Err()
+	importedRows.Close()
+	if err != nil {
+		return err
+	}
+	if overlap {
+		return fmt.Errorf("Этот файл содержит ранее импортированные счета или операции GnuCash. Повторный импорт отменён; данные не изменены. Синхронизация обновлённой книги пока не поддерживается.")
+	}
+
 	// Commodities are shared by all users. Serialize discovery/creation using
 	// the seeded commodity row, after taking the user's finance lock.
 	if _, err := tx.Exec(`UPDATE commodities SET id=id WHERE id=1`); err != nil {
@@ -209,6 +240,21 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 			if _, err = tx.Exec(`INSERT INTO splits(user_id,tx_id,account_id,value_num,value_denom) VALUES(?,?,?,?,100)`, userID, id, accountIDs[s.AccountGUID], cents); err != nil {
 				return err
 			}
+		}
+	}
+	statement, err := tx.Prepare(`INSERT INTO gnucash_import_ids(user_id,entity_kind,source_id) VALUES(?,?,?)`)
+	if err != nil {
+		return err
+	}
+	defer statement.Close()
+	for source := range accounts {
+		if _, err := statement.Exec(userID, "account", source); err != nil {
+			return err
+		}
+	}
+	for source := range seenTx {
+		if _, err := statement.Exec(userID, "transaction", source); err != nil {
+			return err
 		}
 	}
 	return tx.Commit()

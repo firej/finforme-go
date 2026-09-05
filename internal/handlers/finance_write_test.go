@@ -26,6 +26,7 @@ func financeTestHandler(t *testing.T) *Handler {
 			`CREATE TABLE accounts(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), name TEXT, account_type TEXT, commodity_id INTEGER REFERENCES commodities(id), commodity_scu INTEGER, non_std_scu INTEGER, parent_id INTEGER REFERENCES accounts(id), code TEXT, description TEXT, hidden INTEGER DEFAULT 0, placeholder INTEGER DEFAULT 0)`,
 			`CREATE TABLE transactions(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), num TEXT, post_date DATETIME, enter_date DATETIME, description TEXT, tags TEXT)`,
 			`CREATE TABLE splits(id INTEGER PRIMARY KEY,user_id INTEGER REFERENCES users(id),tx_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE,account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,value_num BIGINT,value_denom INTEGER DEFAULT 100)`,
+			`CREATE TABLE gnucash_import_ids(user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,entity_kind TEXT,source_id TEXT,PRIMARY KEY(user_id,entity_kind,source_id))`,
 			`CREATE TABLE books(id INTEGER PRIMARY KEY,user_id INTEGER,root_account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,root_template_id TEXT)`,
 		} {
 			if _, err := h.db.Exec(q); err != nil {

@@ -20,16 +20,23 @@ import (
 // они переназначаются, а ссылки (parent_id, account_id) переписываются по карте.
 const (
 	backupFormat        = "finforme-backup"
-	backupFormatVersion = 1
+	backupFormatVersion = 2
 	backupMaxUploadSize = 64 << 20 // 64 МБ
 )
 
+type backupImportID struct {
+	Kind     string `json:"kind"`
+	SourceID string `json:"source_id"`
+}
+
 type backupData struct {
-	Format       string              `json:"format"`
-	Version      int                 `json:"version"`
-	ExportedAt   string              `json:"exported_at"`
-	Accounts     []backupAccount     `json:"accounts"`
-	Transactions []backupTransaction `json:"transactions"`
+	Commodities      []backupCommodity   `json:"commodities,omitempty"`
+	GnuCashImportIDs []backupImportID    `json:"gnucash_import_ids,omitempty"`
+	Format           string              `json:"format"`
+	Version          int                 `json:"version"`
+	ExportedAt       string              `json:"exported_at"`
+	Accounts         []backupAccount     `json:"accounts"`
+	Transactions     []backupTransaction `json:"transactions"`
 }
 
 type backupAccount struct {
@@ -216,6 +223,27 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		return nil, fmt.Errorf("failed to read splits: %w", err)
 	}
 
+	data.Commodities, err = exportBackupCommodities(tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	importRows, err := tx.Query(`SELECT entity_kind,source_id FROM gnucash_import_ids WHERE user_id=? ORDER BY entity_kind,source_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	for importRows.Next() {
+		var item backupImportID
+		if err := importRows.Scan(&item.Kind, &item.SourceID); err != nil {
+			importRows.Close()
+			return nil, err
+		}
+		data.GnuCashImportIDs = append(data.GnuCashImportIDs, item)
+	}
+	err = importRows.Err()
+	importRows.Close()
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -379,6 +407,11 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		return nil, validationError("В файле нет данных для восстановления")
 	}
 
+	for _, item := range data.GnuCashImportIDs {
+		if (item.Kind != "account" && item.Kind != "transaction") || len(item.SourceID) == 0 || len(item.SourceID) > 255 {
+			return nil, validationError("Некорректная история импорта GnuCash")
+		}
+	}
 	// Предварительная проверка: типы счетов и ссылки внутри файла
 	fileAccounts := make(map[int64]bool, len(data.Accounts))
 	for _, acc := range data.Accounts {
@@ -426,45 +459,23 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		}
 	}
 
-	commodityIDs, err := h.commodityIDsByMnemonic()
+	metadata, err := validateBackupCommodities(data)
 	if err != nil {
 		return nil, err
 	}
-	defaultCommodityID, err := h.defaultCommodityID()
-	if err != nil {
-		return nil, err
-	}
-
 	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-
+	commodityIDs, defaultCommodityID, err := restoreBackupCommodities(tx, data, metadata)
+	if err != nil {
+		return nil, err
+	}
 	if mode == "replace" {
 		if err := deleteUserFinanceData(tx, userID); err != nil {
 			return nil, err
 		}
-	}
-
-	// Валюты, которых нет в справочнике, добавляем — иначе счета потеряют валюту
-	for _, acc := range data.Accounts {
-		mnemonic := strings.ToUpper(strings.TrimSpace(acc.Currency))
-		if mnemonic == "" || commodityIDs[mnemonic] != 0 {
-			continue
-		}
-		res, err := tx.Exec(`
-			INSERT INTO commodities (namespace, mnemonic, fullname, fraction, sign)
-			VALUES ('CURRENCY', ?, ?, 100, '')
-		`, mnemonic, mnemonic)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert commodity %s: %w", mnemonic, err)
-		}
-		newID, err := res.LastInsertId()
-		if err != nil {
-			return nil, err
-		}
-		commodityIDs[mnemonic] = newID
 	}
 
 	// Счета вставляем послойно: сначала без родителя, затем те, чей родитель уже создан
@@ -556,6 +567,19 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		}
 	}
 
+	// Merge identity history even for replace: local deletions must not reopen
+	// the same book for accidental duplicate imports. Old backups have no history.
+	for _, item := range data.GnuCashImportIDs {
+		var count int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM gnucash_import_ids WHERE user_id=? AND entity_kind=? AND source_id=?`, userID, item.Kind, item.SourceID).Scan(&count); err != nil {
+			return nil, err
+		}
+		if count == 0 {
+			if _, err := tx.Exec(`INSERT INTO gnucash_import_ids(user_id,entity_kind,source_id) VALUES(?,?,?)`, userID, item.Kind, item.SourceID); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -587,36 +611,6 @@ func parseBackupTime(value string) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("unsupported date format: %s", value)
-}
-
-// commodityIDsByMnemonic возвращает справочник валют: мнемоника (в верхнем регистре) -> id
-func (h *Handler) commodityIDsByMnemonic() (map[string]int64, error) {
-	rows, err := h.db.Query("SELECT id, mnemonic FROM commodities")
-	if err != nil {
-		return nil, fmt.Errorf("failed to query commodities: %w", err)
-	}
-	defer rows.Close()
-
-	result := make(map[string]int64)
-	for rows.Next() {
-		var id int64
-		var mnemonic string
-		if err := rows.Scan(&id, &mnemonic); err != nil {
-			return nil, fmt.Errorf("failed to scan commodity: %w", err)
-		}
-		result[strings.ToUpper(strings.TrimSpace(mnemonic))] = id
-	}
-	return result, rows.Err()
-}
-
-// defaultCommodityID возвращает валюту по умолчанию для счетов без указанной валюты
-func (h *Handler) defaultCommodityID() (int64, error) {
-	var id int64
-	err := h.db.QueryRow("SELECT id FROM commodities ORDER BY id LIMIT 1").Scan(&id)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get default commodity: %w", err)
-	}
-	return id, nil
 }
 
 // deleteUserFinanceData удаляет все счета, транзакции и сплиты пользователя

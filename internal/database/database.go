@@ -86,6 +86,14 @@ func InitDB(db *sql.DB) error {
 			FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+		`CREATE TABLE IF NOT EXISTS gnucash_import_ids (
+            user_id BIGINT NOT NULL,
+            entity_kind VARCHAR(16) NOT NULL,
+            source_id VARBINARY(255) NOT NULL,
+            PRIMARY KEY (user_id, entity_kind, source_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
 		`CREATE TABLE IF NOT EXISTS api_tokens (
 			id BIGINT PRIMARY KEY AUTO_INCREMENT,
 			user_id BIGINT NOT NULL,

@@ -26,7 +26,7 @@
 
     <div class="card" style="padding:20px;display:flex;flex-direction:column;">
       <div style="font-size:14px;font-weight:600;margin-bottom:8px;">Импорт из GnuCash</div>
-      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;flex:1;">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash — сжатый XML).</p>
+      <p style="font-size:12.5px;color:var(--text-secondary);margin-bottom:16px;flex:1;">Импортируйте существующие счета и транзакции из файла GnuCash (.gnucash — сжатый XML). Повторный импорт той же книги будет отклонён.</p>
       <input type="file" id="gnucashFile" accept=".gnucash,.xml,.gz" style="display:none;" onchange="importGnuCashXML(this)">
       <button id="importXmlBtn" onclick="document.getElementById('gnucashFile').click()" class="btn btn-ghost" style="justify-content:center;">
         Выбрать файл .gnucash
