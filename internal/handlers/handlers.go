@@ -19,6 +19,7 @@ type Handler struct {
 	store      *sessions.CookieStore
 	templates  *template.Template
 	demoUserID int64 // 0 если демо-пользователь не настроен
+	oauth      *oauthServer
 }
 
 // New создает новый экземпляр Handler

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -11,9 +12,10 @@ import (
 
 // mcpUserKey — ключ контекста для передачи userID из auth-middleware в getServer.
 type mcpUserKey struct{}
+type mcpReadOnlyKey struct{}
 
 // MCPHandler возвращает HTTP-обработчик MCP-сервера (Streamable HTTP, stateless).
-// Авторизация — через Authorization: Bearer <api-token>; сервер строится
+// Авторизация — через Bearer API-токен или OAuth access token; сервер строится
 // под конкретного пользователя.
 func (h *Handler) MCPHandler() http.Handler {
 	streamable := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
@@ -21,7 +23,23 @@ func (h *Handler) MCPHandler() http.Handler {
 		if !ok {
 			return nil
 		}
-		return h.buildMCPServer(userID)
+		server := h.buildMCPServer(userID)
+		if readOnly, _ := r.Context().Value(mcpReadOnlyKey{}).(bool); readOnly {
+			server.RemoveTools("create_account", "update_account", "delete_account", "create_transaction", "update_transaction", "update_transaction_metadata", "delete_transaction")
+			// Fail closed for future tools too, not just today's write-tool list.
+			server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+				return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+					if method == "tools/call" {
+						p, ok := req.GetParams().(*mcp.CallToolParamsRaw)
+						if !ok || !oauthReadTool(p.Name) {
+							return nil, fmt.Errorf("insufficient_scope: требуется finforme:write")
+						}
+					}
+					return next(ctx, method, req)
+				}
+			})
+		}
+		return server
 	}, &mcp.StreamableHTTPOptions{
 		Stateless: true,
 	})
@@ -29,14 +47,32 @@ func (h *Handler) MCPHandler() http.Handler {
 	// Bearer-авторизация перед передачей запроса в MCP-обработчик
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := h.userIDFromBearer(r)
+		readOnly := false
+		if !ok {
+			var scope string
+			userID, scope, ok = h.oauthBearer(r)
+			readOnly = !strings.Contains(scope, oauthWrite)
+		}
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="finforme", error="invalid_token"`)
-			http.Error(w, "Unauthorized: valid API token required", http.StatusUnauthorized)
+			if h.oauth != nil {
+				w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+h.oauth.issuer+`/.well-known/oauth-protected-resource/mcp", scope="`+oauthRead+` `+oauthWrite+`"`)
+			}
+			http.Error(w, "Unauthorized: valid OAuth or API token required", http.StatusUnauthorized)
 			return
 		}
 		ctx := context.WithValue(r.Context(), mcpUserKey{}, userID)
+		ctx = context.WithValue(ctx, mcpReadOnlyKey{}, readOnly)
 		streamable.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func oauthReadTool(name string) bool {
+	switch name {
+	case "list_accounts", "get_account", "list_commodities", "list_transactions", "get_transaction", "get_report", "get_currency_rates":
+		return true
+	}
+	return false
 }
 
 // buildMCPServer собирает MCP-сервер с инструментами, привязанными к userID.
@@ -208,6 +244,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 		return nil, out, nil
 	})
 
+	h.addAccountTools(server, userID)
 	return server
 }
 

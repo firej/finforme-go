@@ -51,6 +51,9 @@ func main() {
 
 	// Создание обработчиков
 	h := handlers.New(db, store)
+	if err := h.ConfigureOAuth(cfg.PublicURL); err != nil {
+		log.Fatal(err)
+	}
 
 	// Демо-пользователь со счетами и транзакциями (idempotent)
 	if err := h.SeedDemoUser(); err != nil {
@@ -59,6 +62,7 @@ func main() {
 
 	// Настройка роутера
 	r := mux.NewRouter()
+	h.RegisterOAuthRoutes(r)
 
 	// Статические файлы
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -126,8 +130,8 @@ func main() {
 	api.HandleFunc("/finance/import/csv/preview", h.APIImportCSVPreview).Methods("POST")
 	api.HandleFunc("/finance/import/csv/save", h.APIImportCSVSave).Methods("POST")
 
-	// MCP-сервер (Streamable HTTP, авторизация через Bearer API-токен)
-	r.PathPrefix("/mcp").Handler(h.MCPHandler())
+	// MCP-сервер (Streamable HTTP, OAuth или Bearer API-токен)
+	r.Handle("/mcp", h.MCPHandler())
 
 	// Запуск сервера
 	addr := fmt.Sprintf(":%s", cfg.Port)

@@ -121,6 +121,9 @@ func InitDB(db *sql.DB) error {
 			return fmt.Errorf("failed to create table: %w", err)
 		}
 	}
+	if err := InitOAuthDB(db); err != nil {
+		return fmt.Errorf("failed to initialize OAuth: %w", err)
+	}
 
 	// Миграции: добавляем новые колонки если их нет (для существующих БД)
 	migrations := []string{

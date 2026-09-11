@@ -8,6 +8,7 @@ services:
       - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
       - SESSION_SECRET=${SESSION_SECRET:?Set a random SESSION_SECRET of at least 32 bytes}
       - SECURE_COOKIE=false
+      - PUBLIC_URL=http://localhost:8080
     depends_on:
       mariadb:
         condition: service_healthy

@@ -1,0 +1,12 @@
+{{define "oauth_consent.html"}}
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Подключение к finfor.me</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;background:#f5f6f8;color:#20242b;margin:0;padding:24px}main{max-width:520px;margin:8vh auto;background:white;border:1px solid #ddd;border-radius:16px;padding:28px}h1{font-size:24px}p{overflow-wrap:anywhere}button{font:inherit;padding:10px 16px;border:1px solid #bbb;border-radius:8px;cursor:pointer;background:white}button[value=allow]{background:#2455dc;color:white;border-color:#2455dc}.muted{font-size:13px;color:#606570}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}label{display:block;margin:20px 0}</style></head>
+<body><main><p>finfor.me</p><h1>Разрешить доступ к финансам?</h1>
+<p>Приложение <strong>{{.Client}}</strong> запрашивает доступ к вашим счетам, транзакциям и отчётам.</p>
+<p class="muted">Название указано самим приложением. Продолжайте, только если вы начали это подключение. После подтверждения вы вернётесь по адресу: {{.Redirect}}</p>
+<form method="post" action="/oauth/authorize"><input type="hidden" name="csrf" value="{{.CSRF}}">
+<p>Доступ на чтение: просмотр счетов, операций, отчётов и валют.</p>
+{{if .Write}}<label><input type="checkbox" name="write" value="1"> Также разрешить создание, изменение и удаление счетов и операций</label>{{end}}
+<p class="muted">Доступ можно отозвать в настройках → Подключённые приложения.</p>
+<div class="actions"><button name="decision" value="allow">Разрешить доступ</button><button name="decision" value="deny">Отмена</button></div></form></main></body></html>
+{{end}}

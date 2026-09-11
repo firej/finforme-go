@@ -71,6 +71,7 @@ make rebuild   # Пересобрать и перезапустить конте
 | `DATABASE_DSN` | DSN для подключения к MariaDB | `finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4` |
 | `SESSION_SECRET` | Случайный секрет не короче 32 байт | Обязателен для HTTP-сервера, значения по умолчанию нет |
 | `SECURE_COOKIE` | Использовать secure cookies | `false` |
+| `PUBLIC_URL` | Внешний origin для OAuth; в production задайте `https://finfor.me` | `http://localhost:8080` |
 
 ### Обновление безопасности входа
 
@@ -286,33 +287,88 @@ curl "https://finfor.me/api/v1/finance/transactions/get?from=2026-07-01&tag=пр
   -H "Authorization: Bearer finforme_XXXX"
 ```
 
-## MCP-сервер (доступ из Claude)
+## MCP-сервер (Codex, Claude и другие клиенты)
 
 Приложение отдаёт MCP-сервер (Streamable HTTP, stateless) на `/mcp`.
-Авторизация — тем же Bearer-токеном. Это позволяет Claude просматривать счета,
-добавлять транзакции и строить отчёты по вашим данным.
+Авторизация — OAuth через вход в браузере или существующий API-токен.
+Можно просматривать счета, добавлять транзакции и строить отчёты.
 
 ### Подключение
 
-**Claude Code (CLI):**
+**Codex — без ручного копирования токенов:**
+
+```bash
+codex mcp add finforme --url https://finfor.me/mcp
+codex mcp login finforme
+```
+
+В открывшемся браузере войдите в finfor.me и подтвердите доступ. По умолчанию
+выдаётся только чтение; для управления счетами и операциями отметьте разрешение
+на запись. Адрес возврата и название приложения видны перед подтверждением.
+Существующую настройку с постоянным заголовком Authorization сначала удалите
+или замените подключением без этого заголовка.
+
+В других MCP-клиентах с поддержкой OAuth добавьте URL `https://finfor.me/mcp`
+и выполните вход. Для этого сервер поддерживает автоматическую регистрацию
+публичных клиентов (DCR, `token_endpoint_auth_method: none`); CIMD пока не реализован.
+
+**Подключение с API-токеном (по-прежнему поддерживается), Claude Code:**
 
 ```bash
 claude mcp add --transport http finforme https://finfor.me/mcp \
   --header "Authorization: Bearer finforme_XXXX"
 ```
 
-**Claude Desktop** — Settings → Connectors → Add custom connector,
-URL: `https://finfor.me/mcp`, заголовок `Authorization: Bearer finforme_XXXX`.
-
 **Локальная разработка** — тот же способ, но URL `http://localhost:8080/mcp`.
 
 Проверить подключение можно запросом: «покажи мои счета в finforme».
+
+### Настройка OAuth на сервере
+
+`PUBLIC_URL` — канонический внешний адрес сервера без пути, например
+`https://finfor.me`. За прокси он должен совпадать с адресом, используемым клиентом;
+Host и X-Forwarded-Host не используются для построения OAuth-ссылок.
+По умолчанию: `http://localhost:8080`; HTTP разрешён только для loopback.
+В production compose уже задан `PUBLIC_URL=https://finfor.me`.
+При запуске автоматически создаются таблицы `oauth_clients`, `oauth_grants`,
+`oauth_codes`, `oauth_tokens`. Существующие API-токены не мигрируются.
+
+Поток: Authorization Code + PKCE S256, одноразовый код на 5 минут,
+access token на 1 час, refresh token на 30 дней с ротацией. Подключение действует
+не более 90 дней, затем требуется новое согласие. В БД хранятся только хеши
+кодов и токенов. Повторное использование уже обменённого кода (с корректным PKCE)
+или refresh token отзывает всё подключение.
+
+OAuth-токены действуют только на `/mcp`; для REST API используйте API-токены.
+Права `finforme:read` / `finforme:write` проверяются сервером. При ограничении
+доступа чтением инструменты записи недоступны даже при прямом вызове.
+Смена версии сессии при смене/сбросе пароля, блокировка пользователя или отзыв
+подключения прекращают доступ и обновление токенов.
+
+Отзыв: **Настройки → Подключённые приложения → Отозвать доступ**.
+Демо-пользователь не может выдавать OAuth-доступ.
+
+Служебные endpoints: `/.well-known/oauth-authorization-server`,
+`/.well-known/oauth-protected-resource/mcp`, `/oauth/register`, `/oauth/authorize`,
+`/oauth/token`, `/oauth/revoke`. Регистрация ограничена 30 запросами в минуту
+на процесс и 10 000 зарегистрированных клиентов в БД; для публичного сервиса
+дополнительно можно ограничить частоту запросов на reverse proxy.
+
+Проверка OAuth: `go test ./internal/handlers -run TestOAuth` включает
+автоматическое подключение официальным MCP SDK. Для проверки на MariaDB
+задайте `FINFORME_TEST_MYSQL_DSN` тестового сервера с правом CREATE DATABASE:
+тесты создают и удаляют собственные временные базы.
 
 ### Инструменты
 
 | Инструмент | Описание |
 |------------|----------|
 | `list_accounts` | Счета с балансами и валютой |
+| `list_commodities` | Валюты и их ID для создания счетов |
+| `get_account` | Параметры одного счёта, включая родителя и описание |
+| `create_account` | Создать счёт или категорию: name, account_type, commodity_id; опционально parent_id, description, hidden, placeholder |
+| `update_account` | Частично изменить счёт по id; пропущенные поля сохраняются |
+| `delete_account` | Удалить пустой счёт без операций и дочерних счетов |
 | `list_transactions` | Транзакции с фильтрами (счёт, даты, тег, поиск, пагинация) |
 | `get_transaction` | Одна транзакция со сплитами (дебет/кредит) |
 | `create_transaction` | Создать транзакцию: `from_account_id` → `to_account_id`, суммы в валюте счёта, поддержка кросс-валютных (`amount_to`) |
@@ -323,6 +379,15 @@ URL: `https://finfor.me/mcp`, заголовок `Authorization: Bearer finforme
 
 Все инструменты работают строго в рамках пользователя, которому принадлежит
 токен. Отозвать доступ можно удалением токена в настройках.
+
+Для создания счёта сначала получите ID валюты через `list_commodities`.
+Например: `create_account` с `{"name":"Накопления","account_type":"BANK","commodity_id":1}`
+(используйте фактический ID нужной валюты). Допустимые типы: ASSET, CASH, BANK,
+LIABILITY, INCOME, EXPENSE, EQUITY. Родитель должен быть контейнером;
+`parent_id: 0` снимает родителя. `list_accounts` возвращает `parent_id` и `commodity_id`.
+Чтобы скрыть счёт с историей, вызовите `update_account` с `{"id":123,"hidden":true}`;
+`false` снова показывает его. Валюту счёта с операциями менять нельзя.
+Системные ROOT-счета не редактируются и не удаляются через MCP.
 
 ## Курсы валют
 

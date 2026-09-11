@@ -104,6 +104,8 @@ func (h *Handler) periodReport(userID int64, from, to time.Time) (*PeriodReport,
 // AccountBalance — счёт с балансом и валютой (для MCP list_accounts)
 type AccountBalance struct {
 	ID          int64                    `json:"id"`
+	ParentID    *int64                   `json:"parent_id"`
+	CommodityID int64                    `json:"commodity_id"`
 	Name        string                   `json:"name"`
 	AccountType string                   `json:"account_type"`
 	Currency    string                   `json:"currency"`
@@ -127,7 +129,7 @@ func (h *Handler) accountsWithBalances(userID int64) ([]AccountBalance, error) {
 	h.buildAccountTree(accounts, byID)
 	result := make([]AccountBalance, 0, len(accounts))
 	for _, a := range accounts {
-		result = append(result, AccountBalance{ID: a.ID, Name: a.Name, AccountType: a.AccountType, Currency: a.Currency,
+		result = append(result, AccountBalance{ID: a.ID, ParentID: a.ParentID, CommodityID: a.CommodityID, Name: a.Name, AccountType: a.AccountType, Currency: a.Currency,
 			Balance: a.Balance, Placeholder: a.Placeholder == 1, Hidden: a.Hidden == 1, Balances: a.GetBalances()})
 	}
 	return result, nil

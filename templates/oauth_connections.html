@@ -1,0 +1,17 @@
+{{define "oauth_connections.html"}}
+{{template "header" .}}
+<div class="topbar">{{template "mobile_menu_btn" .}}<div class="topbar-title">Подключённые приложения</div></div>
+<div class="page-narrow" style="max-width:600px;">
+<div class="card" style="padding:20px;margin-bottom:14px;">
+<h2 style="font-size:16px;">Подключение без API-токенов</h2>
+<p>Добавьте MCP-сервер <code style="overflow-wrap:anywhere">{{.MCPURL}}</code> в приложении и подтвердите доступ в браузере.</p>
+<p>Для Codex CLI:</p><pre style="overflow-x:auto;">codex mcp add finforme --url {{.MCPURL}}
+codex mcp login finforme</pre>
+</div>
+{{range .Connections}}<div class="card" style="padding:20px;margin-bottom:12px;">
+<strong>{{.Name}}</strong><p>{{.Scope}} · Подключено {{.Created}}</p>
+<form method="post" action="/finance/settings/connections"><input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}"><button class="btn btn-ghost" type="submit">Отозвать доступ</button></form>
+</div>{{else}}<p>Подключённых приложений пока нет.</p>{{end}}
+<a href="/finance/settings">← Настройки</a></div>
+{{template "footer" .}}
+{{end}}

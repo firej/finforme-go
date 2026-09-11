@@ -12,6 +12,7 @@ services:
       - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
       - SESSION_SECRET=${SESSION_SECRET:?Set a random SESSION_SECRET of at least 32 bytes}
       - SECURE_COOKIE=true
+      - PUBLIC_URL=https://finfor.me
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.finforme.rule=Host(`finfor.me`)"

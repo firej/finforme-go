@@ -12,6 +12,7 @@ type Config struct {
 	DatabaseDSN   string // DSN для MariaDB: user:password@tcp(host:port)/dbname?parseTime=true
 	SessionSecret string
 	SecureCookie  bool
+	PublicURL     string
 }
 
 // Load загружает конфигурацию из переменных окружения
@@ -21,6 +22,7 @@ func Load() *Config {
 		DatabaseDSN:   getEnv("DATABASE_DSN", "finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"),
 		SessionSecret: os.Getenv("SESSION_SECRET"),
 		SecureCookie:  getEnv("SECURE_COOKIE", "false") == "true",
+		PublicURL:     getEnv("PUBLIC_URL", "http://localhost:8080"),
 	}
 }
 
