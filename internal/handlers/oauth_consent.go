@@ -20,6 +20,13 @@ type oauthAuthorization struct {
 	Resource  string
 }
 
+// Chromium checks the callback redirect against the original form's policy.
+// Call only after matching the redirect against the registered OAuth client.
+func oauthConsentPolicy(redirect string) string {
+	u, _ := url.Parse(redirect)
+	return "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' " + u.Scheme + "://" + u.Host + "; frame-ancestors 'none'; base-uri 'none'"
+}
+
 func (h *Handler) oauthBrowserUser(w http.ResponseWriter, r *http.Request) (int64, int64, bool) {
 	id, version, required, ok := h.sessionUser(r)
 	if required {
@@ -108,6 +115,7 @@ func (h *Handler) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 			oauthError(w, 400, "invalid_request")
 			return
 		}
+		w.Header().Set("Content-Security-Policy", oauthConsentPolicy(a.Redirect))
 		user, version, ok := h.oauthBrowserUser(w, r)
 		if !ok {
 			return
@@ -138,6 +146,7 @@ func (h *Handler) oauthAuthorize(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, 400, "invalid_request")
 		return
 	}
+	w.Header().Set("Content-Security-Policy", oauthConsentPolicy(a.Redirect))
 	redirect, _ := url.Parse(a.Redirect)
 	q := redirect.Query()
 	q.Set("state", a.State)

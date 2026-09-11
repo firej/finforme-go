@@ -101,6 +101,16 @@ type oauthClient struct {
 
 func validOAuthRedirect(raw string) bool {
 	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	// The validated authority is also used as a CSP source. Do not allow
+	// whitespace, wildcards or directive delimiters to widen that policy.
+	for _, c := range u.Host {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune(".-:[]", c)) {
+			return false
+		}
+	}
 	return err == nil && len(raw) <= 512 && u.Host != "" && u.User == nil && u.Fragment == "" &&
 		(u.Scheme == "https" || (u.Scheme == "http" && loopbackHost(u.Hostname())))
 }

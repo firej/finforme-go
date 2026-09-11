@@ -452,3 +452,30 @@ func TestOAuthExpiryAndScopeEscalation(t *testing.T) {
 		t.Fatal("inactive user accepted")
 	}
 }
+
+func TestOAuthConsentAllowsValidatedCallbackRedirect(t *testing.T) {
+	f := newOAuthFixture(t)
+	w := f.request("GET", "/oauth/authorize?"+f.authorizationQuery().Encode(), "", "", []*http.Cookie{f.cookie})
+	policy := w.Header().Get("Content-Security-Policy")
+	if w.Code != 200 || !strings.Contains(policy, "form-action 'self' http://127.0.0.1:49152;") {
+		t.Fatalf("callback blocked by consent policy: %d %s", w.Code, policy)
+	}
+	csrf := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindStringSubmatch(w.Body.String())[1]
+	for _, decision := range []string{"allow", "deny"} {
+		response := f.request("POST", "/oauth/authorize", url.Values{"csrf": {csrf}, "decision": {decision}}.Encode(), "application/x-www-form-urlencoded", append(w.Result().Cookies(), f.cookie))
+		if response.Code != 303 || response.Header().Get("Content-Security-Policy") != policy {
+			t.Fatalf("callback redirect policy: %d %s", response.Code, response.Header().Get("Content-Security-Policy"))
+		}
+	}
+	for _, redirect := range []string{"https://*.example.com/callback", "https://example.com;script-src/callback", "https://example.com'unsafe-inline'/callback"} {
+		if validOAuthRedirect(redirect) {
+			t.Fatalf("accepted unsafe CSP authority %q", redirect)
+		}
+	}
+	q := f.authorizationQuery()
+	q.Set("redirect_uri", "https://other.example/callback")
+	w = f.request("GET", "/oauth/authorize?"+q.Encode(), "", "", []*http.Cookie{f.cookie})
+	if w.Code != 400 || strings.Contains(w.Header().Get("Content-Security-Policy"), "other.example") {
+		t.Fatal("unregistered redirect added to CSP")
+	}
+}
