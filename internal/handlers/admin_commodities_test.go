@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -117,5 +118,49 @@ func TestAdminCommodityConcurrentDuplicate(t *testing.T) {
 	}
 	if successes != 1 {
 		t.Fatalf("created %d times", successes)
+	}
+}
+
+func TestAdminCommodityEdit(t *testing.T) {
+	h := financeTestHandler(t)
+	c := models.Commodity{Mnemonic: "ARS", Fullname: "Peso", Sign: "ARS", Fraction: 100}
+	if err := h.createAdminCommodity(c); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.db.QueryRow(`SELECT id FROM commodities WHERE mnemonic='ARS'`).Scan(&c.ID); err != nil {
+		t.Fatal(err)
+	}
+	cookie := authCookie(t, h, 1)
+	request := func(method, path string, values url.Values) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.RequireAdmin(h.AdminCommodities)(w, authRequest(method, path, values, cookie))
+		return w
+	}
+	id := strconv.FormatInt(c.ID, 10)
+	if w := request("GET", "/admin/commodities/?edit="+id, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `value="Peso"`) || !strings.Contains(w.Body.String(), "Сохранить") {
+		t.Fatalf("edit form: %d %s", w.Code, w.Body.String())
+	}
+	values := url.Values{"id": {id}, "mnemonic": {"ARS"}, "fullname": {"Аргентинское песо"}, "sign": {"$"}, "decimals": {"2"}}
+	if w := request("POST", "/admin/commodities/", values); w.Code != 303 || !strings.Contains(w.Header().Get("Location"), "currency_updated") {
+		t.Fatalf("save: %d %s", w.Code, w.Body.String())
+	}
+	for _, tc := range []struct{ key, value string }{{"mnemonic", "PESO"}, {"decimals", "3"}, {"fullname", ""}, {"id", "-1"}, {"id", "999999"}} {
+		original := values.Get(tc.key)
+		values.Set(tc.key, tc.value)
+		if w := request("POST", "/admin/commodities/", values); w.Code != 400 {
+			t.Fatalf("invalid %s: %d", tc.key, w.Code)
+		}
+		values.Set(tc.key, original)
+	}
+	var name, sign, code string
+	var fraction int
+	if err := h.db.QueryRow(`SELECT fullname,sign,mnemonic,fraction FROM commodities WHERE id=?`, c.ID).Scan(&name, &sign, &code, &fraction); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Аргентинское песо" || sign != "$" || code != "ARS" || fraction != 100 {
+		t.Fatalf("unexpected saved currency: %s %s %s %d", name, sign, code, fraction)
+	}
+	if w := request("GET", "/admin/commodities/?edit=999999", nil); w.Code != 404 {
+		t.Fatalf("missing: %d", w.Code)
 	}
 }

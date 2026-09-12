@@ -99,7 +99,8 @@
   <p style="font-size:11.5px;color:var(--text-muted);">
     USD/RUB, EUR/RUB — официальный курс ЦБ РФ.<br>
     BTC/USD — курс биткоина (Coinbase).<br>
-    USD/ARS — официальный курс ЦБ Аргентины (BCRA). RUB/ARS — кросс-курс.
+    USD/ARS — официальный курс BCRA или Blue Dollar Sell (источник указан на карточке).<br>
+    RUB/ARS — песо за рубль: официальный кросс-курс или Blue Dollar Sell × ЦБ РФ.
   </p>
 </div>
 
@@ -185,7 +186,8 @@
   function renderCharts(data) {
     data.forEach(function(item) {
       if (!item.points || item.points.length < 2) return;
-      var canvases = document.querySelectorAll('[id^="chart-' + item.code + '-"]');
+      var selectedCanvas = document.getElementById('chart-' + item.code + '-' + item.source);
+      var canvases = selectedCanvas ? [selectedCanvas] : [];
       canvases.forEach(function(canvas) {
         var labels = item.points.map(function(p) { return p.date; });
         var values = item.points.map(function(p) { return p.rate; });

@@ -29,6 +29,7 @@ type CurrencyHistoryPoint struct {
 // CurrencyChartData — данные для одного графика
 type CurrencyChartData struct {
 	Code   string                 `json:"code"`
+	Source string                 `json:"source"`
 	Points []CurrencyHistoryPoint `json:"points"`
 }
 
@@ -199,10 +200,9 @@ func loadCurrencyCharts(db *sql.DB, days int) ([]CurrencyChartData, error) {
 
 	result := make([]CurrencyChartData, 0, len(keyOrder))
 	for _, k := range keyOrder {
-		// Показываем код с источником если источников несколько
-		displayCode := k.code
 		result = append(result, CurrencyChartData{
-			Code:   displayCode,
+			Code:   k.code,
+			Source: k.source,
 			Points: pointsMap[k],
 		})
 	}

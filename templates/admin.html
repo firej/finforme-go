@@ -27,6 +27,7 @@
     {{else if eq . "bulk_deleted"}}Записи удалены
     {{else if eq . "updated"}}Запись обновлена
     {{else if eq . "currency_created"}}Валюта добавлена
+    {{else if eq . "currency_updated"}}Валюта сохранена
     {{else if eq . "password_reset"}}Пароль сброшен
     {{else}}{{.}}{{end}}
   </div>
@@ -42,12 +43,13 @@
 
   {{if eq .Tab "commodities"}}
   <div class="card" style="padding:16px;margin-bottom:16px;">
-    <h2 style="font-size:15px;margin:0 0 8px;">Добавить валюту</h2>
+    <h2 style="font-size:15px;margin:0 0 8px;">{{if .CurrencyForm.ID}}Редактировать валюту{{else}}Добавить валюту{{end}}</h2>
     <p style="color:var(--text-secondary);font-size:13px;">Общий справочник для счетов всех пользователей. Добавленная валюта сразу появится при создании счёта и в MCP. Курсы обмена настраиваются отдельно.</p>
     <form method="POST" action="/admin/commodities/" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
       <div class="form-group">
+        {{if .CurrencyForm.ID}}<input type="hidden" name="id" value="{{.CurrencyForm.ID}}">{{end}}
         <label class="form-label" for="currency-code">Код</label>
-        <input class="form-input" id="currency-code" name="mnemonic" required maxlength="12" pattern="[A-Za-z][A-Za-z0-9]{1,11}" placeholder="ARS" value="{{.CurrencyForm.Mnemonic}}">
+        <input class="form-input" id="currency-code" {{if .CurrencyForm.ID}}readonly{{end}} name="mnemonic" required maxlength="12" pattern="[A-Za-z][A-Za-z0-9]{1,11}" placeholder="ARS" value="{{.CurrencyForm.Mnemonic}}">
       </div>
       <div class="form-group">
         <label class="form-label" for="currency-name">Название</label>
@@ -60,28 +62,29 @@
       <div class="form-group">
         <label class="form-label" for="currency-decimals">Знаков после запятой</label>
         <select class="form-select" id="currency-decimals" name="decimals">
-          <option value="0" {{if eq .CurrencyForm.Fraction 1}}selected{{end}}>0</option>
-          <option value="1" {{if eq .CurrencyForm.Fraction 10}}selected{{end}}>1</option>
-          <option value="2" {{if eq .CurrencyForm.Fraction 100}}selected{{end}}>2</option>
-          <option value="3" {{if eq .CurrencyForm.Fraction 1000}}selected{{end}}>3</option>
-          <option value="4" {{if eq .CurrencyForm.Fraction 10000}}selected{{end}}>4</option>
-          <option value="5" {{if eq .CurrencyForm.Fraction 100000}}selected{{end}}>5</option>
-          <option value="6" {{if eq .CurrencyForm.Fraction 1000000}}selected{{end}}>6</option>
-          <option value="7" {{if eq .CurrencyForm.Fraction 10000000}}selected{{end}}>7</option>
-          <option value="8" {{if eq .CurrencyForm.Fraction 100000000}}selected{{end}}>8</option>
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 1)}}<option value="0" {{if eq .CurrencyForm.Fraction 1}}selected{{end}}>0</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 10)}}<option value="1" {{if eq .CurrencyForm.Fraction 10}}selected{{end}}>1</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 100)}}<option value="2" {{if eq .CurrencyForm.Fraction 100}}selected{{end}}>2</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 1000)}}<option value="3" {{if eq .CurrencyForm.Fraction 1000}}selected{{end}}>3</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 10000)}}<option value="4" {{if eq .CurrencyForm.Fraction 10000}}selected{{end}}>4</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 100000)}}<option value="5" {{if eq .CurrencyForm.Fraction 100000}}selected{{end}}>5</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 1000000)}}<option value="6" {{if eq .CurrencyForm.Fraction 1000000}}selected{{end}}>6</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 10000000)}}<option value="7" {{if eq .CurrencyForm.Fraction 10000000}}selected{{end}}>7</option>{{end}}
+          {{if or (not .CurrencyForm.ID) (eq .CurrencyForm.Fraction 100000000)}}<option value="8" {{if eq .CurrencyForm.Fraction 100000000}}selected{{end}}>8</option>{{end}}
         </select>
       </div>
-      <button type="submit" class="btn btn-primary">Добавить валюту</button>
+      <button type="submit" class="btn btn-primary">{{if .CurrencyForm.ID}}Сохранить{{else}}Добавить валюту{{end}}</button>
+      {{if .CurrencyForm.ID}}<a href="/admin/commodities/" class="btn">Отмена</a>{{end}}
     </form>
-    <p style="font-size:12px;color:var(--text-secondary);">Для ARS выберите 2 знака. Точность в справочнике не снимает текущее ограничение ввода операций через интерфейс, API и MCP: не более двух знаков после запятой.</p>
+    <p style="font-size:12px;color:var(--text-secondary);">Код и точность существующей валюты неизменны; для другого кода или точности создайте новую валюту. Для ARS выберите 2 знака. Точность в справочнике не снимает текущее ограничение ввода операций через интерфейс, API и MCP: не более двух знаков после запятой.</p>
   </div>
   <div class="card" style="overflow-x:auto;">
     <table class="data-table">
-      <thead><tr><th>Код</th><th>Название</th><th>Обозначение</th><th>Долей в единице</th><th>Пространство имён</th></tr></thead>
+      <thead><tr><th>Код</th><th>Название</th><th>Обозначение</th><th>Долей в единице</th><th>Пространство имён</th><th></th></tr></thead>
       <tbody>
         {{range .Commodities}}
-        <tr><td class="mono">{{.Mnemonic}}</td><td>{{.Fullname}}</td><td>{{.Sign}}</td><td>{{.Fraction}}</td><td>{{.Namespace}}</td></tr>
-        {{else}}<tr><td colspan="5">Валют пока нет</td></tr>{{end}}
+        <tr><td class="mono">{{.Mnemonic}}</td><td>{{.Fullname}}</td><td>{{.Sign}}</td><td>{{.Fraction}}</td><td>{{.Namespace}}</td><td><a href="/admin/commodities/?edit={{.ID}}">Редактировать</a></td></tr>
+        {{else}}<tr><td colspan="6">Валют пока нет</td></tr>{{end}}
       </tbody>
     </table>
   </div>
