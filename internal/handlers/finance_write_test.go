@@ -21,6 +21,7 @@ func financeTestHandler(t *testing.T) *Handler {
 	if os.Getenv("FINFORME_TEST_MYSQL_DSN") == "" {
 		for _, q := range []string{
 			`PRAGMA foreign_keys=ON`,
+			`CREATE TABLE user_memory(user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,memory_key TEXT NOT NULL,content TEXT NOT NULL,updated_at DATETIME NOT NULL,PRIMARY KEY(user_id,memory_key))`,
 			`CREATE TABLE commodities(id INTEGER PRIMARY KEY, namespace TEXT, mnemonic TEXT, fullname TEXT, cusip TEXT, fraction INTEGER, quote_source TEXT, quote_tz TEXT, sign TEXT)`,
 			`INSERT INTO commodities(id,namespace,mnemonic,fullname,fraction,sign) VALUES(1,'CURRENCY','RUB','Ruble',100,'RUB'),(2,'CURRENCY','USD','Dollar',100,'USD')`,
 			`CREATE TABLE accounts(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), name TEXT, account_type TEXT, commodity_id INTEGER REFERENCES commodities(id), commodity_scu INTEGER, non_std_scu INTEGER, parent_id INTEGER REFERENCES accounts(id), code TEXT, description TEXT, hidden INTEGER DEFAULT 0, placeholder INTEGER DEFAULT 0)`,

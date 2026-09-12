@@ -1,0 +1,60 @@
+{{define "memory_settings.html"}}
+{{template "header" .}}
+<div class="topbar">
+  {{template "mobile_menu_btn" .}}
+  <div class="topbar-title">Память ассистента</div>
+</div>
+<div class="page-narrow" style="max-width:760px;">
+  <a href="/finance/settings" class="btn btn-ghost" style="margin-bottom:12px;">← Настройки</a>
+  <p style="color:var(--text-secondary);">Здесь хранятся заметки, которые ассистент использует в следующих беседах. Вы можете просматривать, изменять и удалять их. Изменения сразу доступны подключённым ассистентам.</p>
+  {{if .Error}}<div role="alert" style="padding:12px;margin-bottom:12px;background:var(--red-subtle);color:var(--red);">{{.Error}}</div>{{end}}
+  {{if eq .Message "saved"}}<p role="status">Заметка сохранена.</p>{{end}}
+  {{if eq .Message "deleted"}}<p role="status">Заметка удалена.</p>{{end}}
+  <div class="card" style="padding:20px;margin-bottom:16px;">
+    <h2 style="font-size:16px;">{{if .Editing}}Редактировать заметку{{else}}Добавить заметку{{end}}</h2>
+    <form method="POST" action="/finance/settings/memory">
+      {{if .Editing}}<input type="hidden" name="editing" value="1">{{end}}
+      <div class="form-group">
+        <label class="form-label" for="memory-key">Ключ</label>
+        <input class="form-input" id="memory-key" name="key" required maxlength="128" pattern="[a-z0-9][a-z0-9._\/\-]{0,127}" placeholder="preferences.currency" value="{{.MemoryForm.Key}}" {{if .Editing}}readonly{{end}}>
+        <div class="form-hint">Короткое имя заметки: латинские строчные буквы, цифры, точки, дефисы, подчёркивания и /. Сохранение с существующим ключом заменяет заметку.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="memory-content">Содержимое</label>
+        <textarea class="form-input" id="memory-content" name="content" rows="8" maxlength="16000" required>{{.MemoryForm.Content}}</textarea>
+        <div class="form-hint">До 16000 символов.</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-primary" name="action" value="save">Сохранить</button>
+        {{if .Editing}}<a class="btn btn-ghost" href="/finance/settings/memory">Отмена</a>{{end}}
+      </div>
+    </form>
+  </div>
+  <div class="card" style="padding:20px;">
+    <h2 style="font-size:16px;">Ваши заметки</h2>
+    <form method="GET" action="/finance/settings/memory" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+      <input class="form-input" name="prefix" aria-label="Начало ключа" value="{{.Prefix}}" placeholder="Начало ключа" maxlength="128" style="flex:1;min-width:160px;">
+      <button class="btn btn-ghost" type="submit">Найти</button>
+      {{if .Prefix}}<a href="/finance/settings/memory" class="btn btn-ghost">Сбросить</a>{{end}}
+    </form>
+    {{range .Memories}}
+    <div style="padding:12px 0;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;gap:12px;">
+      <div style="flex:1;min-width:160px;overflow-wrap:anywhere;">
+        <a href="/finance/settings/memory?edit={{.Key}}">{{.Key}}</a>
+        <div style="font-size:12px;color:var(--text-muted);">Обновлено: {{.UpdatedAt}}</div>
+      </div>
+      <a class="btn btn-ghost btn-sm" href="/finance/settings/memory?edit={{.Key}}">Редактировать</a>
+      <form method="POST" action="/finance/settings/memory" onsubmit="return confirm('Удалить эту заметку?')">
+        <input type="hidden" name="key" value="{{.Key}}">
+        <button class="btn btn-danger btn-sm" name="action" value="delete">Удалить</button>
+      </form>
+    </div>
+    {{else}}<p style="color:var(--text-secondary);">{{if .Prefix}}По этому префиксу заметок нет.{{else}}Заметок пока нет.{{end}}</p>{{end}}
+    <nav aria-label="Страницы заметок" style="display:flex;gap:12px;margin-top:16px;">
+      {{if gt .Offset 0}}<a class="btn btn-ghost" href="/finance/settings/memory?prefix={{.Prefix}}&offset={{.PreviousOffset}}">Назад</a>{{end}}
+      {{if .HasMore}}<a class="btn btn-ghost" href="/finance/settings/memory?prefix={{.Prefix}}&offset={{.NextOffset}}">Далее</a>{{end}}
+    </nav>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

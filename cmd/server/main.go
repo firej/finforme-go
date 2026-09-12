@@ -91,6 +91,7 @@ func main() {
 	r.HandleFunc("/finance/transaction/{account_id}/", h.RequireAuth(h.FinanceTransaction)).Methods("GET")
 	r.HandleFunc("/finance/transaction/{account_id}/{tx_id}", h.RequireAuth(h.FinanceTransaction)).Methods("GET")
 	r.HandleFunc("/finance/tag/{tag}", h.RequireAuth(h.FinanceTransactionsByTag)).Methods("GET")
+	r.HandleFunc("/finance/settings/memory", h.RequireAuth(h.MemorySettings)).Methods("GET", "POST")
 	r.HandleFunc("/finance/settings", h.RequireAuth(h.FinanceSettings)).Methods("GET")
 	r.HandleFunc("/finance/settings/tokens/create", h.RequireAuth(h.APITokenCreate)).Methods("POST")
 	r.HandleFunc("/finance/settings/tokens/delete", h.RequireAuth(h.APITokenDelete)).Methods("POST")

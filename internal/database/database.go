@@ -24,6 +24,15 @@ func InitDB(db *sql.DB) error {
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+        `CREATE TABLE IF NOT EXISTS user_memory (
+            user_id BIGINT NOT NULL,
+            memory_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+            content TEXT NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY (user_id, memory_key),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
 		`CREATE TABLE IF NOT EXISTS commodities (
 			id BIGINT PRIMARY KEY AUTO_INCREMENT,
 			namespace VARCHAR(255),
