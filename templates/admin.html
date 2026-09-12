@@ -13,6 +13,7 @@
     <a href="/admin/users/" class="sort-tab {{if eq .Tab "users"}}active{{end}}">Пользователи</a>
     <a href="/admin/rates/" class="sort-tab {{if eq .Tab "rates"}}active{{end}}">Курсы валют</a>
     <a href="/admin/commodities/" class="sort-tab {{if eq .Tab "commodities"}}active{{end}}">Валюты</a>
+    <a href="/admin/rate-bindings/" class="sort-tab {{if eq .Tab "rate-bindings"}}active{{end}}">Привязка курсов</a>
   </div>
 
   <!-- Уведомления -->
@@ -39,6 +40,38 @@
     {{else if eq . "empty_filter"}}Укажите хотя бы один фильтр для массового удаления
     {{else}}{{.}}{{end}}
   </div>
+  {{end}}
+
+  {{if eq .Tab "rate-bindings"}}
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <h2 style="font-size:15px;">Привязка курсов к валютам</h2>
+    <p>Курс — количество второй валюты за одну единицу первой. Для USD/RUB выберите USD → RUB.</p>
+    <p>Привязка общая для всех пользователей и дат выбранного источника, включая будущие котировки. Недостающую валюту можно <a href="/admin/commodities/">добавить в справочник</a>.</p>
+  </div>
+  {{range .Bindings}}
+  {{$binding := .}}
+  <div class="card" style="padding:16px;margin-bottom:12px;">
+    <h3 style="font-size:14px;">{{.Code}} · {{.Source}} {{if not .BaseID}}— не привязано{{end}}</h3>
+    <form method="POST" action="/admin/rate-bindings/" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <input type="hidden" name="code" value="{{.Code}}">
+      <input type="hidden" name="source" value="{{.Source}}">
+      <label class="form-group">Первая валюта (1 единица)
+        <select class="form-select" name="base_id" required>
+          <option value="">Выберите валюту</option>
+          {{range $.Commodities}}<option value="{{.ID}}" {{if eq .ID $binding.BaseID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
+        </select>
+      </label>
+      <label class="form-group">Вторая валюта (сумма по курсу)
+        <select class="form-select" name="quote_id" required>
+          <option value="">Выберите валюту</option>
+          {{range $.Commodities}}<option value="{{.ID}}" {{if eq .ID $binding.QuoteID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
+        </select>
+      </label>
+      <button class="btn btn-primary" name="action" value="save">Сохранить</button>
+      {{if .BaseID}}<button class="btn btn-ghost" name="action" value="delete" formnovalidate>Снять привязку</button>{{end}}
+    </form>
+  </div>
+  {{else}}<div class="card" style="padding:16px;">Курсов пока нет. После импорта здесь появятся пары и источники.</div>{{end}}
   {{end}}
 
   {{if eq .Tab "commodities"}}

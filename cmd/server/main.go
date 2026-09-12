@@ -102,6 +102,7 @@ func main() {
 	r.HandleFunc("/admin/users/", h.RequireAdmin(h.AdminUsers)).Methods("GET")
 	r.HandleFunc("/admin/users/{id}/reset-password/", h.RequireAdmin(h.AdminUserRequestPasswordChange)).Methods("POST")
 	r.HandleFunc("/admin/users/{id}/delete/", h.RequireAdmin(h.AdminUserDelete)).Methods("POST")
+	r.HandleFunc("/admin/rate-bindings/", h.RequireAdmin(h.AdminRateBindings)).Methods("GET", "POST")
 	r.HandleFunc("/admin/rates/", h.RequireAdmin(h.AdminRates)).Methods("GET")
 	r.HandleFunc("/admin/rates/edit/", h.RequireAdmin(h.AdminRateEdit)).Methods("GET", "POST")
 	r.HandleFunc("/admin/rates/delete/", h.RequireAdmin(h.AdminRateDelete)).Methods("POST")

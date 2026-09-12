@@ -105,6 +105,17 @@ func InitDB(db *sql.DB) error {
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
+		`CREATE TABLE IF NOT EXISTS currency_rate_bindings (
+            code VARCHAR(20) NOT NULL,
+            source VARCHAR(50) NOT NULL,
+            base_commodity_id BIGINT NOT NULL,
+            quote_commodity_id BIGINT NOT NULL,
+            PRIMARY KEY (code, source),
+            FOREIGN KEY (base_commodity_id) REFERENCES commodities(id),
+            FOREIGN KEY (quote_commodity_id) REFERENCES commodities(id),
+            CHECK (base_commodity_id <> quote_commodity_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+
 		`CREATE TABLE IF NOT EXISTS currency_rates (
 			code VARCHAR(20) NOT NULL COMMENT 'Например: USD/RUB, EUR/RUB, USDT/RUB',
 			name VARCHAR(255) NOT NULL COMMENT 'Название валюты',
