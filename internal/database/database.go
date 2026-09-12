@@ -70,6 +70,7 @@ func InitDB(db *sql.DB) error {
 			post_date DATETIME NOT NULL,
 			enter_date DATETIME NOT NULL,
 			description TEXT,
+			comment TEXT,
 			tags TEXT,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -147,6 +148,10 @@ func InitDB(db *sql.DB) error {
 		if _, err := db.Exec(m); err != nil {
 			return fmt.Errorf("failed to migrate users: %w", err)
 		}
+	}
+
+	if _, err := db.Exec(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS comment TEXT`); err != nil {
+		return fmt.Errorf("failed to migrate transaction comments: %w", err)
 	}
 
 	// Миграция: убираем transactions.currency_id (валюта теперь определяется

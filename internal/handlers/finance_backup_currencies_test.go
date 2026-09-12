@@ -18,7 +18,7 @@ func TestFinanceBackupCurrencyMetadataTransfer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if backup.Version != 2 {
+	if backup.Version != backupFormatVersion {
 		t.Fatal("wrong backup version")
 	}
 	if _, err := target.restoreBackup(2, backup, "replace"); err != nil {

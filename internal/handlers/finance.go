@@ -399,7 +399,7 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 	tag := vars["tag"]
 
 	rows, err := h.db.Query(`
-		SELECT t.id, t.description, t.post_date, t.tags,
+		SELECT t.id, t.description, COALESCE(t.comment,''), t.post_date, t.tags,
 		       a.id, a.name, a.account_type, a.commodity_id,
 		       s.id, s.value_num, s.value_denom
 		FROM transactions t
@@ -419,17 +419,18 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 
 	for rows.Next() {
 		var txID, accountID, splitID, valueNum, valueDenom int64
-		var description, tags, accountName, accountType string
+		var description, comment, tags, accountName, accountType string
 		var postDate time.Time
 		var commodityID int64
 
-		rows.Scan(&txID, &description, &postDate, &tags, &accountID, &accountName,
+		rows.Scan(&txID, &description, &comment, &postDate, &tags, &accountID, &accountName,
 			&accountType, &commodityID, &splitID, &valueNum, &valueDenom)
 
 		if _, exists := transactionsMap[txID]; !exists {
 			transactionsMap[txID] = map[string]interface{}{
 				"id":          txID,
 				"description": description,
+				"comment":     comment,
 				"post_date":   postDate.Format("02.01.2006"),
 				"tags":        strings.Split(tags, ","),
 				"splits":      []map[string]interface{}{},
@@ -840,7 +841,7 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 	// Всегда получаем транзакции в хронологическом порядке для расчета баланса
 	// Используем JOIN вместо IN (SELECT ...) для лучшей производительности
 	rows, err := h.db.Query(`
-		SELECT t.id, t.description, t.post_date, t.tags,
+		SELECT t.id, t.description, COALESCE(t.comment,''), t.post_date, t.tags,
 		       s.id, s.account_id, s.value_num, s.value_denom,
 		       a.name
 		FROM transactions t
@@ -861,16 +862,17 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 
 	for rows.Next() {
 		var txID, splitID, splitAccountID, valueNum, valueDenom int64
-		var description, tags, accountName string
+		var description, comment, tags, accountName string
 		var postDate time.Time
 
-		rows.Scan(&txID, &description, &postDate, &tags, &splitID, &splitAccountID,
+		rows.Scan(&txID, &description, &comment, &postDate, &tags, &splitID, &splitAccountID,
 			&valueNum, &valueDenom, &accountName)
 
 		if _, exists := transactionsMap[txID]; !exists {
 			transactionsMap[txID] = map[string]interface{}{
 				"id":            txID,
 				"description":   description,
+				"comment":       comment,
 				"post_date":     postDate.Format("02.01.2006"),
 				"post_date_raw": postDate,
 				"tags":          strings.Split(tags, ","),
@@ -922,9 +924,9 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 func (h *Handler) getTransaction(userID, txID int64) (*models.Transaction, []map[string]interface{}, []map[string]interface{}) {
 	var tx models.Transaction
 	err := h.db.QueryRow(`
-		SELECT id, description, post_date, enter_date, tags
+		SELECT id, description, post_date, enter_date, tags, COALESCE(comment,'')
 		FROM transactions WHERE id = ? AND user_id = ?
-	`, txID, userID).Scan(&tx.ID, &tx.Description, &tx.PostDate, &tx.EnterDate, &tx.Tags)
+	`, txID, userID).Scan(&tx.ID, &tx.Description, &tx.PostDate, &tx.EnterDate, &tx.Tags, &tx.Comment)
 
 	if err != nil {
 		return nil, nil, nil
@@ -1342,7 +1344,7 @@ func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]i
 		splitArgs = append(splitArgs, id)
 	}
 	splitRows, err := h.db.Query(fmt.Sprintf(`
-		SELECT t.id, t.description, t.post_date, t.tags,
+		SELECT t.id, t.description, COALESCE(t.comment,''), t.post_date, t.tags,
 		       s.account_id, COALESCE(a.name, ''), s.value_num, s.value_denom,
 		       COALESCE(c.mnemonic, '')
 		FROM transactions t
@@ -1359,10 +1361,10 @@ func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]i
 	txMap := make(map[int64]map[string]interface{}, len(txIDs))
 	for splitRows.Next() {
 		var txID, accountID, valueNum, valueDenom int64
-		var description, tags, accountName, currency string
+		var description, comment, tags, accountName, currency string
 		var postDate time.Time
 
-		if err := splitRows.Scan(&txID, &description, &postDate, &tags,
+		if err := splitRows.Scan(&txID, &description, &comment, &postDate, &tags,
 			&accountID, &accountName, &valueNum, &valueDenom, &currency); err != nil {
 			continue
 		}
@@ -1378,6 +1380,7 @@ func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]i
 				"id":          txID,
 				"date":        postDate.Format("2006-01-02"),
 				"description": description,
+				"comment":     comment,
 				"tags":        tagList,
 				"splits":      []map[string]interface{}{},
 			}
@@ -1480,6 +1483,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	savedID, err := h.saveTransaction(userID, txSaveInput{
 		TxID:            txID,
 		Description:     description,
+		Comment:         optionalFormComment(r),
 		PostDate:        postDate,
 		Tags:            tags,
 		Value:           value,
@@ -1502,6 +1506,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 type txSaveInput struct {
 	TxID            int64 // 0 — создать новую
 	Description     string
+	Comment         *string // nil preserves the current comment on update
 	PostDate        time.Time
 	Tags            string
 	Value           float64  // сумма списания (в валюте счёта списания)

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"unicode/utf8"
 )
 
 // Serialize financial writes for one user before reading any validation state.
@@ -67,6 +68,9 @@ func requireTransaction(tx *sql.Tx, userID, id int64) error {
 }
 
 func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
+	if err := validateTransactionComment(in.Comment); err != nil {
+		return 0, err
+	}
 	if in.TxID < 0 || in.PostDate.IsZero() {
 		return 0, validationError("Укажите корректные ID и дату транзакции")
 	}
@@ -126,16 +130,16 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 			return 0, err
 		}
 		if count != 2 || positive != 1 || negative != 1 {
-			return 0, validationError("У этой операции нестандартное распределение сумм. Можно изменить только описание, дату и теги")
+			return 0, validationError("У этой операции нестандартное распределение сумм. Можно изменить только описание, комментарий, дату и теги")
 		}
-		if _, err := tx.Exec(`UPDATE transactions SET description = ?, post_date = ?, tags = ? WHERE id = ? AND user_id = ?`, in.Description, in.PostDate, in.Tags, id, userID); err != nil {
+		if _, err := tx.Exec(`UPDATE transactions SET description = ?, post_date = ?, tags = ?, comment = COALESCE(?,comment) WHERE id = ? AND user_id = ?`, in.Description, in.PostDate, in.Tags, in.Comment, id, userID); err != nil {
 			return 0, err
 		}
 		if _, err := tx.Exec(`DELETE FROM splits WHERE tx_id = ? AND user_id = ?`, id, userID); err != nil {
 			return 0, err
 		}
 	} else {
-		res, err := tx.Exec(`INSERT INTO transactions (user_id,post_date,enter_date,description,tags) VALUES(?,?,?,?,?)`, userID, in.PostDate, time.Now(), in.Description, in.Tags)
+		res, err := tx.Exec(`INSERT INTO transactions (user_id,post_date,enter_date,description,tags,comment) VALUES(?,?,?,?,?,COALESCE(?,''))`, userID, in.PostDate, time.Now(), in.Description, in.Tags, in.Comment)
 		if err != nil {
 			return 0, err
 		}
@@ -155,7 +159,10 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 	return id, nil
 }
 
-func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, description, tags string) error {
+func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, description, tags string, comment *string) error {
+	if err := validateTransactionComment(comment); err != nil {
+		return err
+	}
 	if date.IsZero() {
 		return validationError("Укажите дату транзакции")
 	}
@@ -167,13 +174,17 @@ func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, de
 	if err := requireTransaction(tx, userID, id); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`UPDATE transactions SET post_date = ?, description = ?, tags = ? WHERE id = ? AND user_id = ?`, date, description, tags, id, userID); err != nil {
+	if _, err := tx.Exec(`UPDATE transactions SET post_date = ?, description = ?, tags = ?, comment = COALESCE(?,comment) WHERE id = ? AND user_id = ?`, date, description, tags, comment, id, userID); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
 func (h *Handler) APITransactionMetadataSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeFinanceError(w, validationError("Не удалось прочитать форму"))
+		return
+	}
 	userID, _ := h.getUserID(r)
 	id, err := strconv.ParseInt(r.FormValue("id"), 10, 64)
 	if err != nil {
@@ -185,10 +196,26 @@ func (h *Handler) APITransactionMetadataSave(w http.ResponseWriter, r *http.Requ
 		writeFinanceError(w, validationError("Некорректная дата"))
 		return
 	}
-	if err := h.updateTransactionMetadata(userID, id, date, r.FormValue("description"), r.FormValue("tags")); err != nil {
+	if err := h.updateTransactionMetadata(userID, id, date, r.FormValue("description"), r.FormValue("tags"), optionalFormComment(r)); err != nil {
 		writeFinanceError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"result": "ok", "id": id})
+}
+
+// Omitted fields from older clients preserve comments; an explicit empty value clears them.
+func optionalFormComment(r *http.Request) *string {
+	if !r.PostForm.Has("comment") {
+		return nil
+	}
+	value := r.PostForm.Get("comment")
+	return &value
+}
+
+func validateTransactionComment(comment *string) error {
+	if comment != nil && (!utf8.ValidString(*comment) || utf8.RuneCountInString(*comment) > 16000) {
+		return validationError("Комментарий должен содержать не более 16000 символов UTF-8")
+	}
+	return nil
 }

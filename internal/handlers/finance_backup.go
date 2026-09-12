@@ -20,7 +20,7 @@ import (
 // они переназначаются, а ссылки (parent_id, account_id) переписываются по карте.
 const (
 	backupFormat        = "finforme-backup"
-	backupFormatVersion = 2
+	backupFormatVersion = 3
 	backupMaxUploadSize = 64 << 20 // 64 МБ
 )
 
@@ -59,6 +59,7 @@ type backupTransaction struct {
 	PostDate    string        `json:"post_date"`
 	EnterDate   string        `json:"enter_date"`
 	Description string        `json:"description"`
+	Comment     string        `json:"comment"`
 	Tags        string        `json:"tags"`
 	Splits      []backupSplit `json:"splits"`
 }
@@ -159,7 +160,7 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 	}
 
 	txRows, err := tx.Query(`
-		SELECT id, num, post_date, enter_date, description, tags
+		SELECT id, num, post_date, enter_date, description, tags, COALESCE(comment,'')
 		FROM transactions
 		WHERE user_id = ?
 		ORDER BY post_date, id
@@ -175,7 +176,7 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 		var num, description, tags sql.NullString
 		var postDate, enterDate time.Time
 
-		if err := txRows.Scan(&t.ID, &num, &postDate, &enterDate, &description, &tags); err != nil {
+		if err := txRows.Scan(&t.ID, &num, &postDate, &enterDate, &description, &tags, &t.Comment); err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
 		}
 
@@ -436,6 +437,9 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 	}
 	seenTransactions := map[int64]bool{}
 	for _, t := range data.Transactions {
+		if err := validateTransactionComment(&t.Comment); err != nil {
+			return nil, err
+		}
 		if t.ID <= 0 || seenTransactions[t.ID] {
 			return nil, validationError("Пустой или повторный id операции")
 		}
@@ -540,9 +544,9 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		}
 
 		res, err := tx.Exec(`
-			INSERT INTO transactions (user_id, num, post_date, enter_date, description, tags)
-			VALUES (?, ?, ?, ?, ?, ?)
-		`, userID, t.Num, postDate, enterDate, t.Description, t.Tags)
+			INSERT INTO transactions (user_id, num, post_date, enter_date, description, tags, comment)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, userID, t.Num, postDate, enterDate, t.Description, t.Tags, t.Comment)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert transaction %q: %w", t.Description, err)
 		}

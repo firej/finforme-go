@@ -50,6 +50,7 @@ type Transaction struct {
 	PostDate    time.Time `json:"post_date"`
 	EnterDate   time.Time `json:"enter_date"`
 	Description string    `json:"description"`
+	Comment     string    `json:"comment"`
 	Tags        string    `json:"tags"`
 	Value       float64   `json:"value,omitempty"`
 }

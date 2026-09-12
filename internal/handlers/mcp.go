@@ -145,6 +145,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 			ID:          tx.ID,
 			Date:        tx.PostDate.Format("2006-01-02"),
 			Description: tx.Description,
+			Comment:     tx.Comment,
 			Tags:        tx.Tags,
 			Debit:       debit,
 			Credit:      credit,
@@ -170,6 +171,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 		return h.mcpSaveTransaction(userID, in.ID, writeTransactionIn{
 			Date:          in.Date,
 			Description:   in.Description,
+			Comment:       in.Comment,
 			Amount:        in.Amount,
 			FromAccountID: in.FromAccountID,
 			ToAccountID:   in.ToAccountID,
@@ -180,13 +182,13 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "update_transaction_metadata",
-		Description: "Изменить только дату, описание и теги существующей операции, сохранив все проводки, счета и суммы. Подходит для сложных импортированных операций.",
+		Description: "Изменить только дату, описание, комментарий и теги существующей операции, сохранив все проводки, счета и суммы. Подходит для сложных импортированных операций.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in updateTransactionMetadataIn) (*mcp.CallToolResult, writeTransactionOut, error) {
 		date, err := time.Parse("2006-01-02", in.Date)
 		if err != nil {
 			return nil, writeTransactionOut{}, fmt.Errorf("invalid date: %w", err)
 		}
-		if err := h.updateTransactionMetadata(userID, in.ID, date, in.Description, in.Tags); err != nil {
+		if err := h.updateTransactionMetadata(userID, in.ID, date, in.Description, in.Tags, in.Comment); err != nil {
 			return nil, writeTransactionOut{}, err
 		}
 		return nil, writeTransactionOut{ID: in.ID, Result: "ok"}, nil
@@ -258,6 +260,7 @@ func (h *Handler) mcpSaveTransaction(userID, txID int64, in writeTransactionIn) 
 	savedID, err := h.saveTransaction(userID, txSaveInput{
 		TxID:            txID,
 		Description:     in.Description,
+		Comment:         in.Comment,
 		PostDate:        postDate,
 		Tags:            in.Tags,
 		Value:           in.Amount,
@@ -311,6 +314,7 @@ type getTransactionOut struct {
 	ID          int64                    `json:"id"`
 	Date        string                   `json:"date"`
 	Description string                   `json:"description"`
+	Comment     string                   `json:"comment"`
 	Tags        string                   `json:"tags"`
 	Debit       []map[string]interface{} `json:"debit"`
 	Credit      []map[string]interface{} `json:"credit"`
@@ -318,7 +322,8 @@ type getTransactionOut struct {
 
 type writeTransactionIn struct {
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
-	Description   string   `json:"description" jsonschema:"описание транзакции"`
+	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
+	Comment       *string  `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
 	Amount        float64  `json:"amount" jsonschema:"сумма в валюте счёта списания (from), положительное число"`
 	FromAccountID int64    `json:"from_account_id" jsonschema:"ID счёта списания (откуда уходят деньги)"`
 	ToAccountID   int64    `json:"to_account_id" jsonschema:"ID счёта зачисления (куда приходят деньги)"`
@@ -329,7 +334,8 @@ type writeTransactionIn struct {
 type updateTransactionIn struct {
 	ID            int64    `json:"id" jsonschema:"ID обновляемой транзакции"`
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
-	Description   string   `json:"description" jsonschema:"описание транзакции"`
+	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
+	Comment       *string  `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
 	Amount        float64  `json:"amount" jsonschema:"сумма в валюте счёта списания (from), положительное число"`
 	FromAccountID int64    `json:"from_account_id" jsonschema:"ID счёта списания (откуда уходят деньги)"`
 	ToAccountID   int64    `json:"to_account_id" jsonschema:"ID счёта зачисления (куда приходят деньги)"`
@@ -367,8 +373,9 @@ type currencyRatesOut struct {
 }
 
 type updateTransactionMetadataIn struct {
-	ID          int64  `json:"id" jsonschema:"ID существующей транзакции"`
-	Date        string `json:"date" jsonschema:"дата YYYY-MM-DD"`
-	Description string `json:"description" jsonschema:"описание"`
-	Tags        string `json:"tags" jsonschema:"теги через запятую; пустая строка очищает теги"`
+	ID          int64   `json:"id" jsonschema:"ID существующей транзакции"`
+	Date        string  `json:"date" jsonschema:"дата YYYY-MM-DD"`
+	Description string  `json:"description" jsonschema:"описание"`
+	Comment     *string `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
+	Tags        string  `json:"tags" jsonschema:"теги через запятую; пустая строка очищает теги"`
 }

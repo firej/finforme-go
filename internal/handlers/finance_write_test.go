@@ -24,7 +24,7 @@ func financeTestHandler(t *testing.T) *Handler {
 			`CREATE TABLE commodities(id INTEGER PRIMARY KEY, namespace TEXT, mnemonic TEXT, fullname TEXT, cusip TEXT, fraction INTEGER, quote_source TEXT, quote_tz TEXT, sign TEXT)`,
 			`INSERT INTO commodities(id,namespace,mnemonic,fullname,fraction,sign) VALUES(1,'CURRENCY','RUB','Ruble',100,'RUB'),(2,'CURRENCY','USD','Dollar',100,'USD')`,
 			`CREATE TABLE accounts(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), name TEXT, account_type TEXT, commodity_id INTEGER REFERENCES commodities(id), commodity_scu INTEGER, non_std_scu INTEGER, parent_id INTEGER REFERENCES accounts(id), code TEXT, description TEXT, hidden INTEGER DEFAULT 0, placeholder INTEGER DEFAULT 0)`,
-			`CREATE TABLE transactions(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), num TEXT, post_date DATETIME, enter_date DATETIME, description TEXT, tags TEXT)`,
+			`CREATE TABLE transactions(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), num TEXT, post_date DATETIME, enter_date DATETIME, description TEXT, tags TEXT, comment TEXT)`,
 			`CREATE TABLE splits(id INTEGER PRIMARY KEY,user_id INTEGER REFERENCES users(id),tx_id INTEGER REFERENCES transactions(id) ON DELETE CASCADE,account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,value_num BIGINT,value_denom INTEGER DEFAULT 100)`,
 			`CREATE TABLE gnucash_import_ids(user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,entity_kind TEXT,source_id TEXT,PRIMARY KEY(user_id,entity_kind,source_id))`,
 			`CREATE TABLE books(id INTEGER PRIMARY KEY,user_id INTEGER,root_account_id INTEGER REFERENCES accounts(id) ON DELETE CASCADE,root_template_id TEXT)`,
@@ -136,7 +136,7 @@ func TestFinanceComplexMetadataPreservesAllSplits(t *testing.T) {
 	if _, err := h.saveTransaction(2, in); err == nil {
 		t.Fatal("complex operation accepted by two-split editor")
 	}
-	if err := h.updateTransactionMetadata(2, id, in.PostDate.AddDate(0, 0, 1), "Renamed", "tag"); err != nil {
+	if err := h.updateTransactionMetadata(2, id, in.PostDate.AddDate(0, 0, 1), "Renamed", "tag", nil); err != nil {
 		t.Fatal(err)
 	}
 	if after := splitSnapshot(t, h, id); !reflect.DeepEqual(before, after) {
@@ -146,7 +146,7 @@ func TestFinanceComplexMetadataPreservesAllSplits(t *testing.T) {
 	if err := h.db.QueryRow(`SELECT description,tags FROM transactions WHERE id=?`, id).Scan(&desc, &tags); err != nil || desc != "Renamed" || tags != "tag" {
 		t.Fatal("metadata not updated", err)
 	}
-	if err := h.updateTransactionMetadata(1, id, in.PostDate, "Hacked", ""); err == nil {
+	if err := h.updateTransactionMetadata(1, id, in.PostDate, "Hacked", "", nil); err == nil {
 		t.Fatal("foreign transaction changed")
 	}
 	w := httptest.NewRecorder()
