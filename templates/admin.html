@@ -9,9 +9,10 @@
 
 
   <!-- Вкладки -->
-  <div class="sort-tabs" style="margin-bottom:16px;display:inline-flex;">
+  <div class="sort-tabs" style="margin-bottom:16px;display:flex;flex-wrap:wrap;width:fit-content;">
     <a href="/admin/users/" class="sort-tab {{if eq .Tab "users"}}active{{end}}">Пользователи</a>
     <a href="/admin/rates/" class="sort-tab {{if eq .Tab "rates"}}active{{end}}">Курсы валют</a>
+    <a href="/admin/commodities/" class="sort-tab {{if eq .Tab "commodities"}}active{{end}}">Валюты</a>
   </div>
 
   <!-- Уведомления -->
@@ -25,6 +26,7 @@
     {{if eq . "deleted"}}Запись удалена
     {{else if eq . "bulk_deleted"}}Записи удалены
     {{else if eq . "updated"}}Запись обновлена
+    {{else if eq . "currency_created"}}Валюта добавлена
     {{else if eq . "password_reset"}}Пароль сброшен
     {{else}}{{.}}{{end}}
   </div>
@@ -35,6 +37,53 @@
     {{if eq . "self_delete"}}Нельзя удалить собственный аккаунт
     {{else if eq . "empty_filter"}}Укажите хотя бы один фильтр для массового удаления
     {{else}}{{.}}{{end}}
+  </div>
+  {{end}}
+
+  {{if eq .Tab "commodities"}}
+  <div class="card" style="padding:16px;margin-bottom:16px;">
+    <h2 style="font-size:15px;margin:0 0 8px;">Добавить валюту</h2>
+    <p style="color:var(--text-secondary);font-size:13px;">Общий справочник для счетов всех пользователей. Добавленная валюта сразу появится при создании счёта и в MCP. Курсы обмена настраиваются отдельно.</p>
+    <form method="POST" action="/admin/commodities/" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+      <div class="form-group">
+        <label class="form-label" for="currency-code">Код</label>
+        <input class="form-input" id="currency-code" name="mnemonic" required maxlength="12" pattern="[A-Za-z][A-Za-z0-9]{1,11}" placeholder="ARS" value="{{.CurrencyForm.Mnemonic}}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="currency-name">Название</label>
+        <input class="form-input" id="currency-name" name="fullname" required maxlength="255" placeholder="Аргентинское песо" value="{{.CurrencyForm.Fullname}}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="currency-sign">Обозначение</label>
+        <input class="form-input" id="currency-sign" name="sign" required maxlength="10" placeholder="ARS" value="{{.CurrencyForm.Sign}}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="currency-decimals">Знаков после запятой</label>
+        <select class="form-select" id="currency-decimals" name="decimals">
+          <option value="0" {{if eq .CurrencyForm.Fraction 1}}selected{{end}}>0</option>
+          <option value="1" {{if eq .CurrencyForm.Fraction 10}}selected{{end}}>1</option>
+          <option value="2" {{if eq .CurrencyForm.Fraction 100}}selected{{end}}>2</option>
+          <option value="3" {{if eq .CurrencyForm.Fraction 1000}}selected{{end}}>3</option>
+          <option value="4" {{if eq .CurrencyForm.Fraction 10000}}selected{{end}}>4</option>
+          <option value="5" {{if eq .CurrencyForm.Fraction 100000}}selected{{end}}>5</option>
+          <option value="6" {{if eq .CurrencyForm.Fraction 1000000}}selected{{end}}>6</option>
+          <option value="7" {{if eq .CurrencyForm.Fraction 10000000}}selected{{end}}>7</option>
+          <option value="8" {{if eq .CurrencyForm.Fraction 100000000}}selected{{end}}>8</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Добавить валюту</button>
+    </form>
+    <p style="font-size:12px;color:var(--text-secondary);">Для ARS выберите 2 знака. Точность в справочнике не снимает текущее ограничение ввода операций через интерфейс, API и MCP: не более двух знаков после запятой.</p>
+  </div>
+  <div class="card" style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr><th>Код</th><th>Название</th><th>Обозначение</th><th>Долей в единице</th><th>Пространство имён</th></tr></thead>
+      <tbody>
+        {{range .Commodities}}
+        <tr><td class="mono">{{.Mnemonic}}</td><td>{{.Fullname}}</td><td>{{.Sign}}</td><td>{{.Fraction}}</td><td>{{.Namespace}}</td></tr>
+        {{else}}<tr><td colspan="5">Валют пока нет</td></tr>{{end}}
+      </tbody>
+    </table>
   </div>
   {{end}}
 

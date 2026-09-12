@@ -98,6 +98,7 @@ func main() {
 
 	// Админка
 	r.HandleFunc("/admin/", h.RequireAdmin(h.AdminIndex)).Methods("GET")
+	r.HandleFunc("/admin/commodities/", h.RequireAdmin(h.AdminCommodities)).Methods("GET", "POST")
 	r.HandleFunc("/admin/users/", h.RequireAdmin(h.AdminUsers)).Methods("GET")
 	r.HandleFunc("/admin/users/{id}/reset-password/", h.RequireAdmin(h.AdminUserRequestPasswordChange)).Methods("POST")
 	r.HandleFunc("/admin/users/{id}/delete/", h.RequireAdmin(h.AdminUserDelete)).Methods("POST")
