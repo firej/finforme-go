@@ -31,6 +31,8 @@ jobs:
           cache: true
       - name: Unit tests and race checks
         run: go test -race ./...
+      - name: Transaction currency form tests
+        run: node --test tests/transaction-rates.test.cjs
       - name: Static checks
         run: go vet ./...
       - name: MariaDB integration tests

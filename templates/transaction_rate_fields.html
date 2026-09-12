@@ -1,0 +1,9 @@
+{{define "transaction_rate_fields"}}
+<div class="form-group" data-rate-panel hidden>
+  <label class="form-label">Курс на дату операции
+    <select class="form-select" data-rate-choice aria-label="Источник и курс"></select>
+  </label>
+  <p class="form-hint" data-rate-status role="status"></p>
+  <button type="button" class="btn btn-ghost btn-sm" data-rate-reset hidden>Пересчитать по курсу</button>
+</div>
+{{end}}

@@ -853,3 +853,8 @@ body.show-hidden .ptree-node.is-hidden > .ptree-row:hover { opacity: 0.85; }
   #toast-container { left: 12px; right: 12px; bottom: 12px; }
   .toast { max-width: 100%; }
 }
+
+/* Keep rate controls hidden even when button styles set display explicitly. */
+[data-rate-reset][hidden], [data-rate-panel][hidden], [data-target-group][hidden] {
+  display: none !important;
+}

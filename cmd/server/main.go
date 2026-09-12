@@ -118,6 +118,7 @@ func main() {
 	api.HandleFunc("/finance/account/delete", h.APIAccountDelete).Methods("DELETE")
 	api.HandleFunc("/finance/transactions/get", h.APITransactionsGet).Methods("GET")
 	api.HandleFunc("/finance/transaction/metadata", h.APITransactionMetadataSave).Methods("POST")
+	api.HandleFunc("/finance/transaction/rates", h.APITransactionRates).Methods("GET")
 	api.HandleFunc("/finance/transaction/save", h.APITransactionSave).Methods("POST")
 	api.HandleFunc("/finance/transaction/form", h.APITransactionFormGet).Methods("GET")
 	api.HandleFunc("/finance/transaction/table", h.APITransactionTableGet).Methods("GET")
