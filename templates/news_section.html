@@ -1,7 +1,7 @@
 {{define "news_section"}}
 {{if .News}}
-<details class="card news-disclosure">
-  <summary>Новости и интеграции</summary>
+<section class="card news-section">
+  <h2 class="news-heading">Новости</h2>
   {{range $i, $n := .News}}
   <div style="{{if gt $i 0}}border-top:1px solid var(--border-light);padding-top:12px;margin-top:12px;{{end}}">
     <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
@@ -13,7 +13,7 @@
     </div>
   </div>
   {{end}}
-</details>
+</section>
 <style>
   .news-body p { margin: 0 0 8px; }
   .news-body p:last-child { margin-bottom: 0; }

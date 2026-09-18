@@ -182,6 +182,27 @@ func (h *Handler) dashboardTotals(userID int64) ([]DashboardCurrencyTotal, error
 		total.NetWorth = total.TotalAssets - total.TotalLiabilities
 		result = append(result, *total)
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Currency < result[j].Currency })
+	// Preferred display order; any other currencies follow alphabetically.
+	priority := func(currency string) int {
+		switch currency {
+		case "RUB":
+			return 0
+		case "USD":
+			return 1
+		case "EUR":
+			return 2
+		case "ARS":
+			return 3
+		default:
+			return 4
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		a, b := priority(result[i].Currency), priority(result[j].Currency)
+		if a != b {
+			return a < b
+		}
+		return result[i].Currency < result[j].Currency
+	})
 	return result, nil
 }
