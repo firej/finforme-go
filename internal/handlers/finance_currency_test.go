@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/evbogdanov/finforme/internal/models"
+	"github.com/gorilla/mux"
 )
 
 func currencyFixture(t *testing.T) *Handler {
@@ -122,6 +123,33 @@ func TestFinanceCurrencyDashboardAndTree(t *testing.T) {
 		if w.Code != 200 || !strings.Contains(w.Body.String(), `data-currency="RUB"`) || !strings.Contains(w.Body.String(), `data-currency="USD"`) {
 			t.Fatalf("dashboard failed: %d %s", w.Code, w.Body.String())
 		}
+	}
+}
+
+func TestFinanceAccountViewBalances(t *testing.T) {
+	h := currencyFixture(t)
+	for _, tc := range []struct {
+		id       string
+		balances []string
+	}{
+		{"6", []string{`400,00 <span class="stat-currency">RUB</span>`, `250,00 <span class="stat-currency">USD</span>`}},
+		{"11", []string{`250,00 <span class="stat-currency">USD</span>`}},
+		{"1", []string{`400,00 <span class="stat-currency">RUB</span>`}},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			r := authRequest("GET", "/finance/account/"+tc.id+"/", nil, authCookie(t, h, 2))
+			r = mux.SetURLVars(r, map[string]string{"id": tc.id})
+			w := httptest.NewRecorder()
+			h.FinanceAccountView(w, r)
+			if w.Code != 200 {
+				t.Fatalf("account view: %d %s", w.Code, w.Body.String())
+			}
+			for _, balance := range tc.balances {
+				if !strings.Contains(w.Body.String(), balance) {
+					t.Errorf("account balance missing: %s", balance)
+				}
+			}
+		})
 	}
 }
 

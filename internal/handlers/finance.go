@@ -216,10 +216,15 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Не удалось загрузить баланс", http.StatusInternalServerError)
 		return
 	}
+	accountsByID := make(map[int64]*models.Account, len(accounts))
+	for _, a := range accounts {
+		accountsByID[a.ID] = a
+	}
+	h.buildAccountTree(accounts, accountsByID)
 	for _, a := range accounts {
 		if a.ID == accountID {
-			account.Balance = a.Balance
-			account.Currency = a.Currency
+			account = *a
+			break
 		}
 	}
 	commodities, _ := h.getCommodities()
@@ -280,7 +285,7 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 
 	data := h.pageData(userID, "transactions")
 	data["Title"] = account.Name
-	data["Account"] = account
+	data["Account"] = &account
 	data["Transactions"] = transactions
 	data["Accounts"] = accounts
 	data["Commodities"] = commodities

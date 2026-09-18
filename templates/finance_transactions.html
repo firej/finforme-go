@@ -79,9 +79,11 @@
   <div class="stats-bar">
     <div class="stat-cell">
       <div class="stat-label">Текущий остаток</div>
-      <div class="stat-value {{if gt .Account.Balance 0.0}}text-green{{else if lt .Account.Balance 0.0}}text-red{{end}}">
-        {{formatMoney .Account.Balance}} <span class="stat-currency">{{.Account.Currency}}</span>
+      {{range .Account.GetBalances}}
+      <div class="stat-value {{if gt .Amount 0.0}}text-green{{else if lt .Amount 0.0}}text-red{{end}}">
+        {{formatMoney .Amount}} <span class="stat-currency">{{.Currency}}</span>
       </div>
+      {{end}}
       <div class="stat-delta">за всё время</div>
     </div>
     <div class="stat-cell">
