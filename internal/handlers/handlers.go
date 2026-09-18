@@ -76,7 +76,7 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 			}
 			return string(r[i:j])
 		},
-		"formatMoneyShort": formatMoney,
+		"formatMoneyShort": formatMoneyShort,
 		"formatDateGroup": func(dateStr string) string {
 			// dateStr ожидается в формате "2006-01-02"
 			t, err := time.Parse("2006-01-02", dateStr)

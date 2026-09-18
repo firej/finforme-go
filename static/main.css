@@ -881,10 +881,11 @@ body { font-variant-numeric: tabular-nums; }
 .row-actions .btn { min-height: 36px; min-width: 36px; }
 .transactions-table { table-layout: fixed; }
 .transactions-table th:first-child { width: 96px !important; }
-.transactions-table th:nth-child(3), .transactions-table th:nth-child(4) { width: 125px; }
+.transactions-table th:nth-child(4), .transactions-table th:nth-child(5) { width: 125px; }
+.transactions-table th.tx-account-heading { width: 22%; }
 .transactions-table td { vertical-align: top; padding-block: 12px; }
 .tx-description { font-weight: 500; overflow-wrap: anywhere; }
-.tx-account { display: block; font-size: 13px; color: var(--accent-text); text-decoration: none; margin-top: 3px; overflow-wrap: anywhere; }
+.tx-account { display: inline; font-size: 13px; color: var(--accent-text); text-decoration: none; overflow-wrap: anywhere; }
 .tx-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .tx-tags:empty { display: none; }
 .tag { font-size: 12px; }
@@ -948,3 +949,33 @@ body { font-variant-numeric: tabular-nums; }
 .danger-zone { overflow: hidden; border-color: var(--red); }
 .danger-zone-heading { padding: 14px 16px; border-bottom: 1px solid var(--red); font-size: 14px; font-weight: 600; background: var(--red-subtle); color: var(--red); }
 [data-theme="dark"] .btn-danger:hover { background: rgba(225,70,70,0.28); }
+
+/* Account overview: the balance leads, movements belong to the selected period. */
+.account-breadcrumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; color: var(--text-secondary); font-size: 13px; }
+.account-breadcrumbs a { color: inherit; text-decoration: none; }
+.account-breadcrumbs a:hover { text-decoration: underline; }
+.account-stats { grid-template-columns: 1.5fr 1fr 1fr; }
+.account-stats .stat-balance .stat-value { font-size: 30px; color: var(--text-primary); }
+.account-stats .stat-value { font-size: 20px; }
+.transactions-heading { padding: 16px 12px 4px; display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
+.transactions-heading h2 { font-size: 16px; }
+.transactions-heading > span { font-size: 12px; }
+.period-navigation { display: flex; gap: 10px; align-items: center; }
+.period-navigation[hidden] { display: none; }
+#period-caption { min-width: 140px; text-align: center; font-weight: 500; }
+.transactions-table { min-width: 700px; }
+.transactions-table .tx-tags .tag { background: var(--bg-app); color: var(--text-secondary); font-weight: 400; }
+.tx-cell-account { color: var(--text-secondary); }
+.tx-cell-account .tx-account { color: inherit; }
+.tx-cell-account .tx-account:hover { color: var(--accent-text); text-decoration: underline; }
+.transaction-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+.transaction-kinds [aria-pressed="true"] { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent-text); }
+@media (max-width: 1100px) {
+  .account-stats { grid-template-columns: 1fr 1fr; }
+  .account-stats .stat-balance { grid-column: 1 / -1; }
+}
+@media (max-width: 640px) {
+  .transactions-table { min-width: 0; }
+  .transactions-table tbody tr td.tx-cell-account { grid-row: 3; }
+  .account-stats .stat-balance .stat-value { font-size: 28px; }
+}

@@ -286,6 +286,23 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 	data := h.pageData(userID, "transactions")
 	data["Title"] = account.Name
 	data["Account"] = &account
+	var accountPath []*models.Account
+	seenParents := map[int64]bool{account.ID: true}
+	for parentID := account.ParentID; parentID != nil; {
+		parent := accountsByID[*parentID]
+		if parent == nil || seenParents[parent.ID] {
+			break
+		}
+		seenParents[parent.ID] = true
+		if parent.AccountType != models.AccountTypeRoot {
+			accountPath = append(accountPath, parent)
+		}
+		parentID = parent.ParentID
+	}
+	for i, j := 0, len(accountPath)-1; i < j; i, j = i+1, j-1 {
+		accountPath[i], accountPath[j] = accountPath[j], accountPath[i]
+	}
+	data["AccountPath"] = accountPath
 	data["Transactions"] = transactions
 	data["Accounts"] = accounts
 	data["Commodities"] = commodities

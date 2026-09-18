@@ -1,7 +1,15 @@
 {{define "finance_transactions.html"}}
 {{template "header" .}}
 <script src="/static/transaction-rates.js"></script>
+<script src="/static/transaction-period.js"></script>
+<script src="/static/transaction-kind.js"></script>
 
+{{if .AccountPath}}
+<nav class="account-breadcrumbs" aria-label="Путь к счёту">
+  <a href="/finance/">Счета</a>
+  {{range .AccountPath}}<span aria-hidden="true">/</span><a href="/finance/account/{{.ID}}">{{.Name}}</a>{{end}}
+</nav>
+{{end}}
 <!-- Topbar -->
 <div class="topbar">
   {{template "mobile_menu_btn" .}}
@@ -72,12 +80,17 @@
       <option value="{{.Value}}">{{.Label}}</option>
       {{end}}
     </select>
-    <span id="period-hint" class="text-muted" style="font-size:12px;"></span>
+    <div class="period-navigation" id="period-navigation" hidden>
+      <button type="button" class="btn btn-ghost" onclick="shiftPeriod(-1)" aria-label="Предыдущий период">←</button>
+      <span id="period-caption" aria-live="polite"></span>
+      <button type="button" class="btn btn-ghost" onclick="shiftPeriod(1)" aria-label="Следующий период">→</button>
+    </div>
+    <span id="period-hint" class="text-muted" style="font-size:12px;">За всё время</span>
   </div>
 
   <!-- Stats bar -->
-  <div class="stats-bar">
-    <div class="stat-cell">
+  <div class="stats-bar account-stats">
+    <div class="stat-cell stat-balance">
       <div class="stat-label">Текущий остаток</div>
       {{range .Account.GetBalances}}
       <div class="stat-value {{if gt .Amount 0.0}}text-green{{else if lt .Amount 0.0}}text-red{{end}}">
@@ -96,17 +109,14 @@
       <div class="stat-value text-red" id="stat-expense">{{formatMoney .TotalExpense}}</div>
       <div class="stat-delta" id="stat-expense-count">{{.ExpenseCount}} транз.</div>
     </div>
-    <div class="stat-cell">
-      <div class="stat-label">Транзакций</div>
-      <div class="stat-value" id="stat-total">{{.TotalCount}}</div>
-      <div class="stat-delta text-muted">за период</div>
-    </div>
+
   </div>
 </div>
 {{end}}
 
 <!-- Transactions table -->
 <div class="card" style="overflow:hidden;">
+  <div class="transactions-heading"><h2>Операции</h2><span class="text-muted"><span id="stat-total">{{.TotalCount}}</span> за выбранный период</span></div>
   <!-- Table toolbar -->
   <div style="padding:10px 12px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
     <div class="sort-tabs">
@@ -127,6 +137,7 @@
         <tr>
           <th style="width:90px;">Дата</th>
           <th>Описание</th>
+          <th class="tx-account-heading">Второй счёт</th>
           <th class="right">Сумма, {{.Account.Currency}}</th>
           <th class="right">Остаток, {{.Account.Currency}}</th>
           <th style="width:68px;"><span class="sr-only">Действия</span></th>
@@ -160,44 +171,42 @@
 var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
 var currentSortOrder = '{{.SortOrder}}';
 var currentPeriod    = 'all';
-var currentMonth     = '';
+var currentMonth = TransactionPeriod.monthKey(new Date());
 
-// ── Period ────────────────────────────────────────────────────────────────
 function setPeriod(p) {
   currentPeriod = p;
-  document.querySelectorAll('#period-tabs .sort-tab').forEach(function(b) {
-    b.classList.toggle('active', b.dataset.period === p);
-  });
   var picker = document.getElementById('month-picker');
-  var hint   = document.getElementById('period-hint');
-  picker.style.display = (p === 'custom') ? '' : 'none';
-  var hints = { month:'последние 30 дней', quarter:'последние 3 месяца', year:'последние 12 месяцев', all:'', custom:'' };
-  hint.textContent = hints[p] || '';
+  picker.style.display = p === 'custom' ? '' : 'none';
+  if (p === 'custom' && picker.value) currentMonth = picker.value;
+  updatePeriod();
+}
+function setCustomMonth(val) { currentMonth = val; updatePeriod(); }
+function shiftPeriod(direction) {
+  var step = currentPeriod === 'year' ? 12 : currentPeriod === 'quarter' ? 3 : 1;
+  currentMonth = TransactionPeriod.shiftMonth(currentMonth, direction * step);
+  if (currentPeriod === 'custom') currentPeriod = 'month';
+  document.getElementById('month-picker').style.display = 'none';
+  updatePeriod();
+}
+function updatePeriod() {
+  document.querySelectorAll('#period-tabs .sort-tab').forEach(function(button) {
+    button.classList.toggle('active', button.dataset.period === currentPeriod);
+    button.setAttribute('aria-pressed', String(button.dataset.period === currentPeriod));
+  });
+  var range = TransactionPeriod.bounds(currentPeriod, currentMonth);
+  document.getElementById('period-navigation').hidden = currentPeriod === 'all';
+  document.getElementById('period-caption').textContent = range.label;
+  document.getElementById('period-hint').textContent = range.hint;
   filterByPeriod();
 }
-
-function setCustomMonth(val) {
-  currentMonth = val;
-  filterByPeriod();
-}
-
 function filterByPeriod() {
-  var now = new Date();
-  var from = null;
-  if (currentPeriod === 'month')   { from = new Date(now); from.setMonth(now.getMonth()-1); }
-  if (currentPeriod === 'quarter') { from = new Date(now); from.setMonth(now.getMonth()-3); }
-  if (currentPeriod === 'year')    { from = new Date(now); from.setFullYear(now.getFullYear()-1); }
-
-  var rows = document.querySelectorAll('#transactions-tbody .tx-row');
-  rows.forEach(function(row) {
-    var d = new Date(row.dataset.date);
-    var query = document.getElementById('tx-search').value.toLowerCase();
-    var show = !query || row.dataset.desc.toLowerCase().includes(query);
-    if (from && currentPeriod !== 'custom') show = show && d >= from;
-    if (currentPeriod === 'custom' && currentMonth) show = show && row.dataset.date.startsWith(currentMonth);
+  var range = TransactionPeriod.bounds(currentPeriod, currentMonth);
+  var query = document.getElementById('tx-search').value.toLocaleLowerCase('ru');
+  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
+    var show = (!query || row.dataset.desc.toLocaleLowerCase('ru').includes(query)) &&
+      (!range.from || (row.dataset.date >= range.from && row.dataset.date < range.to));
     row.style.display = show ? '' : 'none';
   });
-
   recalcStats();
 }
 
@@ -249,6 +258,7 @@ function openTransactionDrawer(txId, accountId) {
     .then(function(html) {
       body.innerHTML = html;
       htmx.process(body);
+      TransactionKind.attach(document.getElementById('modal-transaction-form'));
       TransactionRates.attach(document.getElementById('modal-transaction-form'));
       var inp = document.getElementById('modal-description');
       if (inp) inp.focus();

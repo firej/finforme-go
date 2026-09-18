@@ -33,7 +33,7 @@ clean: ## Очистить собранные файлы
 test: ## Запустить тесты
 	@echo "$(GREEN)Запуск тестов...$(NC)"
 	@go test -v ./...
-	@node --test tests/transaction-rates.test.cjs
+	@node --test tests/*.test.cjs
 
 deps: ## Установить зависимости
 	@echo "$(GREEN)Установка зависимостей...$(NC)"

@@ -6,8 +6,10 @@
   <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
   <td class="tx-cell-desc">
     <div class="tx-description">{{.description}}</div>
-    <a class="tx-account" href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()">{{.account_name}}</a>
     <div class="tx-tags">{{range .tags}}{{if .}}<span class="tag">{{.}}</span>{{end}}{{end}}</div>
+  </td>
+  <td class="tx-cell-account" data-mlabel="Счёт">
+    <a class="tx-account" href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()">{{.account_name}}</a>
   </td>
   <td class="mono right tx-amount" data-mlabel="Сумма">
     {{if .plus_balance_changing}}<span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>{{end}}

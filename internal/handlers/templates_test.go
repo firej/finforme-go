@@ -57,7 +57,7 @@ func buildTestTemplates(t *testing.T) *template.Template {
 			return 0
 		},
 		"formatMoney":      formatMoney,
-		"formatMoneyShort": formatMoney,
+		"formatMoneyShort": formatMoneyShort,
 		"slice": func(s string, i, j int) string {
 			r := []rune(s)
 			if i < 0 {

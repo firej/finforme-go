@@ -9,6 +9,14 @@
   {{end}}
   <input type="hidden" name="account_id" value="{{.AccountID}}">
 
+  {{if not .MetadataOnly}}
+  <div class="transaction-kinds" aria-label="Тип операции">
+    <button type="button" class="btn btn-ghost" data-transaction-kind="expense">Расход</button>
+    <button type="button" class="btn btn-ghost" data-transaction-kind="income">Доход</button>
+    <button type="button" class="btn btn-ghost" data-transaction-kind="transfer">Перевод</button>
+    <button type="button" class="btn btn-ghost" data-transaction-kind="other">Другая</button>
+  </div>
+  {{end}}
   <!-- Date + Amounts -->
   <div class="form-row">
     <div class="form-group">
@@ -45,12 +53,14 @@
     <div class="form-group">
       <label class="form-label" for="modal-credit_account">Счёт списания</label>
       <select class="form-select" id="modal-credit_account" name="credit_account" required>
+        <option value="">Выберите счёт</option>
         {{$creditAccountID := .AccountID}}
         {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
         {{if eq .Placeholder 0}}
         {{$c := index $.CommodityMap .CommodityID}}
         <option value="{{.ID}}"
+                data-account-type="{{.AccountType}}"
                 data-commodity-id="{{.CommodityID}}"
                 data-commodity-sign="{{if $c}}{{$c.Sign}}{{end}}"
                 {{if eq .ID $creditAccountID}}selected{{end}}>
@@ -63,12 +73,14 @@
     <div class="form-group">
       <label class="form-label" for="modal-debit_account">Счёт зачисления</label>
       <select class="form-select" id="modal-debit_account" name="debit_account" required>
+        <option value="">Выберите счёт</option>
         {{$debitAccountID := 0}}
         {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
         {{range .Accounts}}
         {{if eq .Placeholder 0}}
         {{$c := index $.CommodityMap .CommodityID}}
         <option value="{{.ID}}"
+                data-account-type="{{.AccountType}}"
                 data-commodity-id="{{.CommodityID}}"
                 data-commodity-sign="{{if $c}}{{$c.Sign}}{{end}}"
                 {{if eq .ID $debitAccountID}}selected{{end}}>

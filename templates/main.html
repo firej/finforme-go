@@ -409,7 +409,7 @@ document.addEventListener('keydown', function(e) {
     <span class="stree-name">{{.Name}}</span>
     <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
     {{range .GetBalances}}{{if ne .Amount 0.0}}
-      <span style="color:{{if gt .Amount 0.0}}var(--sidebar-positive){{else}}var(--sidebar-negative){{end}}">{{formatMoney .Amount}} {{.Currency}}</span>
+      <span title="{{formatMoney .Amount}} {{.Currency}}" style="color:{{if gt .Amount 0.0}}var(--sidebar-positive){{else}}var(--sidebar-negative){{end}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
     {{end}}{{end}}
     </span>
   </a>

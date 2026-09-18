@@ -21,3 +21,26 @@ func formatMoney(value float64) string {
 	}
 	return whole + "," + parts[1]
 }
+
+// formatMoneyShort keeps sidebar balances compact; the exact amount is in the tooltip.
+func formatMoneyShort(value float64) string {
+	amount := math.Abs(value)
+	sign := ""
+	if value < 0 && amount >= 0.5 {
+		sign = "−"
+	}
+	divisor, suffix := 1.0, ""
+	switch {
+	case amount >= 999_950_000:
+		divisor, suffix = 1_000_000_000, " млрд"
+	case amount >= 999_950:
+		divisor, suffix = 1_000_000, " млн"
+	case amount >= 999.5:
+		divisor, suffix = 1_000, " тыс."
+	default:
+		return sign + fmt.Sprintf("%.0f", math.Round(amount))
+	}
+	rounded := math.Round(amount/divisor*10) / 10
+	number := strings.TrimSuffix(fmt.Sprintf("%.1f", rounded), ".0")
+	return sign + strings.ReplaceAll(number, ".", ",") + suffix
+}
