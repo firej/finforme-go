@@ -19,8 +19,8 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap"></noscript>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"></noscript>
   <link rel="stylesheet" href="/static/main.css">
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
@@ -67,6 +67,21 @@
         <button class="sidebar-add-btn" onclick="openAccountDrawer(0)" title="Добавить счёт">+</button>
       </div>
     </div>
+    <div class="sidebar-search">
+      <input type="search" aria-label="Найти счёт" placeholder="Найти счёт…" oninput="filterSidebarAccounts(this.value)">
+    </div>
+    <script>
+    function filterSidebarAccounts(query) {
+      var tree = document.getElementById('sidebar-accounts-tree');
+      var needle = query.trim().toLocaleLowerCase('ru');
+      tree.classList.toggle('is-searching', Boolean(needle));
+      tree.querySelectorAll('.stree-item').forEach(function(item) {
+        var names = item.querySelectorAll('.stree-name');
+        var matches = Array.from(names).some(function(name) { return name.textContent.toLocaleLowerCase('ru').includes(needle); });
+        item.hidden = !matches;
+      });
+    }
+    </script>
     <div class="sidebar-accounts" id="sidebar-accounts-tree">
       {{if .AccountTree}}
         {{range .AccountTree}}
@@ -394,7 +409,7 @@ document.addEventListener('keydown', function(e) {
     <span class="stree-name">{{.Name}}</span>
     <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
     {{range .GetBalances}}{{if ne .Amount 0.0}}
-      <span style="color:{{if gt .Amount 0.0}}var(--green){{else}}var(--red){{end}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
+      <span style="color:{{if gt .Amount 0.0}}var(--sidebar-positive){{else}}var(--sidebar-negative){{end}}">{{formatMoney .Amount}} {{.Currency}}</span>
     {{end}}{{end}}
     </span>
   </a>

@@ -36,7 +36,7 @@
   .csvi-amt.pos { color: var(--green); }
   .csvi-badge {
     display: inline-block; padding: 1px 6px; border-radius: 99px;
-    font-size: 11px; font-weight: 600;
+    font-size:12px; font-weight: 600;
   }
   .csvi-badge.dup { background: var(--amber-subtle); color: var(--amber); }
   .csvi-badge.new { background: var(--green-subtle); color: var(--green); }
@@ -405,7 +405,7 @@
       html += '</tr>';
     }
     if (parsedRows.length > limit) {
-      html += '<tr><td colspan="' + nCols + '" style="text-align:center;color:var(--text-muted);font-size:11px;">… ещё ' + (parsedRows.length - limit) + ' строк</td></tr>';
+      html += '<tr><td colspan="' + nCols + '" style="text-align:center;color:var(--text-muted);font-size:12px;">… ещё ' + (parsedRows.length - limit) + ' строк</td></tr>';
     }
     html += '</tbody>';
 

@@ -8,68 +8,55 @@
 
 <div style="display:flex;flex-direction:column;gap:14px;">
 
-  <div class="card" style="padding:16px 18px;overflow-x:auto;">
-    <div style="font-weight:600;margin-bottom:8px;">Итоги по валютам</div>
-    <p class="form-hint">Каждая валюта считается отдельно. Скрытые счета включены в итоги.</p>
-    {{if .CurrencyTotals}}
-    <table class="data-table" style="min-width:660px;">
-      <thead><tr><th>Валюта</th><th>Активы</th><th>Обязательства</th><th>Чистый капитал</th><th>Доходы (всего)</th><th>Расходы (всего)</th></tr></thead>
-      <tbody>{{range .CurrencyTotals}}
-        <tr data-currency="{{.Currency}}">
-          <td><strong>{{.Currency}}</strong></td>
-          <td class="mono">{{formatMoney .TotalAssets}}</td>
-          <td class="mono">{{formatMoney .TotalLiabilities}}</td>
-          <td class="mono" style="color:{{if ge .NetWorth 0.0}}var(--green){{else}}var(--red){{end}};">{{formatMoney .NetWorth}}</td>
-          <td class="mono">{{formatMoney .TotalIncome}}</td><td class="mono">{{formatMoney .TotalExpense}}</td>
-        </tr>
-      {{end}}</tbody>
-    </table>
-    {{else}}<p class="form-hint">Пока нет счетов для расчёта итогов.</p>{{end}}
-  </div>
-
-  <!-- Top accounts + Recent transactions -->
-  <div class="dash-grid-2" style="display:grid;grid-template-columns:1fr 1.6fr;gap:12px;align-items:start;">
-
-    <!-- Top accounts -->
-    <div class="card" style="padding:16px 18px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Активные счета</div>
-      {{if .TopAccounts}}
-        {{range .TopAccounts}}
-        <a href="/finance/account/{{.ID}}"
-           style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border-light);text-decoration:none;color:inherit;cursor:pointer;">
-          <span class="account-dot dot-{{.AccountType}}" style="width:8px;height:8px;flex-shrink:0;"></span>
-          <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Name}}</span>
-          <span style="font-family:var(--font-mono);font-size:12px;color:{{if ge .Balance 0.0}}var(--green){{else}}var(--red){{end}};font-weight:500;flex-shrink:0;">
-            {{formatMoneyShort .Balance}} {{.Currency}}
-          </span>
+  <p class="form-hint">Каждая валюта считается отдельно. Скрытые счета включены в итоги.</p>
+  {{if .CurrencyTotals}}<div class="currency-selector" aria-label="Валюта итогов">
+    {{range $i, $total := .CurrencyTotals}}<button type="button" class="btn btn-ghost" data-currency-choice="{{$total.Currency}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}" onclick="selectDashboardCurrency(this.dataset.currencyChoice)">{{$total.Currency}}</button>{{end}}
+  </div>{{end}}
+  {{range .CurrencyTotals}}
+  <section class="card currency-summary" data-currency="{{.Currency}}">
+    <div>Чистый капитал · {{.Currency}}</div>
+    <div class="net-worth">{{formatMoney .NetWorth}} <span class="stat-currency">{{.Currency}}</span></div>
+    <dl class="currency-metrics">
+      <div><dt>Активы</dt><dd>{{formatMoney .TotalAssets}}</dd></div>
+      <div><dt>Обязательства</dt><dd>{{formatMoney .TotalLiabilities}}</dd></div>
+      <div><dt>Доходы за всё время</dt><dd class="text-green">{{formatMoney .TotalIncome}}</dd></div>
+      <div><dt>Расходы за всё время</dt><dd>{{formatMoney .TotalExpense}}</dd></div>
+    </dl>
+  </section>
+  {{else}}<p class="form-hint">Пока нет счетов для расчёта итогов.</p>{{end}}
+  <div class="dashboard-stack">
+    <section class="card" style="padding:20px;">
+      <h2 style="font-size:16px;margin-bottom:16px;">Активные счета</h2>
+      <div class="dashboard-accounts">
+      {{range .TopAccounts}}
+        <a class="dashboard-account" href="/finance/account/{{.ID}}">
+          <span>{{.Name}}</span><strong>{{formatMoney .Balance}} <span class="stat-currency">{{.Currency}}</span></strong>
         </a>
-        {{end}}
-      {{else}}
-        <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0;">Нет данных</div>
-      {{end}}
-    </div>
+      {{else}}<p class="form-hint">Нет данных</p>{{end}}
+      </div>
+    </section>
 
     <!-- Recent transactions -->
     <div class="card" style="padding:16px 18px;">
-      <div style="font-weight:600;font-size:13px;margin-bottom:12px;">Последние транзакции</div>
+      <div style="font-weight:600;font-size:16px;margin-bottom:12px;">Последние транзакции</div>
       {{if .RecentTransactions}}
         <table style="width:100%;border-collapse:collapse;">
           <tbody>
             {{range .RecentTransactions}}
             <tr style="border-bottom:1px solid var(--border-light);">
               <td style="padding:7px 8px 7px 0;white-space:nowrap;width:1%;">
-                <span style="font-size:11px;color:var(--text-muted);">{{formatDateGroup .PostDate}}</span>
+                <span style="font-size:13px;color:var(--text-muted);">{{formatDateGroup .PostDate}}</span>
               </td>
               <td style="padding:7px 4px;width:100%;">
                 <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
                   <span class="account-dot dot-{{.AccountType}}" style="width:6px;height:6px;flex-shrink:0;"></span>
-                  <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Description}}</span>
+                  <span style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{.Description}}</span>
                 </div>
-                <div style="font-size:10px;color:var(--text-muted);margin-top:1px;padding-left:11px;">{{.AccountName}}</div>
+                <div style="font-size:13px;color:var(--text-muted);margin-top:1px;padding-left:11px;">{{.AccountName}}</div>
               </td>
               <td style="padding:7px 0 7px 8px;text-align:right;white-space:nowrap;">
-                <span style="font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--text-primary);">
-                  {{formatMoneyShort .Amount}} {{.Currency}}
+                <span style="font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);">
+                  {{if eq .AccountType "EXPENSE"}}−{{else}}+{{end}}{{formatMoney .Amount}} {{.Currency}}
                 </span>
               </td>
             </tr>
@@ -77,7 +64,7 @@
           </tbody>
         </table>
       {{else}}
-        <div style="color:var(--text-muted);font-size:12px;text-align:center;padding:16px 0;">Нет транзакций</div>
+        <div style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px 0;">Нет транзакций</div>
       {{end}}
     </div>
 
@@ -88,5 +75,13 @@
 
 </div>
 
+<script>
+function selectDashboardCurrency(currency) {
+  document.querySelectorAll('.currency-summary').forEach(function(card) { card.hidden = card.dataset.currency !== currency; });
+  document.querySelectorAll('[data-currency-choice]').forEach(function(button) { button.setAttribute('aria-pressed', String(button.dataset.currencyChoice === currency)); });
+}
+var firstCurrency = document.querySelector('[data-currency-choice]');
+if (firstCurrency) selectDashboardCurrency(firstCurrency.dataset.currencyChoice);
+</script>
 {{template "footer" .}}
 {{end}}

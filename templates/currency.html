@@ -29,36 +29,36 @@
           </div>
           <div>
             <div style="font-size:13px;font-weight:600;">{{.Code}}</div>
-            <div style="font-size:11px;color:var(--text-muted);">{{.Name}}</div>
+            <div style="font-size:12px;color:var(--text-muted);">{{.Name}}</div>
           </div>
         </div>
         <div style="text-align:right;">
           {{if or (eq .Code "USD/ARS") (eq .Code "RUB/ARS")}}
           <div style="font-size:17px;font-weight:700;font-family:var(--font-mono);">{{formatMoney .Rate}} <span style="font-size:12px;font-weight:400;color:var(--text-muted);">ARS</span></div>
           {{if ne .Change 0.0}}
-          <div style="font-size:11.5px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
+          <div style="font-size:12px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
             {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} ARS
           </div>
           {{else}}
-          <div style="font-size:11px;color:var(--text-muted);">— нет данных</div>
+          <div style="font-size:12px;color:var(--text-muted);">— нет данных</div>
           {{end}}
           {{else if eq .Code "BTC/USD"}}
           <div style="font-size:17px;font-weight:700;font-family:var(--font-mono);">{{formatMoney .Rate}} <span style="font-size:12px;font-weight:400;color:var(--text-muted);">$</span></div>
           {{if ne .Change 0.0}}
-          <div style="font-size:11.5px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
+          <div style="font-size:12px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
             {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} $
           </div>
           {{else}}
-          <div style="font-size:11px;color:var(--text-muted);">— нет данных</div>
+          <div style="font-size:12px;color:var(--text-muted);">— нет данных</div>
           {{end}}
           {{else}}
           <div style="font-size:17px;font-weight:700;font-family:var(--font-mono);">{{formatMoney .Rate}} <span style="font-size:12px;font-weight:400;color:var(--text-muted);">₽</span></div>
           {{if ne .Change 0.0}}
-          <div style="font-size:11.5px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
+          <div style="font-size:12px;font-weight:500;color:{{if gt .Change 0.0}}var(--green){{else}}var(--red){{end}};">
             {{if gt .Change 0.0}}▲ +{{formatMoney .Change}}{{else}}▼ {{formatMoney .Change}}{{end}} ₽
           </div>
           {{else}}
-          <div style="font-size:11px;color:var(--text-muted);">— нет данных</div>
+          <div style="font-size:12px;color:var(--text-muted);">— нет данных</div>
           {{end}}
           {{end}}
         </div>
@@ -70,7 +70,7 @@
       </div>
 
       <!-- Подвал -->
-      <div style="padding:8px 16px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
+      <div style="padding:8px 16px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);">
         <span>{{.Source}}</span>
         <span>{{.RateDate}}</span>
       </div>
@@ -96,7 +96,7 @@
   </div>
   {{end}}
 
-  <p style="font-size:11.5px;color:var(--text-muted);">
+  <p style="font-size:12px;color:var(--text-muted);">
     USD/RUB, EUR/RUB — официальный курс ЦБ РФ.<br>
     BTC/USD — курс биткоина (Coinbase).<br>
     USD/ARS — официальный курс BCRA или Blue Dollar Sell (источник указан на карточке).<br>

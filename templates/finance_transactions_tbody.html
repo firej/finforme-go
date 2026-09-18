@@ -1,27 +1,17 @@
 {{define "finance_transactions_tbody.html"}}
 {{range .Transactions}}
-<tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
+<tr class="tx-row" data-date="{{with .post_date_raw}}{{.Format "2006-01-02"}}{{else}}{{.post_date}}{{end}}" data-desc="{{.description}}"
     data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
     onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
   <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
-  <td class="tx-cell-desc" style="font-weight:450;">{{.description}}</td>
-  <td data-mlabel="Счёт">
-    <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
-       style="color:var(--accent-text);font-size:12px;text-decoration:none;">
-      {{.account_name}}
-    </a>
+  <td class="tx-cell-desc">
+    <div class="tx-description">{{.description}}</div>
+    <a class="tx-account" href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()">{{.account_name}}</a>
+    <div class="tx-tags">{{range .tags}}{{if .}}<span class="tag">{{.}}</span>{{end}}{{end}}</div>
   </td>
-  <td class="mono right" data-mlabel="Приход"
-      {{if not .plus_balance_changing}}data-empty="1"{{end}}>
-    {{if .plus_balance_changing}}
-      <span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>
-    {{end}}
-  </td>
-  <td class="mono right" data-mlabel="Расход"
-      {{if not .balance_changing}}data-empty="1"{{end}}>
-    {{if .balance_changing}}
-      <span class="amount-out">−{{formatMoney .balance_changing}}</span>
-    {{end}}
+  <td class="mono right tx-amount" data-mlabel="Сумма">
+    {{if .plus_balance_changing}}<span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>{{end}}
+    {{if .balance_changing}}<span class="amount-out">−{{formatMoney .balance_changing}}</span>{{end}}
   </td>
   <td class="mono right" data-mlabel="Баланс">
     {{if gt .account_balance 0.0}}
@@ -30,11 +20,6 @@
       <span class="bal-neg">{{formatMoney .account_balance}}</span>
     {{else}}
       <span class="bal-zero">{{formatMoney .account_balance}}</span>
-    {{end}}
-  </td>
-  <td data-mlabel="Теги" {{if not .tags}}data-empty="1"{{end}}>
-    {{range .tags}}
-      <span class="tag">{{.}}</span>
     {{end}}
   </td>
   <td onclick="event.stopPropagation()" data-empty="1">

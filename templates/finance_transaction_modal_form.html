@@ -39,20 +39,6 @@
 
   {{if .MetadataOnly}}{{template "transaction_readonly_splits" .}}{{end}}
 
-  <!-- Description -->
-  <div class="form-group">
-    <label class="form-label" for="modal-description">Описание</label>
-    <input class="form-input" type="text" id="modal-description" name="description"
-           autofocus required placeholder="Название транзакции..."
-           value="{{if .Transaction}}{{.Transaction.Description}}{{end}}">
-  </div>
-
-  <div class="form-group">
-    <label class="form-label" for="modal-comment">Комментарий</label>
-    <textarea class="form-input" id="modal-comment" name="comment" rows="3" maxlength="16000"
-              placeholder="Расчёты курсов, данные выписки и уточнения">{{if .Transaction}}{{.Transaction.Comment}}{{end}}</textarea>
-  </div>
-
   {{if not .MetadataOnly}}
   <!-- From / To accounts: контейнерные (placeholder) счета не доступны -->
   <div class="form-row">
@@ -96,6 +82,23 @@
 
   {{end}}
   {{if not .MetadataOnly}}{{template "transaction_rate_fields" .}}{{end}}
+  <!-- Description -->
+  <div class="form-group">
+    <label class="form-label" for="modal-description">Описание</label>
+    <input class="form-input" type="text" id="modal-description" name="description"
+           autofocus required placeholder="Название транзакции..."
+           value="{{if .Transaction}}{{.Transaction.Description}}{{end}}">
+  </div>
+
+
+  <details class="optional-field" {{if .Transaction}}{{if .Transaction.Comment}}open{{end}}{{end}}>
+    <summary>Комментарий</summary>
+  <div class="form-group">
+    <label class="form-label" for="modal-comment">Комментарий</label>
+    <textarea class="form-input" id="modal-comment" name="comment" rows="3" maxlength="16000"
+              placeholder="Расчёты курсов, данные выписки и уточнения">{{if .Transaction}}{{.Transaction.Comment}}{{end}}</textarea>
+  </div>
+  </details>
   <!-- Tags -->
   <div class="form-group">
     <label class="form-label" for="modal-tags">Теги</label>
@@ -108,7 +111,7 @@
   <div id="modal-result"></div>
 
   <!-- Footer buttons (inside drawer-footer via JS injection or just here) -->
-  <div style="display:flex;gap:8px;margin-top:8px;">
+  <div class="transaction-form-actions">
     <button type="submit" id="modal-submit-btn" class="btn btn-primary">Сохранить</button>
     <button type="button" class="btn btn-ghost" onclick="closeTransactionDrawer()">Отмена</button>
     {{if .Transaction}}

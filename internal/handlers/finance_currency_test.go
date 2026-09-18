@@ -113,7 +113,7 @@ func TestFinanceCurrencyDashboardAndTree(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	h.FinanceIndex(w, authRequest("GET", "/finance/", nil, authCookie(t, h, 2)))
-	if w.Code != 200 || !strings.Contains(w.Body.String(), "400.00 RUB") || !strings.Contains(w.Body.String(), "250.00 USD") {
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "400,00 RUB") || !strings.Contains(w.Body.String(), "250,00 USD") {
 		t.Fatalf("tree currencies missing: %d %s", w.Code, w.Body.String())
 	}
 	if os.Getenv("FINFORME_TEST_MYSQL_DSN") != "" {

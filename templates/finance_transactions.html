@@ -72,17 +72,17 @@
       <option value="{{.Value}}">{{.Label}}</option>
       {{end}}
     </select>
-    <span id="period-hint" class="text-muted" style="font-size:11px;"></span>
+    <span id="period-hint" class="text-muted" style="font-size:12px;"></span>
   </div>
 
   <!-- Stats bar -->
   <div class="stats-bar">
     <div class="stat-cell">
-      <div class="stat-label">Баланс</div>
+      <div class="stat-label">Текущий остаток</div>
       <div class="stat-value {{if gt .Account.Balance 0.0}}text-green{{else if lt .Account.Balance 0.0}}text-red{{end}}">
-        {{formatMoney .Account.Balance}}
+        {{formatMoney .Account.Balance}} <span class="stat-currency">{{.Account.Currency}}</span>
       </div>
-      <div class="stat-delta pos">↑ актуально</div>
+      <div class="stat-delta">за всё время</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">Приход</div>
@@ -120,79 +120,18 @@
 
   <!-- Table -->
   <div style="overflow-x:auto;">
-    <table class="data-table" id="transactions-table">
+    <table class="data-table transactions-table" id="transactions-table">
       <thead>
         <tr>
           <th style="width:90px;">Дата</th>
           <th>Описание</th>
-          <th>Счёт-контрагент</th>
-          <th class="right" style="width:120px;">Приход</th>
-          <th class="right" style="width:120px;">Расход</th>
-          <th class="right" style="width:130px;">Баланс</th>
-          <th style="width:100px;">Теги</th>
-          <th style="width:80px;"></th>
+          <th class="right">Сумма, {{.Account.Currency}}</th>
+          <th class="right">Остаток, {{.Account.Currency}}</th>
+          <th style="width:68px;"><span class="sr-only">Действия</span></th>
         </tr>
       </thead>
       <tbody id="transactions-tbody">
-        {{range .Transactions}}
-          <tr class="tx-row" data-date="{{.post_date}}" data-desc="{{.description}}"
-              data-income="{{.plus_balance_changing}}" data-expense="{{.balance_changing}}"
-              onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
-            <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
-            <td class="tx-cell-desc" style="font-weight:450;">{{.description}}</td>
-            <td data-mlabel="Счёт">
-              <a href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()"
-                 style="color:var(--accent-text);font-size:12px;text-decoration:none;">
-                {{.account_name}}
-              </a>
-            </td>
-            <td class="mono right" data-mlabel="Приход"
-                {{if not .plus_balance_changing}}data-empty="1"{{end}}>
-              {{if .plus_balance_changing}}
-                <span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>
-              {{end}}
-            </td>
-            <td class="mono right" data-mlabel="Расход"
-                {{if not .balance_changing}}data-empty="1"{{end}}>
-              {{if .balance_changing}}
-                <span class="amount-out">−{{formatMoney .balance_changing}}</span>
-              {{end}}
-            </td>
-            <td class="mono right" data-mlabel="Баланс">
-              {{if gt .account_balance 0.0}}
-                <span class="bal-pos">{{formatMoney .account_balance}}</span>
-              {{else if lt .account_balance 0.0}}
-                <span class="bal-neg">{{formatMoney .account_balance}}</span>
-              {{else}}
-                <span class="bal-zero">{{formatMoney .account_balance}}</span>
-              {{end}}
-            </td>
-            <td data-mlabel="Теги" {{if not .tags}}data-empty="1"{{end}}>
-              {{range .tags}}
-                <span class="tag">{{.}}</span>
-              {{end}}
-            </td>
-            <td onclick="event.stopPropagation()" data-empty="1">
-              <div class="row-actions">
-                <button class="btn btn-ghost btn-sm btn-icon"
-                  onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})" title="Редактировать">
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M11 2l3 3-8 8H3v-3l8-8z"/>
-                  </svg>
-                </button>
-                <button class="btn btn-danger btn-sm btn-icon"
-                  hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
-                  hx-confirm="Удалить транзакцию?"
-                  hx-on::after-request="if(event.detail.successful){const r=this.closest('tr');r.style.transition='all 0.3s';r.style.opacity='0';r.style.transform='translateX(-20px)';setTimeout(()=>r.remove(),300);}"
-                  title="Удалить">
-                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>
-        {{end}}
+        {{template "finance_transactions_tbody.html" .}}
       </tbody>
     </table>
   </div>
@@ -250,9 +189,10 @@ function filterByPeriod() {
   var rows = document.querySelectorAll('#transactions-tbody .tx-row');
   rows.forEach(function(row) {
     var d = new Date(row.dataset.date);
-    var show = true;
-    if (from && currentPeriod !== 'custom') show = d >= from;
-    if (currentPeriod === 'custom' && currentMonth) show = row.dataset.date.startsWith(currentMonth);
+    var query = document.getElementById('tx-search').value.toLowerCase();
+    var show = !query || row.dataset.desc.toLowerCase().includes(query);
+    if (from && currentPeriod !== 'custom') show = show && d >= from;
+    if (currentPeriod === 'custom' && currentMonth) show = show && row.dataset.date.startsWith(currentMonth);
     row.style.display = show ? '' : 'none';
   });
 
@@ -270,7 +210,7 @@ function recalcStats() {
     if (inc > 0) { income += inc; incomeCount++; }
     if (exp > 0) { expense += exp; expenseCount++; }
   });
-  var fmt = function(v) { return v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
+  var fmt = function(v) { return new Intl.NumberFormat('ru-RU', {minimumFractionDigits:2, maximumFractionDigits:2}).format(v); };
   var el = function(id) { return document.getElementById(id); };
   if (el('stat-income'))       el('stat-income').textContent       = fmt(income);
   if (el('stat-expense'))      el('stat-expense').textContent      = fmt(expense);
@@ -280,14 +220,7 @@ function recalcStats() {
 }
 
 // ── Search ────────────────────────────────────────────────────────────────
-function filterTransactions(q) {
-  q = q.toLowerCase();
-  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
-    var match = !q || row.dataset.desc.toLowerCase().includes(q);
-    row.style.display = match ? '' : 'none';
-  });
-  recalcStats();
-}
+function filterTransactions() { filterByPeriod(); }
 
 // ── Drawer ────────────────────────────────────────────────────────────────
 function openTransactionDrawer(txId, accountId) {
@@ -367,16 +300,7 @@ function submitTransactionForm(event) {
 
 // ── Refresh table ─────────────────────────────────────────────────────────
 function refreshTransactionsTable() {
-  var tbody = document.getElementById('transactions-tbody');
-  tbody.style.opacity = '0.5';
-  fetch('/api/v1/finance/transaction/table?account_id=' + currentAccountId + '&sort=' + currentSortOrder)
-    .then(function(r) { return r.text(); })
-    .then(function(html) {
-      tbody.innerHTML = html;
-      tbody.style.opacity = '1';
-      htmx.process(tbody);
-    })
-    .catch(function() { tbody.style.opacity = '1'; });
+  window.location.reload();
 }
 
 document.addEventListener('keydown', function(e) {

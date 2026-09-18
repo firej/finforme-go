@@ -13,7 +13,6 @@ import (
 	"database/sql"
 	"fmt"
 	"html/template"
-	"math"
 	"strings"
 	"testing"
 	"time"
@@ -57,27 +56,8 @@ func buildTestTemplates(t *testing.T) *template.Template {
 			}
 			return 0
 		},
-		"formatMoney": func(v float64) string {
-			if math.Abs(v) < 0.005 {
-				return "0.00"
-			}
-			return fmt.Sprintf("%.2f", v)
-		},
-		"formatMoneyShort": func(v float64) string {
-			abs := math.Abs(v)
-			sign := ""
-			if v < 0 {
-				sign = "-"
-			}
-			switch {
-			case abs >= 1_000_000:
-				return fmt.Sprintf("%s%.1fM", sign, abs/1_000_000)
-			case abs >= 1_000:
-				return fmt.Sprintf("%s%.1fK", sign, abs/1_000)
-			default:
-				return fmt.Sprintf("%s%.0f", sign, abs)
-			}
-		},
+		"formatMoney":      formatMoney,
+		"formatMoneyShort": formatMoney,
 		"slice": func(s string, i, j int) string {
 			r := []rune(s)
 			if i < 0 {

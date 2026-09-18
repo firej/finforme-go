@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"html/template"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -53,12 +52,7 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 			}
 			return result
 		},
-		"formatMoney": func(value float64) string {
-			if math.Abs(value) < 0.005 {
-				return "0.00"
-			}
-			return fmt.Sprintf("%.2f", value)
-		},
+		"formatMoney": formatMoney,
 		"derefInt64": func(ptr *int64) int64 {
 			if ptr != nil {
 				return *ptr
@@ -82,21 +76,7 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 			}
 			return string(r[i:j])
 		},
-		"formatMoneyShort": func(value float64) string {
-			abs := math.Abs(value)
-			sign := ""
-			if value < 0 {
-				sign = "-"
-			}
-			switch {
-			case abs >= 1_000_000:
-				return fmt.Sprintf("%s%.1fM", sign, abs/1_000_000)
-			case abs >= 1_000:
-				return fmt.Sprintf("%s%.1fK", sign, abs/1_000)
-			default:
-				return fmt.Sprintf("%s%.0f", sign, abs)
-			}
-		},
+		"formatMoneyShort": formatMoney,
 		"formatDateGroup": func(dateStr string) string {
 			// dateStr ожидается в формате "2006-01-02"
 			t, err := time.Parse("2006-01-02", dateStr)

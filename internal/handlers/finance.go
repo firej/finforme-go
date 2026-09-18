@@ -211,7 +211,17 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 
 	// Получаем транзакции счета с учетом сортировки
 	transactions := h.getAccountTransactions(userID, accountID, sortOrder)
-	accounts, _ := h.getAccounts(userID)
+	accounts, err := h.getAccountsWithBalance(userID)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить баланс", http.StatusInternalServerError)
+		return
+	}
+	for _, a := range accounts {
+		if a.ID == accountID {
+			account.Balance = a.Balance
+			account.Currency = a.Currency
+		}
+	}
 	commodities, _ := h.getCommodities()
 
 	// Определяем противоположный порядок сортировки для ссылки
@@ -235,8 +245,8 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 			totalExpense += v
 			expenseCount++
 		}
-		if d, ok := tx["post_date"].(string); ok && len(d) >= 7 {
-			monthsSet[d[:7]] = true
+		if d, ok := tx["post_date_raw"].(time.Time); ok {
+			monthsSet[d.Format("2006-01")] = true
 		}
 	}
 
