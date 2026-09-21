@@ -773,16 +773,50 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 
 // renderDashboard — общая логика рендеринга дашборда (используется Index и Dashboard)
 func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID int64) {
+	now := time.Now()
+	month, err := reportMonth(r.URL.Query().Get("month"), now)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	report, err := h.dashboardMonthlyReport(userID, month, now, r.URL.Query())
+	if err != nil {
+		http.Error(w, "Не удалось загрузить отчёт", http.StatusInternalServerError)
+		return
+	}
+	holdings, err := h.capitalHoldings(r.Context(), userID, now)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить остатки", http.StatusInternalServerError)
+		return
+	}
+	quotes, err := h.capitalQuotes(r.Context(), now)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить курсы", http.StatusInternalServerError)
+		return
+	}
+	capital := buildDashboardCapital(holdings, quotes, r.URL.Query().Get("currency"), now, r.URL.Query())
+	historyQuery := r.URL.Query()
+	for _, choice := range capital.Rates {
+		if historyQuery.Get(choice.Name) != "" {
+			continue
+		}
+		for _, option := range choice.Options {
+			if option.Selected {
+				historyQuery.Set(choice.Name, option.Value)
+			}
+		}
+	}
+	history, err := h.dashboardCapitalHistory(r.Context(), userID, now, capital.Currency, month.Format("2006-01"), historyQuery)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить динамику капитала", http.StatusInternalServerError)
+		return
+	}
 	data := h.pageData(userID, "dashboard")
 	data["Title"] = "Дашборд"
 	data["News"] = h.latestNews()
-
-	totals, err := h.dashboardTotals(userID)
-	if err != nil {
-		http.Error(w, "Не удалось загрузить итоги", http.StatusInternalServerError)
-		return
-	}
-	data["CurrencyTotals"] = totals
+	data["MonthReport"] = report
+	data["Capital"] = capital
+	data["CapitalHistory"] = history
 
 	// 7 счетов-активов с самой свежей транзакционной активностью
 	topRows, err := h.db.Query(`

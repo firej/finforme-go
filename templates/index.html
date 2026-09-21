@@ -8,22 +8,11 @@
 
 <div style="display:flex;flex-direction:column;gap:14px;">
 
-  <p class="form-hint">Каждая валюта считается отдельно. Скрытые счета включены в итоги.</p>
-  {{if .CurrencyTotals}}<div class="currency-selector" aria-label="Валюта итогов">
-    {{range $i, $total := .CurrencyTotals}}<button type="button" class="btn btn-ghost" data-currency-choice="{{$total.Currency}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}" onclick="selectDashboardCurrency(this.dataset.currencyChoice)">{{$total.Currency}}</button>{{end}}
-  </div>{{end}}
-  {{range .CurrencyTotals}}
-  <section class="card currency-summary" data-currency="{{.Currency}}">
-    <div>Чистый капитал · {{.Currency}}</div>
-    <div class="net-worth">{{formatMoney .NetWorth}} <span class="stat-currency">{{.Currency}}</span></div>
-    <dl class="currency-metrics">
-      <div><dt>Активы</dt><dd>{{formatMoney .TotalAssets}}</dd></div>
-      <div><dt>Обязательства</dt><dd>{{formatMoney .TotalLiabilities}}</dd></div>
-      <div><dt>Доходы за всё время</dt><dd class="text-green">{{formatMoney .TotalIncome}}</dd></div>
-      <div><dt>Расходы за всё время</dt><dd>{{formatMoney .TotalExpense}}</dd></div>
-    </dl>
-  </section>
-  {{else}}<p class="form-hint">Пока нет счетов для расчёта итогов.</p>{{end}}
+  <form method="get" action="/" id="dashboard-options" class="dashboard-overview">
+    {{template "dashboard_capital" .}}
+    {{template "dashboard_history" .}}
+    {{template "dashboard_month" .}}
+  </form>
   <div class="dashboard-stack">
     <section class="card" style="padding:20px;">
       <h2 style="font-size:16px;margin-bottom:16px;">Активные счета</h2>
@@ -75,13 +64,6 @@
 
 </div>
 
-<script>
-function selectDashboardCurrency(currency) {
-  document.querySelectorAll('.currency-summary').forEach(function(card) { card.hidden = card.dataset.currency !== currency; });
-  document.querySelectorAll('[data-currency-choice]').forEach(function(button) { button.setAttribute('aria-pressed', String(button.dataset.currencyChoice === currency)); });
-}
-var firstCurrency = document.querySelector('[data-currency-choice]');
-if (firstCurrency) selectDashboardCurrency(firstCurrency.dataset.currencyChoice);
-</script>
+<script src="/static/dashboard.js"></script>
 {{template "footer" .}}
 {{end}}

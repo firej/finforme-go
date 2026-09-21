@@ -1,0 +1,51 @@
+{{define "dashboard_history"}}
+{{with .CapitalHistory}}
+<section class="card capital-history" aria-labelledby="history-title">
+  <div class="dashboard-section-heading">
+    <div><h2 id="history-title">Прирост капитала по месяцам</h2><p class="form-hint">{{.From}} — {{.To}} · {{.Currency}} · активы минус обязательства</p></div>
+    <span class="history-period-label">Последние 12 месяцев</span>
+  </div>
+  {{if .HasData}}
+  <dl class="history-summary">
+    <div><dt>На начало периода</dt><dd>{{.Start}} <span class="stat-currency">{{.Currency}}</span></dd></div>
+    <div><dt>На конец периода</dt><dd>{{.End}} <span class="stat-currency">{{.Currency}}</span></dd></div>
+    <div><dt>Изменение за период</dt><dd>{{.Change}} <span class="stat-currency">{{.Currency}}</span></dd></div>
+  </dl>
+  <p class="form-hint">Нажмите на месяц, чтобы открыть его доходы и расходы. Текущий месяц показан по {{.To}}.</p>
+  <div class="history-chart-scroll" role="region" aria-label="Помесячное изменение капитала" tabindex="0">
+    <div class="history-chart">
+      {{range .Rows}}
+      <a href="{{.URL}}" class="history-month history-{{.Sign}}{{if .Selected}} history-selected{{end}}" data-history-link
+         {{if .Selected}}aria-current="true"{{end}}
+         aria-label="{{.Label}}: {{if .Known}}{{.Change}} {{$.CapitalHistory.Currency}}{{else}}нет данных для расчёта{{end}}. Открыть отчёт."
+         title="{{.Label}} · {{if .Known}}{{.Change}} {{$.CapitalHistory.Currency}}{{else}}{{.Status}}{{end}}">
+        <span class="history-change">{{.ShortChange}}</span>
+        <span class="history-plot" aria-hidden="true"><span class="history-bar" style="height:{{.Height}}%"></span>{{if not .Known}}<span class="history-no-rate">?</span>{{end}}</span>
+        <span class="history-month-label">{{.ShortLabel}}{{if .Current}}*{{end}}</span><span class="history-year">{{.Year}}</span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+  <p class="form-hint history-mobile-hint">Прокрутите график вбок, чтобы увидеть остальные месяцы.</p>
+  <p class="form-hint history-legend"><span>＋ рост</span><span>− снижение</span><span>? не хватает исторического курса</span></p>
+  <details class="history-details">
+    <summary>Суммы по месяцам и влияние курсов</summary>
+    <p class="form-hint">Прирост — разница капитала на конец и начало месяца. «Изменение остатков» считает новые суммы на счетах по курсам начала месяца; «Курсы» — их переоценку по курсам конца. В изменение остатков входят также начальные балансы и корректировки.</p>
+    <div class="history-table-scroll"><table class="data-table history-table">
+      <thead><tr><th>Месяц</th><th class="right">Капитал на конец</th><th class="right">Прирост</th><th class="right">Изменение остатков</th><th class="right">Курсы</th></tr></thead>
+      <tbody>{{range .Rows}}
+        <tr{{if .Selected}} class="history-selected"{{end}}>
+          <th scope="row"><a href="{{.URL}}" data-history-link>{{.Label}}{{if .Current}}*{{end}}</a></th>
+          <td class="right">{{.End}}</td><td class="right history-amount-{{.Sign}}">{{.Change}}</td><td class="right">{{.BalanceChange}}</td><td class="right">{{.FXChange}}</td>
+        </tr>
+        <tr class="history-calculation"><td colspan="5">
+          {{if .Status}}<p class="form-hint">{{.Status}}</p>{{end}}
+          <details><summary>Расчёт за {{.Label}}</summary><p>Капитал на начало: {{.Start}} {{$.CapitalHistory.Currency}}. На {{.Date}}: {{.End}} {{$.CapitalHistory.Currency}}.</p><p>Курсы на начало: {{.StartRates}}</p><p>Курсы на конец: {{.EndRates}}</p></details>
+        </td></tr>
+      {{end}}</tbody>
+    </table></div>
+  </details>
+  {{else}}<p class="dashboard-empty">Динамика появится после первых операций по активам или обязательствам.</p>{{end}}
+</section>
+{{end}}
+{{end}}

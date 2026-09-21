@@ -1,6 +1,7 @@
 {{define "finance_transaction.html"}}
 {{template "header" .}}
 <script src="/static/transaction-rates.js"></script>
+<script src="/static/account-picker.js"></script>
 
 <div class="topbar">
   {{template "mobile_menu_btn" .}}
@@ -86,6 +87,7 @@
     <div id="result" style="margin-top:16px;"></div>
 
     <script>
+    AccountPicker.attach(document.getElementById('transaction-form'));
     TransactionRates.attach(document.getElementById('transaction-form'));
     document.body.addEventListener('htmx:afterRequest', function(evt) {
       if (evt.detail.elt && evt.detail.elt.matches('form')) {

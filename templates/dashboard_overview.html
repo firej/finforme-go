@@ -1,0 +1,87 @@
+{{define "dashboard_capital"}}
+<section class="card capital-card" aria-labelledby="capital-title">
+  {{with .Capital}}
+  <div class="dashboard-section-heading">
+    <div><h2 id="capital-title">Общий капитал</h2><p class="form-hint">На {{.Date}} · активы минус обязательства</p></div>
+    <label class="dashboard-control">Валюта оценки
+      <select name="currency" class="form-select" data-dashboard-submit>
+        {{range .Currencies}}<option value="{{.}}" {{if eq . $.Capital.Currency}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+  </div>
+  {{if .Rows}}
+    {{range .Warnings}}<p class="capital-warning" role="status">{{.}}</p>{{end}}
+    {{if .Missing}}<p class="capital-warning" role="status">Неполная оценка: нет свежего курса для {{range $i,$c := .Missing}}{{if $i}}, {{end}}{{$c}}{{end}}. Эти остатки не включены в сумму.</p>{{end}}
+    <div class="net-worth">{{.Net}} <span class="stat-currency">{{.Currency}}</span></div>
+    <dl class="currency-metrics">
+      <div><dt>{{if .Missing}}Учтённые активы{{else}}Активы{{end}}</dt><dd>{{.Assets}} <span class="stat-currency">{{.Currency}}</span></dd></div>
+      <div><dt>{{if .Missing}}Учтённые обязательства{{else}}Обязательства{{end}}</dt><dd>{{.Debt}} <span class="stat-currency">{{.Currency}}</span></dd></div>
+    </dl>
+    <details class="capital-details" {{if .Missing}}open{{end}}>
+      <summary>Остатки по валютам и курсы</summary>
+      <div class="capital-table-wrap"><table class="data-table capital-table">
+        <thead><tr><th>Валюта</th><th class="right">Активы</th><th class="right">Обязательства</th><th class="right">Капитал</th><th class="right">В {{.Currency}}</th></tr></thead>
+        <tbody>{{range .Rows}}<tr data-currency="{{.Currency}}"><th scope="row">{{.Currency}}</th><td class="right">{{.Assets}}</td><td class="right">{{.Debt}}</td><td class="right">{{.Net}}</td><td class="right">{{if .Included}}{{.Converted}}{{else}}<span class="text-muted">Нет курса</span>{{end}}</td></tr>{{end}}</tbody>
+      </table></div>
+      {{if .Rates}}
+      <div class="capital-rates">
+        {{range .Rates}}<label class="dashboard-control">{{.Pair}}
+          <select class="form-select" name="{{.Name}}" data-dashboard-submit>{{range .Options}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select>
+        </label>{{end}}
+      </div>
+      <p class="form-hint">Пересчёт: {{range $i,$row := .Rows}}{{if $i}}; {{end}}{{if .Included}}{{.Route}}{{else}}{{.Currency}} — нет курса{{end}}{{end}}.</p>
+      {{end}}
+      <p class="form-hint">Скрытые счета включены. Курсы — последние доступные, не старше 14 дней. Оценка капитала не меняет суммы операций.</p>
+    </details>
+  {{else}}<p class="dashboard-empty">Пока нет счетов для расчёта капитала.</p>{{end}}
+  {{else}}<p class="dashboard-empty">Пока нет счетов для расчёта капитала.</p>{{end}}
+</section>
+{{end}}
+
+{{define "dashboard_month"}}
+<section class="card monthly-report" id="monthly-report" aria-labelledby="report-title">
+  {{with .MonthReport}}
+  <div class="dashboard-section-heading">
+    <div><h2 id="report-title">Отчёт за месяц</h2><p class="form-hint">{{.Label}} · сравнение: {{.PreviousLabel}}</p></div>
+    <div class="report-month-control">
+      {{if .PreviousURL}}<a class="btn btn-ghost" href="{{.PreviousURL}}" aria-label="Предыдущий месяц">←</a>{{end}}
+      <label class="sr-only" for="report-month">Месяц отчёта</label>
+      <input class="form-input" type="month" id="report-month" name="month" value="{{.Value}}" min="1900-01" max="9998-12" required data-dashboard-submit>
+      {{if .NextURL}}<a class="btn btn-ghost" href="{{.NextURL}}" aria-label="Следующий месяц">→</a>{{end}}
+    </div>
+  </div>
+  {{if .Current}}<p class="form-hint report-note">Текущий месяц ещё не завершён; сравнение — с полным предыдущим месяцем.</p>{{end}}
+  {{if .Currencies}}
+  <div class="currency-selector report-currency-selector" aria-label="Валюта отчёта">
+    {{range $i,$c := .Currencies}}<button type="button" class="btn btn-ghost" data-report-currency="{{$c.Currency}}" aria-pressed="{{if eq $i 0}}true{{else}}false{{end}}">{{$c.Currency}}</button>{{end}}
+  </div>
+  <p class="form-hint report-note">Доходы и расходы считаются в валюте категории. Переводы между своими счетами исключены.</p>
+  {{range $i,$c := .Currencies}}
+  <div data-report-panel="{{.Currency}}">
+    <dl class="report-metrics">
+      <div><dt>Доходы · {{.Currency}}</dt><dd class="text-green">{{formatMoney .Income}}</dd><div class="report-comparison">Было {{formatMoney .PreviousIncome}}<br>{{.IncomeChange}}</div></div>
+      <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison">Было {{formatMoney .PreviousExpense}}<br>{{.ExpenseChange}}</div></div>
+      <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison">Было {{formatMoney .PreviousNet}}<br>{{.NetChange}}</div></div>
+    </dl>
+    <div class="report-categories">
+      <h3>Расходы по категориям <span class="stat-currency">{{.Currency}}</span></h3>
+      {{range .Expenses}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Расходов за эти два месяца нет.</p>{{end}}
+    </div>
+    <details class="report-income"><summary>Доходы по категориям · {{.Currency}}</summary>
+      {{range .Incomes}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Доходов за эти два месяца нет.</p>{{end}}
+    </details>
+  </div>
+  {{end}}
+  {{else}}<p class="dashboard-empty">Доходов и расходов за этот и предыдущий месяц пока нет.</p>{{end}}
+  {{end}}
+  <noscript><button class="btn btn-primary" type="submit">Показать</button></noscript>
+</section>
+{{end}}
+
+{{define "dashboard_category"}}
+<a class="report-category" href="{{.URL}}">
+  <span class="report-category-name">{{.Name}}</span><strong>{{formatMoney .Amount}}</strong>
+  <meter min="0" max="1" value="{{.Bar}}" aria-hidden="true"></meter>
+  <span class="report-comparison">Было {{formatMoney .Previous}} · {{.Change}}</span>
+</a>
+{{end}}

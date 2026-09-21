@@ -37,6 +37,8 @@
       buttons.forEach(function(button) { button.setAttribute('aria-pressed', String(button.dataset.transactionKind === kind)); });
       var changedFrom = filter(from, kind, 'from');
       var changedTo = filter(to, kind, 'to');
+      if (from.accountPicker) from.accountPicker.refresh();
+      if (to.accountPicker) to.accountPicker.refresh();
       if ((changedFrom || changedTo) && form.rateController) form.rateController.refresh();
     }
     var kind = infer(type(from), type(to));

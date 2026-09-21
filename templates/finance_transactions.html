@@ -3,6 +3,7 @@
 <script src="/static/transaction-rates.js"></script>
 <script src="/static/transaction-period.js"></script>
 <script src="/static/transaction-kind.js"></script>
+<script src="/static/account-picker.js"></script>
 
 {{if .AccountPath}}
 <nav class="account-breadcrumbs" aria-label="Путь к счёту">
@@ -172,6 +173,15 @@ var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
 var currentSortOrder = '{{.SortOrder}}';
 var currentPeriod    = 'all';
 var currentMonth = TransactionPeriod.monthKey(new Date());
+var linkedMonth = new URLSearchParams(window.location.search).get('month');
+if (linkedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth)) {
+  currentMonth = linkedMonth;
+  currentPeriod = 'month';
+  document.querySelectorAll('a.sort-tab').forEach(function(link) {
+    var url = new URL(link.href); url.searchParams.set('month', linkedMonth); link.href = url.toString();
+  });
+  updatePeriod();
+}
 
 function setPeriod(p) {
   currentPeriod = p;
@@ -259,6 +269,7 @@ function openTransactionDrawer(txId, accountId) {
       body.innerHTML = html;
       htmx.process(body);
       TransactionKind.attach(document.getElementById('modal-transaction-form'));
+      AccountPicker.attach(document.getElementById('modal-transaction-form'));
       TransactionRates.attach(document.getElementById('modal-transaction-form'));
       var inp = document.getElementById('modal-description');
       if (inp) inp.focus();
