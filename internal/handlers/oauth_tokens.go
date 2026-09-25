@@ -5,10 +5,44 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 )
+
+// oauthAudit deliberately excludes request headers, bodies, tokens and token hashes.
+func oauthAudit(event, reason, kind, clientID, grantID string) {
+	slog.Info("oauth", "event", event, "reason", reason, "grant_type", kind, "client_id", clientID, "grant_id", grantID)
+}
+
+func oauthGrantFailure(tx *sql.Tx, id string, now int64) string {
+	var revoked, active, passwordChange int
+	var expires, version, currentVersion int64
+	err := tx.QueryRow(`SELECT g.revoked,g.expires_at,g.session_version,u.session_version,u.is_active,u.password_change_required
+ FROM oauth_grants g JOIN users u ON u.id=g.user_id WHERE g.id=?`, id).
+		Scan(&revoked, &expires, &version, &currentVersion, &active, &passwordChange)
+	if err == sql.ErrNoRows {
+		return "grant_not_found"
+	}
+	if err != nil {
+		return "grant_lookup_failed"
+	}
+	switch {
+	case revoked != 0:
+		return "grant_revoked"
+	case expires <= now:
+		return "grant_expired"
+	case active != 1:
+		return "user_inactive"
+	case passwordChange != 0:
+		return "password_change_required"
+	case version != currentVersion:
+		return "session_version_changed"
+	default:
+		return "grant_lookup_failed"
+	}
+}
 
 func validPKCEChallenge(s string) bool {
 	b, err := base64.RawURLEncoding.DecodeString(s)
@@ -31,13 +65,14 @@ func verifyPKCE(verifier, challenge string) bool {
 type oauthGrant struct {
 	ID, ClientID, Scope, Resource string
 	UserID                        int64
+	ExpiresAt                     int64
 }
 
 func loadOAuthGrant(tx *sql.Tx, id string, now int64) (oauthGrant, error) {
 	var g oauthGrant
-	err := tx.QueryRow(`SELECT g.id,g.user_id,g.client_id,g.scope,g.resource FROM oauth_grants g JOIN users u ON u.id=g.user_id
+	err := tx.QueryRow(`SELECT g.id,g.user_id,g.client_id,g.scope,g.resource,g.expires_at FROM oauth_grants g JOIN users u ON u.id=g.user_id
 	 WHERE g.id=? AND g.revoked=0 AND g.expires_at>? AND u.is_active=1 AND u.password_change_required=0 AND u.session_version=g.session_version`, id, now).
-		Scan(&g.ID, &g.UserID, &g.ClientID, &g.Scope, &g.Resource)
+		Scan(&g.ID, &g.UserID, &g.ClientID, &g.Scope, &g.Resource, &g.ExpiresAt)
 	return g, err
 }
 
@@ -46,135 +81,120 @@ func (h *Handler) oauthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := r.PostForm
+	var grantID string
+	deny := func(status int, code, reason string) {
+		oauthAudit("token_rejected", reason, f.Get("grant_type"), f.Get("client_id"), grantID)
+		oauthError(w, status, code)
+	}
 	if r.Header.Get("Authorization") != "" || f.Get("client_secret") != "" {
-		oauthError(w, 400, "invalid_client")
+		deny(400, "invalid_client", "client_auth_not_supported")
 		return
 	}
 	kind := f.Get("grant_type")
-	if kind != "authorization_code" && kind != "refresh_token" {
-		oauthError(w, 400, "unsupported_grant_type")
+	if kind != "authorization_code" {
+		deny(400, "unsupported_grant_type", "grant_type_not_supported")
 		return
 	}
 	client, err := h.oauthClient(f.Get("client_id"))
 	if err != nil {
-		oauthError(w, 400, "invalid_client")
+		deny(400, "invalid_client", "client_not_found")
 		return
 	}
 	secret := f.Get("code")
-	table := "oauth_codes"
-	if kind == "refresh_token" {
-		secret = f.Get("refresh_token")
-		table = "oauth_tokens"
-	}
 	if secret == "" {
-		oauthError(w, 400, "invalid_grant")
+		deny(400, "invalid_grant", "credential_missing")
 		return
 	}
 	hash := hashAPIToken(secret)
-	// table is a fixed internal identifier, not supplied by the request.
 	var user int64
-	var grantID string
-	err = h.db.QueryRow(`SELECT g.user_id,g.id FROM `+table+` t JOIN oauth_grants g ON g.id=t.grant_id WHERE t.hash=?`, hash).Scan(&user, &grantID)
+	err = h.db.QueryRow(`SELECT g.user_id,g.id FROM oauth_codes t JOIN oauth_grants g ON g.id=t.grant_id WHERE t.hash=?`, hash).Scan(&user, &grantID)
 	if err != nil {
-		oauthError(w, 400, "invalid_grant")
+		deny(400, "invalid_grant", "credential_lookup_failed")
 		return
 	}
 	tx, err := h.beginFinanceWrite(user)
 	if err != nil {
-		oauthError(w, 500, "server_error")
+		deny(500, "server_error", "transaction_failed")
 		return
 	}
 	defer tx.Rollback()
 	now := time.Now().Unix()
 	g, err := loadOAuthGrant(tx, grantID, now)
-	if err != nil || g.ClientID != client.ID || g.Resource != h.oauth.issuer+"/mcp" {
-		oauthError(w, 400, "invalid_grant")
+	if err != nil {
+		deny(400, "invalid_grant", oauthGrantFailure(tx, grantID, now))
+		return
+	}
+	if g.ClientID != client.ID || g.Resource != h.oauth.issuer+"/mcp" {
+		deny(400, "invalid_grant", "grant_binding_mismatch")
 		return
 	}
 	resource := f.Get("resource")
-	if (kind == "authorization_code" && resource != g.Resource) || (resource != "" && resource != g.Resource) {
-		oauthError(w, 400, "invalid_target")
+	if resource != g.Resource {
+		deny(400, "invalid_target", "resource_mismatch")
 		return
 	}
 	var used int
 	var expires int64
-	if kind == "authorization_code" {
-		var redirect, challenge string
-		err = tx.QueryRow(`SELECT redirect_uri,challenge,expires_at,used FROM oauth_codes WHERE hash=?`, hash).Scan(&redirect, &challenge, &expires, &used)
-		if err != nil || redirect != f.Get("redirect_uri") || !verifyPKCE(f.Get("code_verifier"), challenge) {
-			oauthError(w, 400, "invalid_grant")
-			return
-		}
-	} else {
-		var tokenKind string
-		err = tx.QueryRow(`SELECT kind,expires_at,used FROM oauth_tokens WHERE hash=?`, hash).Scan(&tokenKind, &expires, &used)
-		if err != nil || tokenKind != "refresh" {
-			oauthError(w, 400, "invalid_grant")
-			return
-		}
+	var redirect, challenge string
+	err = tx.QueryRow(`SELECT redirect_uri,challenge,expires_at,used FROM oauth_codes WHERE hash=?`, hash).Scan(&redirect, &challenge, &expires, &used)
+	if err != nil || redirect != f.Get("redirect_uri") || !verifyPKCE(f.Get("code_verifier"), challenge) {
+		deny(400, "invalid_grant", "code_validation_failed")
+		return
 	}
 	if used != 0 {
-		// A valid code/refresh token was replayed. Invalidate the entire family.
+		// A valid authorization code was replayed. Invalidate the entire family.
 		if _, err = tx.Exec(`UPDATE oauth_grants SET revoked=1 WHERE id=?`, g.ID); err == nil {
 			err = tx.Commit()
 		}
 		if err != nil {
-			oauthError(w, 500, "server_error")
+			deny(500, "server_error", "replay_revocation_failed")
 			return
 		}
-		oauthError(w, 400, "invalid_grant")
+		oauthAudit("grant_revoked", "credential_reused", kind, client.ID, g.ID)
+		deny(400, "invalid_grant", "credential_reused")
 		return
 	}
 	if expires <= now {
-		oauthError(w, 400, "invalid_grant")
+		deny(400, "invalid_grant", "credential_expired")
 		return
 	}
 	if scope := f.Get("scope"); scope != "" {
 		normalized, ok := oauthScopes(scope)
 		if !ok || (strings.Contains(normalized, oauthWrite) && !strings.Contains(g.Scope, oauthWrite)) {
-			oauthError(w, 400, "invalid_scope")
+			deny(400, "invalid_scope", "scope_invalid")
 			return
 		}
 		g.Scope = normalized
 		if _, err = tx.Exec(`UPDATE oauth_grants SET scope=? WHERE id=?`, g.Scope, g.ID); err != nil {
-			oauthError(w, 500, "server_error")
+			deny(500, "server_error", "scope_update_failed")
 			return
 		}
 	}
-	result, err := tx.Exec(`UPDATE `+table+` SET used=1 WHERE hash=? AND used=0`, hash)
+	result, err := tx.Exec(`UPDATE oauth_codes SET used=1 WHERE hash=? AND used=0`, hash)
 	if err != nil {
-		oauthError(w, 500, "server_error")
+		deny(500, "server_error", "credential_consume_failed")
 		return
 	}
 	n, err := result.RowsAffected()
 	if err != nil || n != 1 {
-		oauthError(w, 400, "invalid_grant")
+		deny(400, "invalid_grant", "credential_already_consumed")
 		return
 	}
 	access, err := oauthSecret("ffoa_")
 	if err != nil {
-		oauthError(w, 500, "server_error")
+		deny(500, "server_error", "access_generation_failed")
 		return
 	}
-	refresh, err := oauthSecret("ffor_")
-	if err != nil {
-		oauthError(w, 500, "server_error")
+	if _, err = tx.Exec(`INSERT INTO oauth_tokens(hash,grant_id,kind,expires_at,used) VALUES(?,?,?,?,0)`, hashAPIToken(access), g.ID, "access", g.ExpiresAt); err != nil {
+		deny(500, "server_error", "token_insert_failed")
 		return
-	}
-	for _, item := range []struct {
-		token, kind string
-		lifetime    int64
-	}{{access, "access", 3600}, {refresh, "refresh", 30 * 86400}} {
-		if _, err = tx.Exec(`INSERT INTO oauth_tokens(hash,grant_id,kind,expires_at,used) VALUES(?,?,?,?,0)`, hashAPIToken(item.token), g.ID, item.kind, now+item.lifetime); err != nil {
-			oauthError(w, 500, "server_error")
-			return
-		}
 	}
 	if err = tx.Commit(); err != nil {
-		oauthError(w, 500, "server_error")
+		deny(500, "server_error", "commit_failed")
 		return
 	}
-	oauthJSON(w, 200, map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": 3600, "refresh_token": refresh, "scope": g.Scope})
+	oauthAudit("token_issued", "success", kind, client.ID, g.ID)
+	oauthJSON(w, 200, map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": g.ExpiresAt - now, "scope": g.Scope})
 }
 
 func (h *Handler) oauthBearer(r *http.Request) (int64, string, bool) {
@@ -199,10 +219,13 @@ func (h *Handler) oauthRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Possession of a token allows revocation, but never grants access to data.
-	_, err := h.db.Exec(`UPDATE oauth_grants SET revoked=1 WHERE client_id=? AND id IN (SELECT grant_id FROM oauth_tokens WHERE hash=?)`, r.PostForm.Get("client_id"), hashAPIToken(r.PostForm.Get("token")))
+	result, err := h.db.Exec(`UPDATE oauth_grants SET revoked=1 WHERE client_id=? AND id IN (SELECT grant_id FROM oauth_tokens WHERE hash=?)`, r.PostForm.Get("client_id"), hashAPIToken(r.PostForm.Get("token")))
 	if err != nil {
 		oauthError(w, 500, "server_error")
 		return
+	}
+	if rows, err := result.RowsAffected(); err == nil && rows > 0 {
+		oauthAudit("grant_revoked", "revocation_endpoint", "", r.PostForm.Get("client_id"), "")
 	}
 	oauthJSON(w, 200, map[string]any{})
 }

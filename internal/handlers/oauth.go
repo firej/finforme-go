@@ -78,7 +78,7 @@ func (h *Handler) oauthMetadata(w http.ResponseWriter, r *http.Request) {
 	oauthJSON(w, 200, map[string]any{
 		"issuer": i, "authorization_endpoint": i + "/oauth/authorize", "token_endpoint": i + "/oauth/token",
 		"registration_endpoint": i + "/oauth/register", "revocation_endpoint": i + "/oauth/revoke",
-		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code", "refresh_token"},
+		"response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code"},
 		"token_endpoint_auth_methods_supported": []string{"none"}, "revocation_endpoint_auth_methods_supported": []string{"none"},
 		"code_challenge_methods_supported": []string{"S256"}, "scopes_supported": []string{oauthRead, oauthWrite},
 		"authorization_response_iss_parameter_supported": true,
@@ -163,7 +163,7 @@ func (h *Handler) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, v := range c.GrantTypes {
-		if v != "authorization_code" && v != "refresh_token" {
+		if v != "authorization_code" {
 			oauthError(w, 400, "invalid_client_metadata")
 			return
 		}
@@ -185,7 +185,7 @@ func (h *Handler) oauthRegister(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, 500, "server_error")
 		return
 	}
-	c.GrantTypes = []string{"authorization_code", "refresh_token"}
+	c.GrantTypes = []string{"authorization_code"}
 	c.ResponseTypes = []string{"code"}
 	oauthJSON(w, 201, c)
 }

@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -258,14 +260,8 @@ func TestOAuthPKCEBindingAndReplay(t *testing.T) {
 	}
 	tokens := f.token(f.exchangeForm(code), 200)
 	access := tokens["access_token"].(string)
-	refresh := tokens["refresh_token"].(string)
-	rotated := f.token(url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {refresh}}, 200)
-	if rotated["refresh_token"] == refresh {
-		t.Fatal("refresh did not rotate")
-	}
-	f.token(url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {refresh}}, 400)
-	if f.bearer(access) || f.bearer(rotated["access_token"].(string)) {
-		t.Fatal("replayed family not revoked")
+	if !f.bearer(access) || !f.bearer(access) {
+		t.Fatal("access token must be reusable")
 	}
 	code = f.code(false)
 	tokens = f.token(f.exchangeForm(code), 200)
@@ -319,7 +315,7 @@ func TestOAuthRevocationExpiryAndPasswordChange(t *testing.T) {
 	f := newOAuthFixture(t)
 	issue := func() map[string]any { return f.token(f.exchangeForm(f.code(true)), 200) }
 	tokens := issue()
-	w := f.request("POST", "/oauth/revoke", url.Values{"token": {tokens["refresh_token"].(string)}, "client_id": {f.client.ID}}.Encode(), "application/x-www-form-urlencoded", nil)
+	w := f.request("POST", "/oauth/revoke", url.Values{"token": {tokens["access_token"].(string)}, "client_id": {f.client.ID}}.Encode(), "application/x-www-form-urlencoded", nil)
 	if w.Code != 200 || f.bearer(tokens["access_token"].(string)) {
 		t.Fatal("revocation failed")
 	}
@@ -337,7 +333,6 @@ func TestOAuthRevocationExpiryAndPasswordChange(t *testing.T) {
 	if f.bearer(tokens["access_token"].(string)) {
 		t.Fatal("password change did not invalidate access")
 	}
-	f.token(url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {tokens["refresh_token"].(string)}}, 400)
 }
 
 func TestOAuthRegistrationAndOrigin(t *testing.T) {
@@ -427,7 +422,6 @@ func TestOAuthConnectionsRevokeAndOwnership(t *testing.T) {
 	if w.Code != 303 || f.bearer(tokens["access_token"].(string)) {
 		t.Fatal("owner revoke failed")
 	}
-	f.token(url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {tokens["refresh_token"].(string)}}, 400)
 }
 
 func TestOAuthExpiryAndScopeEscalation(t *testing.T) {
@@ -437,14 +431,11 @@ func TestOAuthExpiryAndScopeEscalation(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.token(f.exchangeForm(code), 400)
-	tokens := f.token(f.exchangeForm(f.code(false)), 200)
-	refresh := url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {tokens["refresh_token"].(string)}, "scope": {oauthRead + " " + oauthWrite}}
-	f.token(refresh, 400)
-	refresh.Del("scope")
-	if _, err := f.h.db.Exec(`UPDATE oauth_tokens SET expires_at=? WHERE hash=?`, time.Now().Unix()-1, hashAPIToken(tokens["refresh_token"].(string))); err != nil {
-		t.Fatal(err)
-	}
-	f.token(refresh, 400)
+	code = f.code(false)
+	form := f.exchangeForm(code)
+	form.Set("scope", oauthRead+" "+oauthWrite)
+	f.token(form, 400)
+	tokens := f.token(f.exchangeForm(code), 200)
 	if _, err := f.h.db.Exec(`UPDATE users SET is_active=0 WHERE id=2`); err != nil {
 		t.Fatal(err)
 	}
@@ -477,5 +468,58 @@ func TestOAuthConsentAllowsValidatedCallbackRedirect(t *testing.T) {
 	w = f.request("GET", "/oauth/authorize?"+q.Encode(), "", "", []*http.Cookie{f.cookie})
 	if w.Code != 400 || strings.Contains(w.Header().Get("Content-Security-Policy"), "other.example") {
 		t.Fatal("unregistered redirect added to CSP")
+	}
+}
+
+func TestOAuthAuditReplayAndSecretRedaction(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	f := newOAuthFixture(t)
+	code := f.code(true)
+	tokens := f.token(f.exchangeForm(code), 200)
+	f.token(f.exchangeForm(code), 400)
+	f.token(f.exchangeForm(code), 400)
+	output := logs.String()
+	for _, expected := range []string{`"event":"token_issued"`, `"event":"grant_revoked","reason":"credential_reused"`, `"reason":"grant_revoked"`, `"grant_id":"grant_`} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("missing audit field %s", expected)
+		}
+	}
+	for _, secret := range []string{code, tokens["access_token"].(string), f.exchangeForm(code).Get("code_verifier")} {
+		if secret != "" && (strings.Contains(output, secret) || strings.Contains(output, hashAPIToken(secret))) {
+			t.Error("OAuth audit leaked a credential or its hash")
+		}
+	}
+}
+
+func TestOAuthLongLivedAccessWithoutRefresh(t *testing.T) {
+	f := newOAuthFixture(t)
+	tokens := f.token(f.exchangeForm(f.code(true)), 200)
+	if _, ok := tokens["refresh_token"]; ok {
+		t.Fatal("refresh token issued")
+	}
+	lifetime := tokens["expires_in"].(float64)
+	if lifetime < 90*86400-10 || lifetime > 90*86400 {
+		t.Fatalf("unexpected lifetime %v", lifetime)
+	}
+	access := tokens["access_token"].(string)
+	var tokenExpiry, grantExpiry int64
+	if err := f.h.db.QueryRow(`SELECT t.expires_at,g.expires_at FROM oauth_tokens t JOIN oauth_grants g ON g.id=t.grant_id WHERE t.hash=?`, hashAPIToken(access)).Scan(&tokenExpiry, &grantExpiry); err != nil {
+		t.Fatal(err)
+	}
+	if tokenExpiry != grantExpiry {
+		t.Fatal("access expiry must match grant expiry")
+	}
+	response := f.token(url.Values{"grant_type": {"refresh_token"}, "client_id": {f.client.ID}, "refresh_token": {"old-refresh"}}, 400)
+	if response["error"] != "unsupported_grant_type" || !f.bearer(access) {
+		t.Fatal("refresh must be rejected without revoking access")
+	}
+	if _, err := f.h.db.Exec(`UPDATE oauth_grants SET expires_at=?`, time.Now().Unix()-1); err != nil {
+		t.Fatal(err)
+	}
+	if f.bearer(access) {
+		t.Fatal("expired grant accepted")
 	}
 }

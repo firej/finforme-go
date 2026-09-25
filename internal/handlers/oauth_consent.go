@@ -224,9 +224,13 @@ func (h *Handler) oauthConnections(w http.ResponseWriter, r *http.Request) {
 			oauthError(w, 403, "invalid_request")
 			return
 		}
-		if _, err := h.db.Exec(`UPDATE oauth_grants SET revoked=1 WHERE id=? AND user_id=?`, r.PostForm.Get("id"), user); err != nil {
+		result, err := h.db.Exec(`UPDATE oauth_grants SET revoked=1 WHERE id=? AND user_id=?`, r.PostForm.Get("id"), user)
+		if err != nil {
 			oauthError(w, 500, "server_error")
 			return
+		}
+		if rows, err := result.RowsAffected(); err == nil && rows > 0 {
+			oauthAudit("grant_revoked", "user_disconnect", "", "", r.PostForm.Get("id"))
 		}
 		http.Redirect(w, r, "/finance/settings/connections", 303)
 		return
