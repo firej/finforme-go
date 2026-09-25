@@ -162,11 +162,23 @@ func (h *Handler) oauthRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Some clients request refresh_token alongside authorization_code regardless
+	// of discovery metadata. Accept that superset, but register only the supported
+	// authorization_code grant and never issue refresh tokens.
+	hasAuthorizationCode := len(c.GrantTypes) == 0
 	for _, v := range c.GrantTypes {
-		if v != "authorization_code" {
+		switch v {
+		case "authorization_code":
+			hasAuthorizationCode = true
+		case "refresh_token":
+		default:
 			oauthError(w, 400, "invalid_client_metadata")
 			return
 		}
+	}
+	if !hasAuthorizationCode {
+		oauthError(w, 400, "invalid_client_metadata")
+		return
 	}
 	for _, v := range c.ResponseTypes {
 		if v != "code" {

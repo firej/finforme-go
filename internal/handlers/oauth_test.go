@@ -523,3 +523,38 @@ func TestOAuthLongLivedAccessWithoutRefresh(t *testing.T) {
 		t.Fatal("expired grant accepted")
 	}
 }
+
+func TestOAuthRegistrationGrantNegotiation(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		grants []string
+		status int
+	}{
+		{"default", nil, 201},
+		{"authorization_code", []string{"authorization_code"}, 201},
+		{"client_requests_refresh", []string{"authorization_code", "refresh_token"}, 201},
+		{"refresh_only", []string{"refresh_token"}, 400},
+		{"unsupported", []string{"authorization_code", "client_credentials"}, 400},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newOAuthFixture(t)
+			b, err := json.Marshal(oauthClient{Name: "Codex", Redirects: []string{f.redirect}, AuthMethod: "none", GrantTypes: tc.grants, ResponseTypes: []string{"code"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			w := f.request("POST", "/oauth/register", string(b), "application/json", nil)
+			if w.Code != tc.status {
+				t.Fatalf("registration status %d: %s", w.Code, w.Body.String())
+			}
+			if tc.status == 201 {
+				var client oauthClient
+				if err := json.Unmarshal(w.Body.Bytes(), &client); err != nil {
+					t.Fatal(err)
+				}
+				if len(client.GrantTypes) != 1 || client.GrantTypes[0] != "authorization_code" {
+					t.Fatalf("unexpected registered grants %v", client.GrantTypes)
+				}
+			}
+		})
+	}
+}
