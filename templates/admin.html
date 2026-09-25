@@ -52,26 +52,32 @@
   {{$binding := .}}
   <div class="card" style="padding:16px;margin-bottom:12px;">
     <h3 style="font-size:14px;">{{.Code}} · {{.Source}} {{if not .BaseID}}— не привязано{{end}}</h3>
-    <form method="POST" action="/admin/rate-bindings/" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+    <form class="rate-binding-form" data-example-amount="{{.ExampleAmount}}" method="POST" action="/admin/rate-bindings/" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
       <input type="hidden" name="code" value="{{.Code}}">
       <input type="hidden" name="source" value="{{.Source}}">
       <label class="form-group">Первая валюта (1 единица)
         <select class="form-select" name="base_id" required>
           <option value="">Выберите валюту</option>
-          {{range $.Commodities}}<option value="{{.ID}}" {{if eq .ID $binding.BaseID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
+          {{range $.Commodities}}<option data-currency="{{.Mnemonic}}" value="{{.ID}}" {{if eq .ID $binding.BaseID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
         </select>
       </label>
       <label class="form-group">Вторая валюта (сумма по курсу)
         <select class="form-select" name="quote_id" required>
           <option value="">Выберите валюту</option>
-          {{range $.Commodities}}<option value="{{.ID}}" {{if eq .ID $binding.QuoteID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
+          {{range $.Commodities}}<option data-currency="{{.Mnemonic}}" value="{{.ID}}" {{if eq .ID $binding.QuoteID}}selected{{end}}>{{.Mnemonic}} — {{.Fullname}}</option>{{end}}
         </select>
       </label>
       <button class="btn btn-primary" name="action" value="save">Сохранить</button>
       {{if .BaseID}}<button class="btn btn-ghost" name="action" value="delete" formnovalidate>Снять привязку</button>{{end}}
+      <div style="flex-basis:100%;" aria-live="polite">
+        <p class="rate-binding-example" style="margin:0;">Выберите обе валюты, чтобы увидеть пример пересчёта.</p>
+        {{if .RateDate}}<small>Последняя котировка: {{.RateDate}} · {{.Source}}</small>{{end}}
+        <p class="rate-binding-warning" style="margin:4px 0 0;" hidden></p>
+      </div>
     </form>
   </div>
   {{else}}<div class="card" style="padding:16px;">Курсов пока нет. После импорта здесь появятся пары и источники.</div>{{end}}
+  <script src="/static/admin-rate-bindings.js" defer></script>
   {{end}}
 
   {{if eq .Tab "commodities"}}

@@ -501,6 +501,18 @@ html, body {
 
 /* ─── FORM ─── */
 .form-group  { margin-bottom: 16px; }
+.rate-binding-form > .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+.rate-binding-form .form-select,
+.rate-binding-form > .btn {
+  height: 44px;
+}
 .form-label  { display: block; font-size: 12px; font-weight: 500; color: var(--text-secondary); margin-bottom: 5px; }
 .form-hint   { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 .form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"database/sql"
 	"errors"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +17,11 @@ import (
 type currencyRateBinding struct {
 	Code, Source    string
 	BaseID, QuoteID int64
+}
+
+type currencyRateBindingView struct {
+	currencyRateBinding
+	ExampleAmount, RateDate string
 }
 
 func (h *Handler) AdminRateBindings(w http.ResponseWriter, r *http.Request) {
@@ -47,22 +53,32 @@ func (h *Handler) AdminRateBindings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rows, err := h.db.Query(`SELECT series.code,series.source,
-  COALESCE(b.base_commodity_id,0),COALESCE(b.quote_commodity_id,0)
+  COALESCE(b.base_commodity_id,0),COALESCE(b.quote_commodity_id,0),r.rate,r.rate_date
   FROM (SELECT code,source FROM currency_rates UNION SELECT code,source FROM currency_rate_bindings) series
   LEFT JOIN currency_rate_bindings b ON b.code=series.code AND b.source=series.source
+  LEFT JOIN currency_rates r ON r.code=series.code AND r.source=series.source
+   AND r.rate_date=(SELECT MAX(p.rate_date) FROM currency_rates p WHERE p.code=series.code AND p.source=series.source)
   ORDER BY series.code,series.source`)
 	if err != nil {
 		http.Error(w, "Не удалось загрузить привязки", 500)
 		return
 	}
-	var bindings []currencyRateBinding
+	var bindings []currencyRateBindingView
 	for rows.Next() {
-		var b currencyRateBinding
-		if err = rows.Scan(&b.Code, &b.Source, &b.BaseID, &b.QuoteID); err != nil {
+		var b currencyRateBindingView
+		var rate sql.NullString
+		var date sql.NullTime
+		if err = rows.Scan(&b.Code, &b.Source, &b.BaseID, &b.QuoteID, &rate, &date); err != nil {
 			break
 		}
 		if status == http.StatusBadRequest && b.Code == submitted.Code && b.Source == submitted.Source {
-			b = submitted
+			b.currencyRateBinding = submitted
+		}
+		if value, ok := new(big.Rat).SetString(rate.String); rate.Valid && ok && value.Sign() > 0 {
+			b.ExampleAmount = capitalMoney(new(big.Rat).Mul(value, big.NewRat(10000, 1)))
+		}
+		if date.Valid {
+			b.RateDate = date.Time.Format("02.01.2006")
 		}
 		bindings = append(bindings, b)
 	}

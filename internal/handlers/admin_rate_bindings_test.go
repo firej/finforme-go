@@ -107,6 +107,12 @@ func TestFinanceRateBindings(t *testing.T) {
 	if err := h.db.QueryRow(`SELECT COUNT(*) FROM currency_rates r JOIN currency_rate_bindings b ON b.code=r.code AND b.source=r.source WHERE b.base_commodity_id=2 AND b.quote_commodity_id=1 AND b.source='cbr'`).Scan(&count); err != nil || count != 2 {
 		t.Fatalf("new quote binding: %d %v", count, err)
 	}
+	w := request("GET", admin, "")
+	for _, want := range []string{"data-example-amount=\"9\u00a0100,00\"", "02.09.2026", "data-example-amount=\"9\u00a0000,00\"", "/static/admin-rate-bindings.js"} {
+		if w.Code != 200 || !strings.Contains(w.Body.String(), want) {
+			t.Fatalf("missing latest per-source example %q: status %d", want, w.Code)
+		}
+	}
 	values.Set("source", "cbr")
 	values.Set("action", "delete")
 	if w := request("POST", admin, ""); w.Code != 303 {
