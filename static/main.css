@@ -141,10 +141,7 @@ html, body {
 }
 .sidebar-logo-mark {
   width: 28px; height: 28px;
-  background: var(--accent);
-  border-radius: 7px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 14px; color: white;
+  display: block;
   flex-shrink: 0;
 }
 .sidebar-logo-text {
