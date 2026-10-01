@@ -30,7 +30,11 @@ type dashboardMonth struct {
 
 func reportMonth(value string, now time.Time) (time.Time, error) {
 	if value == "" {
-		value = now.Format("2006-01")
+		month := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		if now.Day() <= 20 {
+			month = month.AddDate(0, -1, 0)
+		}
+		value = month.Format("2006-01")
 	}
 	month, err := time.Parse("2006-01", value)
 	if err != nil || month.Year() < 1900 || month.Year() > 9998 {

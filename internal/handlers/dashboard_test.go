@@ -51,6 +51,33 @@ func TestDashboardMonthlyReport(t *testing.T) {
 	}
 }
 
+func TestDashboardDefaultMonth(t *testing.T) {
+	for _, tc := range []struct {
+		date, selected, want string
+	}{
+		{"2026-10-01", "", "2026-09"},
+		{"2026-10-19", "", "2026-09"},
+		{"2026-10-20", "", "2026-09"},
+		{"2026-10-21", "", "2026-10"},
+		{"2026-10-31", "", "2026-10"},
+		{"2026-01-19", "", "2025-12"},
+		{"2024-03-19", "", "2024-02"},
+		{"2026-10-19", "2026-10", "2026-10"},
+		{"2026-10-21", "2026-08", "2026-08"},
+	} {
+		t.Run(tc.date+"/"+tc.selected, func(t *testing.T) {
+			now, err := time.Parse("2006-01-02", tc.date)
+			if err != nil {
+				t.Fatal(err)
+			}
+			month, err := reportMonth(tc.selected, now)
+			if err != nil || month.Format("2006-01") != tc.want || month.Day() != 1 {
+				t.Fatalf("reportMonth(%q, %s) = %v, %v; want %s", tc.selected, tc.date, month, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestDashboardMonthBoundariesAndComparison(t *testing.T) {
 	now := time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC)
 	for _, invalid := range []string{"2024-13", "2024-2", "oops", "2024-02-01", "1899-12", "9999-01"} {

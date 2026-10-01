@@ -59,17 +59,18 @@
   {{range $i,$c := .Currencies}}
   <div data-report-panel="{{.Currency}}">
     <dl class="report-metrics">
-      <div><dt>Доходы · {{.Currency}}</dt><dd class="text-green">{{formatMoney .Income}}</dd><div class="report-comparison">Было {{formatMoney .PreviousIncome}}<br>{{.IncomeChange}}</div></div>
-      <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison">Было {{formatMoney .PreviousExpense}}<br>{{.ExpenseChange}}</div></div>
-      <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison">Было {{formatMoney .PreviousNet}}<br>{{.NetChange}}</div></div>
+      <div><dt>Доходы · {{.Currency}}</dt><dd class="text-green">{{formatMoney .Income}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousIncome}}">{{.IncomeChange}}</div></div>
+      <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousExpense}}">{{.ExpenseChange}}</div></div>
+      <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousNet}}">{{.NetChange}}</div></div>
     </dl>
     <div class="report-categories">
       <h3>Расходы по категориям <span class="stat-currency">{{.Currency}}</span></h3>
       {{range .Expenses}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Расходов за эти два месяца нет.</p>{{end}}
     </div>
-    <details class="report-income"><summary>Доходы по категориям · {{.Currency}}</summary>
+    <div class="report-categories report-income">
+      <h3>Доходы по категориям <span class="stat-currency">{{.Currency}}</span></h3>
       {{range .Incomes}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Доходов за эти два месяца нет.</p>{{end}}
-    </details>
+    </div>
   </div>
   {{end}}
   {{else}}<p class="dashboard-empty">Доходов и расходов за этот и предыдущий месяц пока нет.</p>{{end}}
@@ -79,9 +80,9 @@
 {{end}}
 
 {{define "dashboard_category"}}
-<a class="report-category" href="{{.URL}}">
-  <span class="report-category-name">{{.Name}}</span><strong>{{formatMoney .Amount}}</strong>
-  <meter min="0" max="1" value="{{.Bar}}" aria-hidden="true"></meter>
-  <span class="report-comparison">Было {{formatMoney .Previous}} · {{.Change}}</span>
+<a class="report-category" href="{{.URL}}" title="Было {{formatMoney .Previous}}">
+  <span class="report-category-bar" style="transform: scaleX({{.Bar}})" aria-hidden="true"></span>
+  <span class="report-category-label"><span class="report-category-name">{{.Name}}</span><span class="report-comparison">{{.Change}}</span></span>
+  <strong>{{formatMoney .Amount}}</strong>
 </a>
 {{end}}
