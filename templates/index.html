@@ -19,7 +19,7 @@
       <div class="dashboard-accounts">
       {{range .TopAccounts}}
         <a class="dashboard-account" href="/finance/account/{{.ID}}">
-          <span>{{.Name}}</span><strong>{{formatMoney .Balance}} <span class="stat-currency">{{.Currency}}</span></strong>
+          <span>{{.Name}}</span><strong class="account-balance">{{formatMoney .Balance}} <span class="stat-currency">{{.Currency}}</span></strong>
         </a>
       {{else}}<p class="form-hint">Нет данных</p>{{end}}
       </div>

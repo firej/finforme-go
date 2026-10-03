@@ -156,3 +156,14 @@ func (a *Account) IsNegativeBalance() bool {
 		a.AccountType == AccountTypeEquity ||
 		a.AccountType == AccountTypeLiability
 }
+
+// DisplayBalances applies the income sign convention only to presentation.
+func (a *Account) DisplayBalances() []CurrencyBalance {
+	balances := a.GetBalances()
+	if a.AccountType == AccountTypeIncome {
+		for i := range balances {
+			balances[i].Amount = -balances[i].Amount
+		}
+	}
+	return balances
+}

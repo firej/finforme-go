@@ -1,0 +1,11 @@
+{{define "not_found.html"}}
+{{template "header" .}}
+<div class="topbar">{{template "mobile_menu_btn" .}}<div class="topbar-title">Страница не найдена</div></div>
+<section class="card" style="padding:32px;max-width:560px;margin:24px;">
+  <p class="text-muted">Ошибка 404</p>
+  <h1>Здесь ничего нет</h1>
+  <p>Возможно, адрес изменился, счёт или транзакция удалены либо недоступны вашему аккаунту.</p>
+  <a class="btn btn-primary" href="/finance/">Вернуться к счетам</a>
+</section>
+{{template "footer" .}}
+{{end}}

@@ -145,6 +145,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 		return nil, getTransactionOut{
 			ID:          tx.ID,
 			Date:        tx.PostDate.Format("2006-01-02"),
+			Time:        tx.PostDate.Format("15:04:05"),
 			Description: tx.Description,
 			Comment:     tx.Comment,
 			Tags:        tx.Tags,
@@ -171,6 +172,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 		}
 		return h.mcpSaveTransaction(userID, in.ID, writeTransactionIn{
 			Date:          in.Date,
+			Time:          in.Time,
 			Description:   in.Description,
 			Comment:       in.Comment,
 			Amount:        in.Amount,
@@ -183,13 +185,13 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "update_transaction_metadata",
-		Description: "Изменить только дату, описание, комментарий и теги существующей операции, сохранив все проводки, счета и суммы. Подходит для сложных импортированных операций.",
+		Description: "Изменить только дату, время, описание, комментарий и теги существующей операции, сохранив все проводки, счета и суммы. Подходит для сложных импортированных операций.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in updateTransactionMetadataIn) (*mcp.CallToolResult, writeTransactionOut, error) {
 		date, err := time.Parse("2006-01-02", in.Date)
 		if err != nil {
 			return nil, writeTransactionOut{}, fmt.Errorf("invalid date: %w", err)
 		}
-		if err := h.updateTransactionMetadata(userID, in.ID, date, in.Description, in.Tags, in.Comment); err != nil {
+		if err := h.updateTransactionMetadata(userID, in.ID, date, in.Description, in.Tags, in.Comment, in.Time); err != nil {
 			return nil, writeTransactionOut{}, err
 		}
 		return nil, writeTransactionOut{ID: in.ID, Result: "ok"}, nil
@@ -227,8 +229,12 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_currency_rates",
-		Description: "Актуальные курсы валют (USD/RUB, EUR/RUB и др.) с дневным изменением. Данные ЦБ РФ и бирж.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, currencyRatesOut, error) {
+		Description: "Без даты — актуальные курсы ЦБ РФ и бирж с дневным изменением. С date (YYYY-MM-DD) — курсы ЦБ, действовавшие на указанную дату, только из истории сервиса; отсутствие данных сообщается явно.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, in currencyRatesIn) (*mcp.CallToolResult, currencyRatesOut, error) {
+		if in.Date != "" {
+			out, err := h.historicalCurrencyRates(in.Date)
+			return nil, out, err
+		}
 		rates, updatedAt, err := loadCurrencyRates(h.db)
 		if err != nil {
 			return nil, currencyRatesOut{}, err
@@ -264,6 +270,7 @@ func (h *Handler) mcpSaveTransaction(userID, txID int64, in writeTransactionIn) 
 		Description:     in.Description,
 		Comment:         in.Comment,
 		PostDate:        postDate,
+		PostTime:        in.Time,
 		Tags:            in.Tags,
 		Value:           in.Amount,
 		ValueTarget:     valueTarget,
@@ -315,6 +322,7 @@ type getTransactionIn struct {
 type getTransactionOut struct {
 	ID          int64                    `json:"id"`
 	Date        string                   `json:"date"`
+	Time        string                   `json:"time"`
 	Description string                   `json:"description"`
 	Comment     string                   `json:"comment"`
 	Tags        string                   `json:"tags"`
@@ -323,6 +331,7 @@ type getTransactionOut struct {
 }
 
 type writeTransactionIn struct {
+	Time          *string  `json:"time,omitempty" jsonschema:"время HH:MM или HH:MM:SS без преобразования часового пояса; при создании по умолчанию 00:00:00, при обновлении пропуск сохраняет время"`
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
 	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
 	Comment       *string  `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
@@ -334,6 +343,7 @@ type writeTransactionIn struct {
 }
 
 type updateTransactionIn struct {
+	Time          *string  `json:"time,omitempty" jsonschema:"время HH:MM или HH:MM:SS без преобразования часового пояса; при создании по умолчанию 00:00:00, при обновлении пропуск сохраняет время"`
 	ID            int64    `json:"id" jsonschema:"ID обновляемой транзакции"`
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
 	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
@@ -370,11 +380,15 @@ type currencyRateOut struct {
 }
 
 type currencyRatesOut struct {
-	UpdatedAt string            `json:"updated_at"`
-	Rates     []currencyRateOut `json:"rates"`
+	RequestedDate string            `json:"requested_date,omitempty"`
+	MissingPairs  []string          `json:"missing_pairs,omitempty"`
+	Message       string            `json:"message,omitempty"`
+	UpdatedAt     string            `json:"updated_at"`
+	Rates         []currencyRateOut `json:"rates"`
 }
 
 type updateTransactionMetadataIn struct {
+	Time        *string `json:"time,omitempty" jsonschema:"время HH:MM или HH:MM:SS без преобразования часового пояса; при создании по умолчанию 00:00:00, при обновлении пропуск сохраняет время"`
 	ID          int64   `json:"id" jsonschema:"ID существующей транзакции"`
 	Date        string  `json:"date" jsonschema:"дата YYYY-MM-DD"`
 	Description string  `json:"description" jsonschema:"описание"`

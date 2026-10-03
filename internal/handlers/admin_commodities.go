@@ -27,7 +27,7 @@ func (h *Handler) AdminCommodities(w http.ResponseWriter, r *http.Request) {
 		}
 		err = h.db.QueryRow(`SELECT id,mnemonic,COALESCE(fullname,''),fraction,COALESCE(sign,'') FROM commodities WHERE id=?`, id).Scan(&form.ID, &form.Mnemonic, &form.Fullname, &form.Fraction, &form.Sign)
 		if errors.Is(err, sql.ErrNoRows) {
-			http.NotFound(w, r)
+			h.NotFound(w, r)
 			return
 		}
 		if err != nil {
@@ -149,18 +149,17 @@ func (h *Handler) saveAdminCommodity(c models.Commodity) error {
 	}
 	if c.ID != 0 {
 		var code string
-		var fraction int
-		err = tx.QueryRow(`SELECT mnemonic,fraction FROM commodities WHERE id=?`, c.ID).Scan(&code, &fraction)
+		err = tx.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, c.ID).Scan(&code)
 		if errors.Is(err, sql.ErrNoRows) {
 			return validationError("Валюта не найдена")
 		}
 		if err != nil {
 			return err
 		}
-		if code != c.Mnemonic || fraction != c.Fraction {
-			return validationError("Код и точность существующей валюты менять нельзя: создайте новую валюту")
+		if code != c.Mnemonic {
+			return validationError("Код существующей валюты менять нельзя: создайте новую валюту")
 		}
-		if _, err = tx.Exec(`UPDATE commodities SET fullname=?,sign=? WHERE id=?`, c.Fullname, c.Sign, c.ID); err != nil {
+		if _, err = tx.Exec(`UPDATE commodities SET fullname=?,sign=?,fraction=? WHERE id=?`, c.Fullname, c.Sign, c.Fraction, c.ID); err != nil {
 			return err
 		}
 		return tx.Commit()

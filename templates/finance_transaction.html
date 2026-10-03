@@ -33,6 +33,11 @@
                value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{end}}" required>
       </div>
 
+    <div class="form-group">
+      <label class="form-label" for="post_time">Время</label>
+      <input class="form-input" type="time" step="1" id="post_time" name="post_time" required
+             value="{{if .Transaction}}{{.Transaction.PostDate.Format "15:04:05"}}{{else}}00:00:00{{end}}">
+    </div>
       <div class="form-group">
         <label class="form-label" for="tags">Теги (через запятую)</label>
         <input class="form-input" type="text" id="tags" name="tags"

@@ -99,7 +99,7 @@ func TestFinanceDeepParentValidation(t *testing.T) {
 	h := financeTestHandler(t)
 	parent := int64(6)
 	for id := int64(100); id < 205; id++ {
-		if _, err := h.db.Exec(`INSERT INTO accounts(id,user_id,name,account_type,commodity_id,parent_id) VALUES(?,2,'Nested','EXPENSE',1,?)`, id, parent); err != nil {
+		if _, err := h.db.Exec(`INSERT INTO accounts(id,user_id,name,account_type,commodity_id,commodity_scu,non_std_scu,parent_id) VALUES(?,2,'Nested','EXPENSE',1,100,0,?)`, id, parent); err != nil {
 			t.Fatal(err)
 		}
 		parent = id

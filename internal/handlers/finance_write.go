@@ -120,6 +120,10 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 		return 0, validationError("Для разных валют укажите сумму зачисления")
 	}
 	id := in.TxID
+	in.PostDate, err = transactionDate(tx, userID, id, in.PostDate, in.PostTime)
+	if err != nil {
+		return 0, err
+	}
 	if id != 0 {
 		if err := requireTransaction(tx, userID, id); err != nil {
 			return 0, err
@@ -159,7 +163,7 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 	return id, nil
 }
 
-func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, description, tags string, comment *string) error {
+func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, description, tags string, comment *string, clocks ...*string) error {
 	if err := validateTransactionComment(comment); err != nil {
 		return err
 	}
@@ -172,6 +176,14 @@ func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, de
 	}
 	defer tx.Rollback()
 	if err := requireTransaction(tx, userID, id); err != nil {
+		return err
+	}
+	var clock *string
+	if len(clocks) > 0 {
+		clock = clocks[0]
+	}
+	date, err = transactionDate(tx, userID, id, date, clock)
+	if err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE transactions SET post_date = ?, description = ?, tags = ?, comment = COALESCE(?,comment) WHERE id = ? AND user_id = ?`, date, description, tags, comment, id, userID); err != nil {
@@ -196,7 +208,7 @@ func (h *Handler) APITransactionMetadataSave(w http.ResponseWriter, r *http.Requ
 		writeFinanceError(w, validationError("Некорректная дата"))
 		return
 	}
-	if err := h.updateTransactionMetadata(userID, id, date, r.FormValue("description"), r.FormValue("tags"), optionalFormComment(r)); err != nil {
+	if err := h.updateTransactionMetadata(userID, id, date, r.FormValue("description"), r.FormValue("tags"), optionalFormComment(r), optionalFormTime(r)); err != nil {
 		writeFinanceError(w, err)
 		return
 	}

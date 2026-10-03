@@ -171,7 +171,7 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 
 	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		h.NotFound(w, r)
 		return
 	}
 
@@ -195,7 +195,11 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("ERROR loading account %d: %v\n", accountID, err)
-		http.Error(w, "Account not found", http.StatusNotFound)
+		if errors.Is(err, sql.ErrNoRows) {
+			h.NotFound(w, r)
+		} else {
+			http.Error(w, "Не удалось загрузить счёт", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -350,7 +354,7 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 	// Редактирование существующего счета
 	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		h.NotFound(w, r)
 		return
 	}
 
@@ -367,7 +371,11 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		fmt.Printf("ERROR loading account for edit %d: %v\n", accountID, err)
-		http.Error(w, "Account not found", http.StatusNotFound)
+		if errors.Is(err, sql.ErrNoRows) {
+			h.NotFound(w, r)
+		} else {
+			http.Error(w, "Не удалось загрузить счёт", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -397,6 +405,9 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 	txIDStr := vars["tx_id"]
 
 	accountID, _ := strconv.ParseInt(accountIDStr, 10, 64)
+	if !h.requirePageAccount(w, r, userID, accountID) {
+		return
+	}
 
 	var transaction *models.Transaction
 	var debit, credit []map[string]interface{}
@@ -405,7 +416,7 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 		txID, _ := strconv.ParseInt(txIDStr, 10, 64)
 		transaction, debit, credit = h.getTransaction(userID, txID)
 		if transaction == nil {
-			http.Error(w, "Транзакция не найдена", http.StatusNotFound)
+			h.NotFound(w, r)
 			return
 		}
 	}
@@ -919,9 +930,10 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 	rows, err := h.db.Query(`
 		SELECT t.id, t.description, COALESCE(t.comment,''), t.post_date, t.tags,
 		       s.id, s.account_id, s.value_num, s.value_denom,
-		       a.name
+		       a.name, current_account.account_type
 		FROM transactions t
 		JOIN splits acc_split ON t.id = acc_split.tx_id AND acc_split.account_id = ? AND acc_split.user_id = ?
+		JOIN accounts current_account ON current_account.id = acc_split.account_id
 		JOIN splits s ON t.id = s.tx_id
 		LEFT JOIN accounts a ON s.account_id = a.id
 		WHERE t.user_id = ?
@@ -938,11 +950,11 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 
 	for rows.Next() {
 		var txID, splitID, splitAccountID, valueNum, valueDenom int64
-		var description, comment, tags, accountName string
+		var description, comment, tags, accountName, accountType string
 		var postDate time.Time
 
 		rows.Scan(&txID, &description, &comment, &postDate, &tags, &splitID, &splitAccountID,
-			&valueNum, &valueDenom, &accountName)
+			&valueNum, &valueDenom, &accountName, &accountType)
 
 		if _, exists := transactionsMap[txID]; !exists {
 			transactionsMap[txID] = map[string]interface{}{
@@ -958,13 +970,16 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 
 		if splitAccountID == accountID {
 			value := float64(valueNum) / float64(valueDenom)
+			if accountType == models.AccountTypeIncome {
+				value = -value
+			}
 			// Разделяем на приход (положительное) и расход (отрицательное)
 			if value > 0 {
 				transactionsMap[txID]["plus_balance_changing"] = value
 			} else {
 				transactionsMap[txID]["balance_changing"] = -value // Показываем расход как положительное число
 			}
-			transactionsMap[txID]["value_change"] = value // Сохраняем оригинальное значение для расчета баланса
+			transactionsMap[txID]["value_change"] = value // Знак для экранного накопительного баланса; проводки не меняются
 		} else {
 			transactionsMap[txID]["account_name"] = accountName
 			transactionsMap[txID]["account_id"] = splitAccountID
@@ -1458,6 +1473,7 @@ func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]i
 			txMap[txID] = map[string]interface{}{
 				"id":          txID,
 				"date":        postDate.Format("2006-01-02"),
+				"time":        postDate.Format("15:04:05"),
 				"description": description,
 				"comment":     comment,
 				"tags":        tagList,
@@ -1564,6 +1580,7 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 		Description:     description,
 		Comment:         optionalFormComment(r),
 		PostDate:        postDate,
+		PostTime:        optionalFormTime(r),
 		Tags:            tags,
 		Value:           value,
 		ValueTarget:     valueTarget,
@@ -1587,6 +1604,7 @@ type txSaveInput struct {
 	Description     string
 	Comment         *string // nil preserves the current comment on update
 	PostDate        time.Time
+	PostTime        *string // nil preserves existing time
 	Tags            string
 	Value           float64  // сумма списания (в валюте счёта списания)
 	ValueTarget     *float64 // сумма зачисления (в валюте счёта зачисления)
@@ -2151,6 +2169,9 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 	accountIDStr := r.URL.Query().Get("account_id")
 
 	accountID, _ := strconv.ParseInt(accountIDStr, 10, 64)
+	if accountIDStr != "" && accountIDStr != "0" && !h.requirePageAccount(w, r, userID, accountID) {
+		return
+	}
 
 	var transaction *models.Transaction
 	var debit, credit []map[string]interface{}
@@ -2159,7 +2180,7 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 		txID, _ := strconv.ParseInt(txIDStr, 10, 64)
 		transaction, debit, credit = h.getTransaction(userID, txID)
 		if transaction == nil {
-			http.Error(w, "Транзакция не найдена", http.StatusNotFound)
+			h.NotFound(w, r)
 			return
 		}
 	}
@@ -2196,10 +2217,13 @@ func (h *Handler) APITransactionTableGet(w http.ResponseWriter, r *http.Request)
 
 	accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid account ID", http.StatusBadRequest)
+		h.NotFound(w, r)
 		return
 	}
 
+	if !h.requirePageAccount(w, r, userID, accountID) {
+		return
+	}
 	if sortOrder != "asc" && sortOrder != "desc" {
 		sortOrder = "desc"
 	}
@@ -2224,6 +2248,10 @@ func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 
 	if accountIDStr != "" && accountIDStr != "0" {
 		accountID, err := strconv.ParseInt(accountIDStr, 10, 64)
+		if err != nil || accountID <= 0 {
+			h.NotFound(w, r)
+			return
+		}
 		if err == nil {
 			var acc models.Account
 			var parentID sql.NullInt64
@@ -2236,6 +2264,14 @@ func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 				&acc.CommodityID, &acc.CommoditySCU, &acc.NonStdSCU,
 				&parentID, &code, &description, &acc.Hidden, &acc.Placeholder)
 
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					h.NotFound(w, r)
+				} else {
+					http.Error(w, "Не удалось загрузить счёт", http.StatusInternalServerError)
+				}
+				return
+			}
 			if err == nil {
 				if parentID.Valid {
 					acc.ParentID = &parentID.Int64

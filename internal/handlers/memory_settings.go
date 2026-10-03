@@ -60,7 +60,7 @@ func (h *Handler) MemorySettings(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			var invalid validationError
 			if errors.As(err, &invalid) {
-				http.NotFound(w, r)
+				h.NotFound(w, r)
 			} else {
 				http.Error(w, "Не удалось загрузить заметку", http.StatusInternalServerError)
 			}

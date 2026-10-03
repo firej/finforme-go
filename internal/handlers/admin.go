@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -380,7 +382,11 @@ func (h *Handler) AdminRateEdit(w http.ResponseWriter, r *http.Request) {
 		code, source, rateDate,
 	).Scan(&cr.Code, &cr.Name, &cr.Rate, &cr.Source, &cr.RateDate)
 	if err != nil {
-		http.Error(w, "Record not found", http.StatusNotFound)
+		if errors.Is(err, sql.ErrNoRows) {
+			h.NotFound(w, r)
+		} else {
+			http.Error(w, "Не удалось загрузить курс", http.StatusInternalServerError)
+		}
 		return
 	}
 

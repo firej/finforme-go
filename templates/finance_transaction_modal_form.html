@@ -24,6 +24,11 @@
       <input class="form-input" type="date" id="modal-post_date" name="post_date" required
              value="{{if .Transaction}}{{.Transaction.PostDate.Format "2006-01-02"}}{{else}}{{.Today}}{{end}}">
     </div>
+    <div class="form-group">
+      <label class="form-label" for="modal-post_time">Время</label>
+      <input class="form-input" type="time" step="1" id="modal-post_time" name="post_time" required
+             value="{{if .Transaction}}{{.Transaction.PostDate.Format "15:04:05"}}{{else}}00:00:00{{end}}">
+    </div>
     {{if not .MetadataOnly}}
     <div class="form-group">
       <label class="form-label" for="modal-value">

@@ -1097,3 +1097,10 @@ body { font-variant-numeric: tabular-nums; }
 
 .history-mobile-hint { display: none; }
 @media (max-width: 640px) { .history-mobile-hint { display: block; margin-bottom: 10px; } }
+
+/* Mask balances while preserving layout, including dynamically refreshed rows. */
+.balances-hidden .stree-bal,
+.balances-hidden .ptree-balance,
+.balances-hidden .stat-balance .stat-value,
+.balances-hidden .account-balance { visibility: hidden; }
+.tx-row:target { background: var(--accent-subtle); outline: 2px solid var(--accent-text); outline-offset: -2px; scroll-margin-block: 90px; }

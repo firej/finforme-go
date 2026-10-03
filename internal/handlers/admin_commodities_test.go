@@ -144,7 +144,7 @@ func TestAdminCommodityEdit(t *testing.T) {
 	if w := request("POST", "/admin/commodities/", values); w.Code != 303 || !strings.Contains(w.Header().Get("Location"), "currency_updated") {
 		t.Fatalf("save: %d %s", w.Code, w.Body.String())
 	}
-	for _, tc := range []struct{ key, value string }{{"mnemonic", "PESO"}, {"decimals", "3"}, {"fullname", ""}, {"id", "-1"}, {"id", "999999"}} {
+	for _, tc := range []struct{ key, value string }{{"mnemonic", "PESO"}, {"fullname", ""}, {"id", "-1"}, {"id", "999999"}} {
 		original := values.Get(tc.key)
 		values.Set(tc.key, tc.value)
 		if w := request("POST", "/admin/commodities/", values); w.Code != 400 {

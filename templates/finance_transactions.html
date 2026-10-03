@@ -93,7 +93,7 @@
   <div class="stats-bar account-stats">
     <div class="stat-cell stat-balance">
       <div class="stat-label">Текущий остаток</div>
-      {{range .Account.GetBalances}}
+      {{range .Account.DisplayBalances}}
       <div class="stat-value {{if gt .Amount 0.0}}text-green{{else if lt .Amount 0.0}}text-red{{end}}">
         {{formatMoney .Amount}} <span class="stat-currency">{{.Currency}}</span>
       </div>
@@ -182,6 +182,18 @@ if (linkedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth)) {
   });
   updatePeriod();
 }
+
+function revealLinkedTransaction() {
+  if (!/^#transaction-\d+$/.test(window.location.hash)) return;
+  var row = document.getElementById(window.location.hash.slice(1));
+  if (!row) return;
+  currentPeriod = 'all';
+  document.getElementById('tx-search').value = '';
+  updatePeriod();
+  requestAnimationFrame(function() { row.scrollIntoView({block: 'center'}); });
+}
+window.addEventListener('hashchange', revealLinkedTransaction);
+revealLinkedTransaction();
 
 function setPeriod(p) {
   currentPeriod = p;

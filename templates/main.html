@@ -15,6 +15,7 @@
         var t = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
         var root = document.documentElement;
         root.setAttribute('data-theme', t);
+        root.classList.toggle('balances-hidden', localStorage.getItem('balances-hidden') === '1');
         root.style.background = t === 'dark' ? '#0c0e16' : '#f1f3f7';
         root.style.colorScheme = t;
       } catch (e) {}
@@ -67,6 +68,7 @@
     <div class="sidebar-section">
       <div class="sidebar-section-row">
         <span class="sidebar-section-label">Мои счета</span>
+        <button type="button" class="sidebar-add-btn" id="balance-visibility" onclick="toggleBalances()" aria-label="Скрыть балансы" aria-pressed="false" title="Скрыть балансы">◉</button>
         <button class="sidebar-add-btn" onclick="openAccountDrawer(0)" title="Добавить счёт">+</button>
       </div>
     </div>
@@ -231,6 +233,7 @@
 function applyTheme(t) {
   var root = document.documentElement;
   root.setAttribute('data-theme', t);
+        root.classList.toggle('balances-hidden', localStorage.getItem('balances-hidden') === '1');
   root.style.background = '';        // hand control back to CSS after first paint
   root.style.colorScheme = t;
   var moon  = document.getElementById('theme-icon-moon');
@@ -288,6 +291,22 @@ function toggleSidebarNode(event, accountId) {
   btn.setAttribute('aria-expanded', String(!isOpen));
   btn.setAttribute('aria-label', isOpen ? 'Развернуть' : 'Свернуть');
 }
+
+function updateBalanceButton() {
+  var button = document.getElementById('balance-visibility');
+  if (!button) return;
+  var hidden = document.documentElement.classList.contains('balances-hidden');
+  button.setAttribute('aria-pressed', String(hidden));
+  button.setAttribute('aria-label', hidden ? 'Показать балансы' : 'Скрыть балансы');
+  button.title = button.getAttribute('aria-label');
+  button.textContent = hidden ? '◎' : '◉';
+}
+function toggleBalances() {
+  var hidden = document.documentElement.classList.toggle('balances-hidden');
+  try { localStorage.setItem('balances-hidden', hidden ? '1' : '0'); } catch (e) {}
+  updateBalanceButton();
+}
+updateBalanceButton();
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(message, type) {
@@ -414,7 +433,7 @@ document.addEventListener('keydown', function(e) {
     <span class="account-dot dot-{{.AccountType}}"></span>
     <span class="stree-name">{{.Name}}</span>
     <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
-    {{range .GetBalances}}{{if ne .Amount 0.0}}
+    {{range .DisplayBalances}}{{if ne .Amount 0.0}}
       <span title="{{formatMoney .Amount}} {{.Currency}}" style="color:{{if gt .Amount 0.0}}var(--sidebar-positive){{else}}var(--sidebar-negative){{end}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
     {{end}}{{end}}
     </span>

@@ -62,6 +62,7 @@ func main() {
 
 	// Настройка роутера
 	r := mux.NewRouter()
+	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 	h.RegisterOAuthRoutes(r)
 
 	// Статические файлы
