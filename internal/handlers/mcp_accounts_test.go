@@ -63,7 +63,6 @@ func TestMCPAccountLifecycle(t *testing.T) {
 		{"name": "Bad", "account_type": "ROOT", "commodity_id": 1},
 		{"name": "Bad", "account_type": "BANK", "commodity_id": 999},
 		{"name": "Bad", "account_type": "BANK", "commodity_id": 1, "parent_id": 5},
-		{"name": "Bad", "account_type": "BANK", "commodity_id": 1, "parent_id": 1},
 	} {
 		call("create_account", args, true)
 	}

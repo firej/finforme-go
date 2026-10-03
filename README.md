@@ -485,7 +485,8 @@ OAuth-токены действуют только на `/mcp`; для REST API 
 Для создания счёта сначала получите ID валюты через `list_commodities`.
 Например: `create_account` с `{"name":"Накопления","account_type":"BANK","commodity_id":1}`
 (используйте фактический ID нужной валюты). Допустимые типы: ASSET, CASH, BANK,
-LIABILITY, INCOME, EXPENSE, EQUITY. Родитель должен быть контейнером;
+LIABILITY, INCOME, EXPENSE, EQUITY. Родителем может быть обычный или контейнерный
+счёт на любом уровне вложенности, кроме самого счёта и его потомков;
 `parent_id: 0` снимает родителя. `list_accounts` возвращает `parent_id` и `commodity_id`.
 Чтобы скрыть счёт с историей, вызовите `update_account` с `{"id":123,"hidden":true}`;
 `false` снова показывает его. Валюту счёта с операциями менять нельзя.

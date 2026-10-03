@@ -54,21 +54,19 @@
     </div>
   </div>
 
-  <!-- Parent account: только контейнерные (placeholder) счета и не сам счёт -->
+  <!-- Parent accounts exclude this account and its descendants. -->
   <div class="form-group">
     <label class="form-label" for="modal-account_parent">Родительский счёт</label>
     <select class="form-select" id="modal-account_parent" name="account_parent">
       <option value="">— корневой —</option>
       {{range .Accounts}}
-      {{if ne .AccountType "ROOT"}}{{if eq .Placeholder 1}}{{if or (not $.Account) (ne .ID $.Account.ID)}}
       <option value="{{.ID}}"
         {{if $.Account}}{{if $.Account.ParentID}}{{if eq .ID (derefInt64 $.Account.ParentID)}}selected{{end}}{{end}}{{end}}>
         {{.DisplayName}}
       </option>
-      {{end}}{{end}}{{end}}
       {{end}}
     </select>
-    <p class="form-hint">Можно выбрать только контейнерные счета.</p>
+    <p class="form-hint">Можно выбрать счёт на любом уровне, кроме самого счёта и его потомков.</p>
   </div>
 
   <!-- Placeholder flag -->

@@ -18,7 +18,7 @@ type createAccountIn struct {
 	Name        string `json:"name"`
 	AccountType string `json:"account_type" jsonschema:"ASSET, CASH, BANK, LIABILITY, INCOME, EXPENSE или EQUITY"`
 	CommodityID int64  `json:"commodity_id" jsonschema:"ID валюты из list_commodities"`
-	ParentID    int64  `json:"parent_id,omitempty" jsonschema:"ID контейнера; 0 — без родителя"`
+	ParentID    int64  `json:"parent_id,omitempty" jsonschema:"ID родительского счёта; 0 — без родителя"`
 	Description string `json:"description,omitempty"`
 	Hidden      bool   `json:"hidden,omitempty"`
 	Placeholder bool   `json:"placeholder,omitempty" jsonschema:"контейнер для дочерних счетов, без операций"`
@@ -79,7 +79,7 @@ func (h *Handler) mutateMCPAccount(userID, id int64, in updateAccountIn) (int64,
 	var name, kind, description string
 	var currency, oldCurrency int64
 	var parent sql.NullInt64
-	var hidden, placeholder bool
+	var hidden, placeholder, oldPlaceholder bool
 	if id != 0 {
 		err = tx.QueryRow(`SELECT name, account_type, commodity_id, parent_id, COALESCE(description,''), hidden, placeholder FROM accounts WHERE id=? AND user_id=?`, id, userID).Scan(&name, &kind, &currency, &parent, &description, &hidden, &placeholder)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -92,6 +92,7 @@ func (h *Handler) mutateMCPAccount(userID, id int64, in updateAccountIn) (int64,
 			return 0, validationError("Системный ROOT нельзя изменять")
 		}
 		oldCurrency = currency
+		oldPlaceholder = placeholder
 	}
 	if in.Name != nil {
 		name = strings.TrimSpace(*in.Name)
@@ -136,14 +137,6 @@ func (h *Handler) mutateMCPAccount(userID, id int64, in updateAccountIn) (int64,
 		if err = validateParentAccount(tx, userID, id, parent.Int64); err != nil {
 			return 0, err
 		}
-		var container bool
-		var parentType string
-		if err = tx.QueryRow(`SELECT placeholder, account_type FROM accounts WHERE id=? AND user_id=?`, parent.Int64, userID).Scan(&container, &parentType); err != nil {
-			return 0, err
-		}
-		if !container && parentType != "ROOT" {
-			return 0, validationError("Родитель должен быть контейнером")
-		}
 	}
 	if id != 0 {
 		var splits, kids int
@@ -159,7 +152,7 @@ func (h *Handler) mutateMCPAccount(userID, id int64, in updateAccountIn) (int64,
 		if splits > 0 && placeholder {
 			return 0, validationError("Счёт с операциями нельзя сделать контейнером")
 		}
-		if kids > 0 && !placeholder {
+		if kids > 0 && oldPlaceholder && !placeholder {
 			return 0, validationError("У счёта с дочерними счетами нельзя убрать признак контейнера")
 		}
 		_, err = tx.Exec(`UPDATE accounts SET name=?,account_type=?,commodity_id=?,parent_id=?,description=?,hidden=?,placeholder=? WHERE id=? AND user_id=?`, name, kind, currency, parent, description, hidden, placeholder, id, userID)

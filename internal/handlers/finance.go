@@ -341,7 +341,7 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 		// Создание нового счета
 		data := h.pageData(userID, "finance")
 		data["Title"] = "Новый счет"
-		data["Accounts"] = accounts
+		data["Accounts"] = accountParentChoices(accounts, nil)
 		data["Commodities"] = commodities
 		h.renderTemplate(w, "finance_account.html", data)
 		return
@@ -384,7 +384,7 @@ func (h *Handler) FinanceAccountEdit(w http.ResponseWriter, r *http.Request) {
 	data := h.pageData(userID, "finance")
 	data["Title"] = "Редактирование счета"
 	data["Account"] = account
-	data["Accounts"] = accounts
+	data["Accounts"] = accountParentChoices(accounts, &account)
 	data["Commodities"] = commodities
 	h.renderTemplate(w, "finance_account.html", data)
 }
@@ -708,7 +708,12 @@ func validateParentAccount(q interface {
 	QueryRow(string, ...interface{}) *sql.Row
 }, userID, accountID, parentID int64) error {
 	current := parentID
-	for i := 0; i < 100 && current != 0; i++ {
+	seen := make(map[int64]bool)
+	for current != 0 {
+		if seen[current] {
+			return fmt.Errorf("в иерархии родительского счёта обнаружен цикл")
+		}
+		seen[current] = true
 		if current == accountID {
 			return fmt.Errorf("родительский счёт не может быть самим счётом или его потомком")
 		}
@@ -724,9 +729,6 @@ func validateParentAccount(q interface {
 			return nil
 		}
 		current = next.Int64
-	}
-	if current != 0 {
-		return fmt.Errorf("слишком глубокая иерархия счетов")
 	}
 	return nil
 }
@@ -1106,9 +1108,11 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 	var parentID sql.NullInt64
 	if parentIDStr != "" {
 		pid, err := strconv.ParseInt(parentIDStr, 10, 64)
-		if err == nil {
-			parentID = sql.NullInt64{Int64: pid, Valid: true}
+		if err != nil || pid <= 0 {
+			writeFinanceError(w, validationError("Некорректный родительский счёт"))
+			return
 		}
+		parentID = sql.NullInt64{Int64: pid, Valid: true}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1164,7 +1168,8 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var oldCurrency int64
-		if err := tx.QueryRow(`SELECT commodity_id FROM accounts WHERE id = ? AND user_id = ?`, accountID, userID).Scan(&oldCurrency); err != nil {
+		var oldPlaceholder int
+		if err := tx.QueryRow(`SELECT commodity_id, placeholder FROM accounts WHERE id = ? AND user_id = ?`, accountID, userID).Scan(&oldCurrency, &oldPlaceholder); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeFinanceError(w, validationError("Счёт не найден"))
 			} else {
@@ -1198,7 +1203,7 @@ func (h *Handler) APIAccountSave(w http.ResponseWriter, r *http.Request) {
 				})
 				return
 			}
-		} else {
+		} else if oldPlaceholder == 1 {
 			var kids int
 			if err := tx.QueryRow(`SELECT COUNT(*) FROM accounts WHERE parent_id = ? AND user_id = ?`,
 				accountID, userID).Scan(&kids); err != nil {
@@ -2251,7 +2256,7 @@ func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]interface{}{
 		"Account":     account,
-		"Accounts":    accounts,
+		"Accounts":    accountParentChoices(accounts, account),
 		"Commodities": commodities,
 	}
 
@@ -2269,4 +2274,34 @@ func hasTransactionTag(tags, wanted string) bool {
 		}
 	}
 	return false
+}
+
+// accountParentChoices excludes the edited account and its entire subtree.
+func accountParentChoices(accounts []*models.Account, account *models.Account) []*models.Account {
+	children := make(map[int64][]int64)
+	for _, candidate := range accounts {
+		if candidate.ParentID != nil {
+			children[*candidate.ParentID] = append(children[*candidate.ParentID], candidate.ID)
+		}
+	}
+	excluded := make(map[int64]bool)
+	if account != nil {
+		pending := []int64{account.ID}
+		for len(pending) > 0 {
+			id := pending[len(pending)-1]
+			pending = pending[:len(pending)-1]
+			if excluded[id] {
+				continue
+			}
+			excluded[id] = true
+			pending = append(pending, children[id]...)
+		}
+	}
+	result := make([]*models.Account, 0, len(accounts))
+	for _, candidate := range accounts {
+		if candidate.AccountType != models.AccountTypeRoot && !excluded[candidate.ID] {
+			result = append(result, candidate)
+		}
+	}
+	return result
 }
