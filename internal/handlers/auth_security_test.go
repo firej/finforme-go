@@ -68,7 +68,7 @@ func authTestHandler(t *testing.T) *Handler {
 		db.SetMaxOpenConns(1)
 		t.Cleanup(func() { db.Close() })
 		for _, q := range []string{
-			`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, email TEXT DEFAULT '', first_name TEXT DEFAULT '', last_name TEXT DEFAULT '', password_hash TEXT, is_active INTEGER DEFAULT 1, is_admin INTEGER DEFAULT 0, session_version INTEGER NOT NULL DEFAULT 1, password_change_required INTEGER NOT NULL DEFAULT 0, password_expires_at DATETIME)`,
+			`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, email TEXT DEFAULT '', first_name TEXT DEFAULT '', last_name TEXT DEFAULT '', password_hash TEXT, is_active INTEGER DEFAULT 1, is_admin INTEGER DEFAULT 0, session_version INTEGER NOT NULL DEFAULT 1, password_change_required INTEGER NOT NULL DEFAULT 0, password_expires_at DATETIME, last_login_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
 			`CREATE TABLE api_tokens (id INTEGER PRIMARY KEY, user_id INTEGER, token_hash TEXT, name TEXT, prefix TEXT, last_used_at DATETIME)`,
 		} {
 			if _, err = db.Exec(q); err != nil {
@@ -357,11 +357,18 @@ func TestAuthMariaDBUpgrade(t *testing.T) {
 		t.Skip("requires disposable MariaDB")
 	}
 	h := authTestHandler(t)
-	if _, err := h.db.Exec(`ALTER TABLE users DROP COLUMN session_version, DROP COLUMN password_change_required, DROP COLUMN password_expires_at`); err != nil {
+	if _, err := h.db.Exec(`ALTER TABLE users DROP COLUMN session_version, DROP COLUMN password_change_required, DROP COLUMN password_expires_at, DROP COLUMN last_login_at`); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.InitDB(h.db); err != nil {
 		t.Fatal(err)
+	}
+	if err := database.InitDB(h.db); err != nil {
+		t.Fatal("repeat migration", err)
+	}
+	var lastLogin sql.NullTime
+	if err := h.db.QueryRow(`SELECT last_login_at FROM users WHERE id=2`).Scan(&lastLogin); err != nil || lastLogin.Valid {
+		t.Fatal("migration must leave historical login unknown", lastLogin, err)
 	}
 	if w := authLogin(h, "original-password"); w.Code != 303 {
 		t.Fatal("existing user cannot log in after migration")

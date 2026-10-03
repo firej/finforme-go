@@ -21,10 +21,11 @@ func InitDB(db *sql.DB) error {
  session_version BIGINT NOT NULL DEFAULT 1,
  password_change_required TINYINT NOT NULL DEFAULT 0,
  password_expires_at DATETIME NULL,
+ last_login_at DATETIME NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
-        `CREATE TABLE IF NOT EXISTS user_memory (
+		`CREATE TABLE IF NOT EXISTS user_memory (
             user_id BIGINT NOT NULL,
             memory_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
             content TEXT NOT NULL,
@@ -152,6 +153,7 @@ func InitDB(db *sql.DB) error {
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_required TINYINT NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_expires_at DATETIME NULL`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at DATETIME NULL`,
 	}
 	for _, m := range migrations {
 		if _, err := db.Exec(m); err != nil {

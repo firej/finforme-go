@@ -67,15 +67,16 @@ type Split struct {
 
 // User представляет пользователя
 type User struct {
-	ID           int64     `json:"id"`
-	Username     string    `json:"username"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"-"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
-	IsActive     bool      `json:"is_active"`
-	IsAdmin      bool      `json:"is_admin"`
-	CreatedAt    time.Time `json:"created_at"`
+	LastLoginAt  *time.Time `json:"-"`
+	ID           int64      `json:"id"`
+	Username     string     `json:"username"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"-"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	IsActive     bool       `json:"is_active"`
+	IsAdmin      bool       `json:"is_admin"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // CurrencyRate представляет запись курса валюты

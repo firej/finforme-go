@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -85,6 +86,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", 500)
 		return
 	}
+	h.recordLogin(id, version)
 	if required {
 		http.Redirect(w, r, "/accounts/password_change/", http.StatusSeeOther)
 		return
@@ -294,4 +296,12 @@ func (h *Handler) ChangeInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/accounts/info/", http.StatusSeeOther)
+}
+
+// recordLogin tracks successful interactive sign-ins, not session refreshes or API use.
+// An audit-field write failure must not prevent an otherwise valid login.
+func (h *Handler) recordLogin(userID, version int64) {
+	if _, err := h.db.Exec(`UPDATE users SET last_login_at=? WHERE id=? AND session_version=? AND is_active=1`, time.Now().UTC(), userID, version); err != nil {
+		log.Printf("Failed to record last login for user %d: %v", userID, err)
+	}
 }

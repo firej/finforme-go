@@ -184,7 +184,11 @@ func (h *Handler) setUserID(w http.ResponseWriter, r *http.Request, userID int64
 	if err := h.db.QueryRow(`SELECT session_version FROM users WHERE id = ? AND is_active = 1 AND password_change_required = 0`, userID).Scan(&version); err != nil {
 		return err
 	}
-	return h.writeSession(w, r, userID, version)
+	if err := h.writeSession(w, r, userID, version); err != nil {
+		return err
+	}
+	h.recordLogin(userID, version)
+	return nil
 }
 
 func (h *Handler) clearSession(w http.ResponseWriter, r *http.Request) error {

@@ -58,7 +58,7 @@ func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
 	data["Tab"] = "users"
 
 	rows, err := h.db.Query(`
-		SELECT id, username, email, first_name, last_name, is_active, is_admin, created_at
+		SELECT id, username, email, COALESCE(first_name,''), COALESCE(last_name,''), is_active, is_admin, created_at, last_login_at
 		FROM users
 		ORDER BY id ASC
 	`)
@@ -72,10 +72,15 @@ func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var u models.User
 		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.FirstName, &u.LastName,
-			&u.IsActive, &u.IsAdmin, &u.CreatedAt); err != nil {
-			continue
+			&u.IsActive, &u.IsAdmin, &u.CreatedAt, &u.LastLoginAt); err != nil {
+			http.Error(w, "Не удалось загрузить пользователей", http.StatusInternalServerError)
+			return
 		}
 		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Не удалось загрузить пользователей", http.StatusInternalServerError)
+		return
 	}
 	data["Users"] = users
 
