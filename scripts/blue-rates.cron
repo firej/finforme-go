@@ -1,0 +1,2 @@
+# Blue Dollar Sell and RUB/ARS cross-rate: hourly, independent of CBR/BCRA jobs.
+10 * * * * flock -n /var/lock/finforme-blue-rates.lock docker exec finforme ./import-blue-rates -recent-days 14 -apply >> /var/log/import-blue-rates.log 2>&1

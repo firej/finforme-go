@@ -1,4 +1,4 @@
-// One-off Blue Dollar Sell backfill. Preview by default; -apply writes rates,
+// Blue Dollar Sell backfill and scheduled refresh. Preview by default; -apply writes rates,
 // never transactions. Official rates are preserved unless -replace-official
 // explicitly requests a backed-up historical ARS replacement.
 package main
@@ -29,6 +29,8 @@ func main() {
 func run() error {
 	from := flag.String("from", exchangerates.FirstDate, "First date, not before 2023-06-01")
 	to := flag.String("to", time.Now().UTC().Format(time.DateOnly), "Last date, inclusive")
+	recentDays := flag.Int("recent-days", 0, "Refresh the last N calendar days through -to (default: today UTC); cannot combine with -from")
+	missingOnly := flag.Bool("missing-only", false, "Insert missing historical rates without changing existing quotes")
 	apply := flag.Bool("apply", false, "Write blue and derived cross rates atomically")
 	auditOnly := flag.Bool("audit", false, "Read database identity and rate coverage, without downloading or writing")
 	htmlFile := flag.String("html", "", "Optional saved bluedollar.net/informal-rate HTML")
@@ -39,9 +41,23 @@ func run() error {
 	if *auditOnly {
 		return audit()
 	}
-	if err := exchangerates.ValidateRange(*from, *to); err != nil {
+	explicitFrom := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "from" {
+			explicitFrom = true
+		}
+	})
+	if *recentDays != 0 && (explicitFrom || *replace) {
+		return fmt.Errorf("-recent-days cannot be combined with -from or -replace-official")
+	}
+	if *missingOnly && *replace {
+		return fmt.Errorf("-missing-only cannot be combined with -replace-official")
+	}
+	start, err := importStart(*from, *to, *recentDays)
+	if err != nil {
 		return err
 	}
+	*from = start
 	if *to > time.Now().UTC().Format(time.DateOnly) {
 		return fmt.Errorf("future end date is not allowed")
 	}
@@ -138,7 +154,11 @@ func run() error {
 		}
 		defer tx.Rollback()
 		save := func(code, name, value, source, date string) error {
-			_, err := tx.ExecContext(ctx, `INSERT INTO currency_rates(code,name,rate,source,rate_date) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE rate=VALUES(rate),name=VALUES(name)`, code, name, value, source, date)
+			query := `INSERT INTO currency_rates(code,name,rate,source,rate_date) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE rate=VALUES(rate),name=VALUES(name)`
+			if *missingOnly {
+				query = `INSERT INTO currency_rates(code,name,rate,source,rate_date) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE code=VALUES(code)`
+			}
+			_, err := tx.ExecContext(ctx, query, code, name, value, source, date)
 			return err
 		}
 		for _, p := range blue {
@@ -170,4 +190,22 @@ func run() error {
 		CrossCount int                   `json:"cross_count"`
 		Quotes     []exchangerates.Quote `json:"quotes"`
 	}{*apply, *from, *to, exchangerates.BlueURL, len(blue), len(quotes), output})
+}
+
+// importStart keeps the periodic window deterministic and inclusive of both ends.
+func importStart(from, to string, recentDays int) (string, error) {
+	if recentDays < 0 || recentDays > 366 {
+		return "", fmt.Errorf("-recent-days must be between 1 and 366 (or 0 to use -from)")
+	}
+	if recentDays > 0 {
+		end, err := time.Parse(time.DateOnly, to)
+		if err != nil {
+			return "", err
+		}
+		from = end.AddDate(0, 0, 1-recentDays).Format(time.DateOnly)
+		if from < exchangerates.FirstDate {
+			from = exchangerates.FirstDate
+		}
+	}
+	return from, exchangerates.ValidateRange(from, to)
 }
