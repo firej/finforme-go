@@ -5,8 +5,8 @@
     onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})">
   <td class="tx-cell-date" style="color:var(--text-secondary);font-size:12px;">{{.post_date}}</td>
   <td class="tx-cell-desc">
-    <div class="tx-description">{{.description}}</div>
-    <div class="tx-tags">{{range .tags}}{{if .}}<span class="tag">{{.}}</span>{{end}}{{end}}</div>
+    <span class="tx-description">{{.description}}</span>
+    <span class="tx-tags">{{range .tags}}{{with trimSpace .}}<a class="tag" href="/finance/tag?tag={{.}}" onclick="event.stopPropagation()">{{.}}</a> {{end}}{{end}}</span>
   </td>
   <td class="tx-cell-account" data-mlabel="Счёт">
     <a class="tx-account" href="/finance/account/{{.account_id}}" onclick="event.stopPropagation()">{{.account_name}}</a>

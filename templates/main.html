@@ -277,6 +277,7 @@ window.addEventListener('resize', function(){
 
 // ── Sidebar tree collapse ──────────────────────────────────────────────────
 function toggleSidebarNode(event, accountId) {
+  event.preventDefault();
   event.stopPropagation();
   var btn = event.currentTarget;
   var isOpen = btn.dataset.open !== 'false';
@@ -284,6 +285,8 @@ function toggleSidebarNode(event, accountId) {
   children.forEach(function(c) { c.style.display = isOpen ? 'none' : ''; });
   btn.classList.toggle('open', !isOpen);
   btn.dataset.open = isOpen ? 'false' : 'true';
+  btn.setAttribute('aria-expanded', String(!isOpen));
+  btn.setAttribute('aria-label', isOpen ? 'Развернуть' : 'Свернуть');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────
@@ -399,7 +402,7 @@ document.addEventListener('keydown', function(e) {
      class="stree-row"
      data-id="{{.ID}}">
     {{if .Childs}}
-    <button class="stree-toggle open" data-open="true"
+    <button type="button" class="stree-toggle open" data-open="true" aria-expanded="true"
       onclick="toggleSidebarNode(event, {{.ID}})" aria-label="Свернуть">
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M6 4l4 4-4 4"/>

@@ -429,6 +429,10 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 	userID, _ := h.getUserID(r)
 	vars := mux.Vars(r)
 	tag := vars["tag"]
+	if tag == "" {
+		tag = r.URL.Query().Get("tag")
+	}
+	tag = strings.TrimSpace(tag)
 
 	rows, err := h.db.Query(`
 		SELECT t.id, t.description, COALESCE(t.comment,''), t.post_date, t.tags,
@@ -437,9 +441,9 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 		FROM transactions t
 		LEFT JOIN splits s ON t.id = s.tx_id
 		LEFT JOIN accounts a ON s.account_id = a.id
-		WHERE t.user_id = ? AND t.tags LIKE ?
+		WHERE t.user_id = ? AND INSTR(t.tags, ?) > 0
 		ORDER BY t.post_date DESC
-	`, userID, "%"+tag+"%")
+	`, userID, tag)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -457,6 +461,10 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 
 		rows.Scan(&txID, &description, &comment, &postDate, &tags, &accountID, &accountName,
 			&accountType, &commodityID, &splitID, &valueNum, &valueDenom)
+
+		if !hasTransactionTag(tags, tag) {
+			continue
+		}
 
 		if _, exists := transactionsMap[txID]; !exists {
 			transactionsMap[txID] = map[string]interface{}{
@@ -2248,4 +2256,17 @@ func (h *Handler) APIAccountFormGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.renderTemplate(w, "finance_account_drawer_form.html", data)
+}
+
+// hasTransactionTag matches a complete comma-separated tag, not a substring.
+func hasTransactionTag(tags, wanted string) bool {
+	if wanted == "" {
+		return false
+	}
+	for _, tag := range strings.Split(tags, ",") {
+		if strings.TrimSpace(tag) == wanted {
+			return true
+		}
+	}
+	return false
 }

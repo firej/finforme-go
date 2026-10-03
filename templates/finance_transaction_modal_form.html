@@ -32,7 +32,7 @@
       </label>
       <input class="form-input form-input-mono" type="number" step="0.01" min="0.01"
              id="modal-value" name="value" required placeholder="0.00"
-             value="{{if .Credit}}{{with index .Credit 0}}{{.value}}{{end}}{{end}}">
+             value="{{if .Credit}}{{with index .Credit 0}}{{formatMoneyInput .value}}{{end}}{{end}}">
     </div>
     <div class="form-group" id="modal-value-target-group" data-target-group hidden>
       <label class="form-label" for="modal-value-target">
@@ -40,7 +40,7 @@
       </label>
       <input class="form-input form-input-mono" type="number" step="0.01" min="0.01"
              id="modal-value-target" name="value_target" placeholder="0.00"
-             value="{{if .Debit}}{{with index .Debit 0}}{{.value}}{{end}}{{end}}">
+             value="{{if .Debit}}{{with index .Debit 0}}{{formatMoneyInput .value}}{{end}}{{end}}">
     </div>
     {{end}}
   </div>

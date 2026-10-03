@@ -52,7 +52,9 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 			}
 			return result
 		},
-		"formatMoney": formatMoney,
+		"formatMoneyInput": formatMoneyInput,
+		"trimSpace":        strings.TrimSpace,
+		"formatMoney":      formatMoney,
 		"derefInt64": func(ptr *int64) int64 {
 			if ptr != nil {
 				return *ptr

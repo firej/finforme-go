@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -43,4 +44,9 @@ func formatMoneyShort(value float64) string {
 	rounded := math.Round(amount/divisor*10) / 10
 	number := strings.TrimSuffix(fmt.Sprintf("%.1f", rounded), ".0")
 	return sign + strings.ReplaceAll(number, ".", ",") + suffix
+}
+
+// formatMoneyInput preserves the float value without scientific notation or rounding.
+func formatMoneyInput(value float64) string {
+	return strconv.FormatFloat(value, 'f', -1, 64)
 }

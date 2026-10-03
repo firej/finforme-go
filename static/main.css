@@ -895,7 +895,9 @@ body { font-variant-numeric: tabular-nums; }
 .transactions-table td { vertical-align: top; padding-block: 12px; }
 .tx-description { font-weight: 500; overflow-wrap: anywhere; }
 .tx-account { display: inline; font-size: 13px; color: var(--accent-text); text-decoration: none; overflow-wrap: anywhere; }
-.tx-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.tx-tags { display: inline; }
+.tx-tags .tag { text-decoration: none; margin-block: 2px; }
+.tx-tags .tag:hover { text-decoration: underline; }
 .tx-tags:empty { display: none; }
 .tag { font-size: 12px; }
 .optional-field { margin-bottom: 16px; }
