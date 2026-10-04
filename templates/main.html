@@ -80,6 +80,13 @@
       var tree = document.getElementById('sidebar-accounts-tree');
       var needle = query.trim().toLocaleLowerCase('ru');
       tree.classList.toggle('is-searching', Boolean(needle));
+      tree.querySelectorAll('.stree-toggle').forEach(function(button) {
+        var open = Boolean(needle) || button.dataset.open === 'true';
+        button.disabled = Boolean(needle);
+        button.classList.toggle('open', open);
+        button.setAttribute('aria-expanded', String(open));
+        button.setAttribute('aria-label', open ? 'Свернуть' : 'Развернуть');
+      });
       tree.querySelectorAll('.stree-item').forEach(function(item) {
         var names = item.querySelectorAll('.stree-name');
         var matches = Array.from(names).some(function(name) { return name.textContent.toLocaleLowerCase('ru').includes(needle); });
@@ -87,7 +94,7 @@
       });
     }
     </script>
-    <div class="sidebar-accounts" id="sidebar-accounts-tree">
+    <div class="sidebar-accounts" id="sidebar-accounts-tree" data-user-id="{{if .User}}{{.User.ID}}{{end}}">
       {{if .AccountTree}}
         {{range .AccountTree}}
           {{if eq .AccountType "ROOT"}}
@@ -278,18 +285,43 @@ window.addEventListener('resize', function(){
   if (window.innerWidth > 640) toggleSidebar(false);
 });
 
-// ── Sidebar tree collapse ──────────────────────────────────────────────────
+// ── Sidebar tree collapse: persist explicit choices; reveal the active path. ──
+var sidebarTree = document.getElementById('sidebar-accounts-tree');
+var sidebarStorageKey = 'sidebar-expanded:' + (sidebarTree ? sidebarTree.dataset.userId : '');
+var sidebarExpanded = {};
+try { sidebarExpanded = JSON.parse(localStorage.getItem(sidebarStorageKey) || '{}') || {}; } catch (e) {}
+if (typeof sidebarExpanded !== 'object' || Array.isArray(sidebarExpanded)) sidebarExpanded = {};
+function setSidebarNode(accountId, open) {
+  if (!sidebarTree) return;
+  var row = sidebarTree.querySelector('.stree-row[data-id="' + accountId + '"]');
+  var btn = row && row.querySelector('.stree-toggle');
+  if (!btn) return;
+  sidebarTree.querySelectorAll('.stree-children[data-parent="' + accountId + '"]').forEach(function(c) {
+    c.style.display = open ? '' : 'none';
+  });
+  btn.classList.toggle('open', open);
+  btn.dataset.open = String(open);
+  btn.setAttribute('aria-expanded', String(open));
+  btn.setAttribute('aria-label', open ? 'Свернуть' : 'Развернуть');
+}
 function toggleSidebarNode(event, accountId) {
   event.preventDefault();
   event.stopPropagation();
-  var btn = event.currentTarget;
-  var isOpen = btn.dataset.open !== 'false';
-  var children = document.querySelectorAll('.stree-children[data-parent="' + accountId + '"]');
-  children.forEach(function(c) { c.style.display = isOpen ? 'none' : ''; });
-  btn.classList.toggle('open', !isOpen);
-  btn.dataset.open = isOpen ? 'false' : 'true';
-  btn.setAttribute('aria-expanded', String(!isOpen));
-  btn.setAttribute('aria-label', isOpen ? 'Развернуть' : 'Свернуть');
+  var open = event.currentTarget.dataset.open !== 'true';
+  setSidebarNode(accountId, open);
+  sidebarExpanded[accountId] = open;
+  try { localStorage.setItem(sidebarStorageKey, JSON.stringify(sidebarExpanded)); } catch (e) {}
+}
+if (sidebarTree) {
+  sidebarTree.querySelectorAll('.stree-row[data-id]').forEach(function(row) {
+    setSidebarNode(row.dataset.id, sidebarExpanded[row.dataset.id] === true);
+  });
+  var activeRow = sidebarTree.querySelector('.stree-row.active');
+  var parent = activeRow && activeRow.parentElement.parentElement;
+  while (parent && parent !== sidebarTree) {
+    if (parent.matches('.stree-children')) setSidebarNode(parent.dataset.parent, true);
+    parent = parent.parentElement;
+  }
 }
 
 function updateBalanceButton() {
@@ -421,8 +453,8 @@ document.addEventListener('keydown', function(e) {
      class="stree-row"
      data-id="{{.ID}}">
     {{if .Childs}}
-    <button type="button" class="stree-toggle open" data-open="true" aria-expanded="true"
-      onclick="toggleSidebarNode(event, {{.ID}})" aria-label="Свернуть">
+    <button type="button" class="stree-toggle" data-open="false" aria-expanded="false"
+      onclick="toggleSidebarNode(event, {{.ID}})" aria-label="Развернуть">
       <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M6 4l4 4-4 4"/>
       </svg>
@@ -434,12 +466,12 @@ document.addEventListener('keydown', function(e) {
     <span class="stree-name">{{.Name}}</span>
     <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
     {{range .DisplayBalances}}{{if ne .Amount 0.0}}
-      <span title="{{formatMoney .Amount}} {{.Currency}}" style="color:{{if gt .Amount 0.0}}var(--sidebar-positive){{else}}var(--sidebar-negative){{end}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
+      <span title="{{formatMoney .Amount}} {{.Currency}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
     {{end}}{{end}}
     </span>
   </a>
   {{if .Childs}}
-  <div class="stree-children" data-parent="{{.ID}}">
+  <div class="stree-children" data-parent="{{.ID}}" style="display:none">
     {{range .Childs}}
       {{template "sidebar_account_node" .}}
     {{end}}

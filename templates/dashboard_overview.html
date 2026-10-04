@@ -3,16 +3,18 @@
   {{with .Capital}}
   <div class="dashboard-section-heading">
     <div><h2 id="capital-title">Общий капитал</h2><p class="form-hint">На {{.Date}} · активы минус обязательства</p></div>
-    <label class="dashboard-control">Валюта оценки
-      <select name="currency" class="form-select" data-dashboard-submit>
-        {{range .Currencies}}<option value="{{.}}" {{if eq . $.Capital.Currency}}selected{{end}}>{{.}}</option>{{end}}
-      </select>
-    </label>
   </div>
   {{if .Rows}}
     {{range .Warnings}}<p class="capital-warning" role="status">{{.}}</p>{{end}}
     {{if .Missing}}<p class="capital-warning" role="status">Неполная оценка: нет свежего курса для {{range $i,$c := .Missing}}{{if $i}}, {{end}}{{$c}}{{end}}. Эти остатки не включены в сумму.</p>{{end}}
-    <div class="net-worth">{{.Net}} <span class="stat-currency">{{.Currency}}</span></div>
+    <div class="capital-value-row">
+      <div class="net-worth">{{.Net}} <span class="stat-currency">{{.Currency}}</span></div>
+      <label class="dashboard-control"><span class="sr-only">Валюта оценки</span>
+      <select name="currency" class="form-select" data-dashboard-submit>
+        {{range .Currencies}}<option value="{{.}}" {{if eq . $.Capital.Currency}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    </div>
     <dl class="currency-metrics">
       <div><dt>{{if .Missing}}Учтённые активы{{else}}Активы{{end}}</dt><dd>{{.Assets}} <span class="stat-currency">{{.Currency}}</span></dd></div>
       <div><dt>{{if .Missing}}Учтённые обязательства{{else}}Обязательства{{end}}</dt><dd>{{.Debt}} <span class="stat-currency">{{.Currency}}</span></dd></div>
@@ -63,6 +65,8 @@
       <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousExpense}}">{{.ExpenseChange}}</div></div>
       <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousNet}}">{{.NetChange}}</div></div>
     </dl>
+    <details class="report-category-details">
+      <summary>Доходы и расходы по категориям</summary>
     <div class="report-categories">
       <h3>Расходы по категориям <span class="stat-currency">{{.Currency}}</span></h3>
       {{range .Expenses}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Расходов за эти два месяца нет.</p>{{end}}
@@ -71,6 +75,7 @@
       <h3>Доходы по категориям <span class="stat-currency">{{.Currency}}</span></h3>
       {{range .Incomes}}{{template "dashboard_category" .}}{{else}}<p class="dashboard-empty">Доходов за эти два месяца нет.</p>{{end}}
     </div>
+    </details>
   </div>
   {{end}}
   {{else}}<p class="dashboard-empty">Доходов и расходов за этот и предыдущий месяц пока нет.</p>{{end}}

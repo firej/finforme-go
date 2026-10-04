@@ -9,10 +9,10 @@
 <div style="display:flex;flex-direction:column;gap:14px;">
 
   <form method="get" action="/" id="dashboard-options" class="dashboard-overview">
-    {{template "dashboard_capital" .}}
-    {{template "dashboard_history" .}}
-    {{template "dashboard_month" .}}
-  </form>
+    <div class="dashboard-summary">
+      {{template "dashboard_capital" .}}
+      {{template "dashboard_month" .}}
+    </div>
   <div class="dashboard-stack">
     <section class="card" style="padding:20px;">
       <h2 style="font-size:16px;margin-bottom:16px;">Активные счета</h2>
@@ -58,6 +58,9 @@
     </div>
 
   </div>
+
+    {{template "dashboard_history" .}}
+  </form>
 
   <!-- Новости -->
   {{template "news_section" .}}

@@ -86,7 +86,7 @@
       <span id="period-caption" aria-live="polite"></span>
       <button type="button" class="btn btn-ghost" onclick="shiftPeriod(1)" aria-label="Следующий период">→</button>
     </div>
-    <span id="period-hint" class="text-muted" style="font-size:12px;">За всё время</span>
+    <span id="period-hint" class="text-muted" style="font-size:13px;">За всё время</span>
   </div>
 
   <!-- Stats bar -->
@@ -94,7 +94,7 @@
     <div class="stat-cell stat-balance">
       <div class="stat-label">Текущий остаток</div>
       {{range .Account.DisplayBalances}}
-      <div class="stat-value {{if gt .Amount 0.0}}text-green{{else if lt .Amount 0.0}}text-red{{end}}">
+      <div class="stat-value">
         {{formatMoney .Amount}} <span class="stat-currency">{{.Currency}}</span>
       </div>
       {{end}}
