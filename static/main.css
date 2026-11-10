@@ -21,6 +21,8 @@
   --bg-sidebar:        #0f1729;
   --bg-sidebar-hover:  rgba(255,255,255,0.07);
   --bg-sidebar-active: rgba(99,130,255,0.18);
+  --bg-sidebar-stripe: rgba(255,255,255,0.025);
+  --bg-row-stripe:     #fafbfe;
   --bg-row-hover:      #f7f8fc;
 
   /* Text */
@@ -74,6 +76,7 @@
   --bg-sidebar: #0a0d18;
   --bg-sidebar-hover:  rgba(255,255,255,0.06);
   --bg-sidebar-active: rgba(99,130,255,0.2);
+  --bg-row-stripe: #191f32;
   --bg-row-hover: #1c2236;
 
   --text-primary:   #e8ecf4;
@@ -185,41 +188,50 @@ html, body {
 /* Account tree in sidebar */
 .stree-item { position: relative; }
 .stree-row {
+  position: relative;
   display: flex; align-items: center; gap: 5px;
-  padding: 5px 6px; border-radius: 6px; cursor: pointer;
+  padding: 4px 6px; border-radius: 4px; cursor: pointer;
   color: var(--text-sidebar); font-size: 14px; font-weight: 400;
   transition: background 0.1s, color 0.1s;
-  text-decoration: none; white-space: nowrap; overflow: hidden;
+  text-decoration: none; white-space: nowrap;
 }
+.stree-row.is-even { background: var(--bg-sidebar-stripe); }
 .stree-row:hover { background: var(--bg-sidebar-hover); color: #fff; }
 .stree-row.active { background: var(--bg-sidebar-active); color: #fff; font-weight: 500; }
 
 .stree-toggle {
-  width: 14px; height: 14px; flex-shrink: 0;
+  width: 18px; height: 24px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   color: #a9b8d3;
   background: none; border: none; cursor: pointer; padding: 0;
 }
 .stree-toggle.open { transform: rotate(90deg); }
 .stree-ready .stree-toggle { transition: transform 0.15s; }
-.stree-toggle-placeholder { width: 14px; flex-shrink: 0; }
+.stree-toggle-placeholder { width: 18px; height: 24px; flex-shrink: 0; }
 
 .account-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .stree-name  { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .stree-bal   { font-family: var(--font-mono); font-size: 13px; opacity: 1; flex-shrink: 0; }
 .stree-row.active .stree-bal { opacity: 1; }
 
-.stree-children { position: relative; margin-left: 16px; }
-.stree-children::before {
-  content: ''; position: absolute;
-  left: 6px; top: 0; bottom: 10px;
-  width: 1px; background: rgba(255,255,255,0.1);
+.stree-children {
+  --tree-branch-width: 10px;
+  --tree-line-color: rgba(255,255,255,0.16);
+  position: relative; margin-left: 14px; padding-left: var(--tree-branch-width);
 }
-.stree-item .stree-row::before {
-  content: ''; position: absolute;
-  left: -10px; top: 50%;
-  width: 10px; height: 1px;
-  background: rgba(255,255,255,0.1);
+.stree-children > .stree-item:not(.is-last-visible)::before,
+.ptree-children > .ptree-node:not(.is-last-visible)::before {
+  content: ''; position: absolute; pointer-events: none;
+  left: calc(-1 * var(--tree-branch-width)); top: 0; bottom: 0;
+  border-left: 1px solid var(--tree-line-color);
+}
+.stree-children > .stree-item > .stree-row::before,
+.ptree-children > .ptree-node > .ptree-row::before {
+  content: ''; position: absolute; pointer-events: none;
+  left: calc(-1 * var(--tree-branch-width)); top: 0;
+  width: var(--tree-branch-width); height: 50%;
+  border-left: 1px solid var(--tree-line-color);
+  border-bottom: 1px solid var(--tree-line-color);
 }
 
 .sidebar-bottom {
@@ -358,8 +370,14 @@ html, body {
 .data-table td.right { text-align: right; }
 
 .data-table tbody tr { transition: background 0.08s; cursor: pointer; }
+.striped-transactions :where(tbody > tr:nth-child(even of :not([hidden]))) {
+  --tx-row-background: var(--bg-row-stripe);
+  background: var(--tx-row-background);
+}
 .data-table tbody tr:hover { background: var(--bg-row-hover); }
+.data-table .tx-row[hidden] { display: none; }
 .data-table tbody tr:last-child td { border-bottom: none; }
+.tx-time { display: block; }
 
 /* Amount colors */
 .amount-in  { color: var(--green); font-weight: 500; }
@@ -552,7 +570,7 @@ html, body {
 /* ─── FULL PAGE ACCOUNTS TREE ─── */
 .ptree-header {
   display: grid; grid-template-columns: 1fr 90px 130px 110px;
-  padding: 6px 12px; margin-bottom: 4px;
+  padding: 6px 12px;
   font-size: 12px; font-weight: 600;
   letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
 }
@@ -562,11 +580,13 @@ html, body {
 .ptree-node { position: relative; }
 .ptree-row {
   display: grid; grid-template-columns: 1fr 90px 130px 110px;
-  align-items: center; padding: 7px 12px;
-  border-radius: 7px; cursor: pointer;
+  align-items: center; padding: 3px 12px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
   transition: background 0.08s; font-size: 14px;
   position: relative;
 }
+.ptree-row.is-even { background: var(--bg-row-stripe); }
 .ptree-row:hover { background: var(--bg-row-hover); }
 .ptree-row.active { background: var(--accent-subtle); }
 
@@ -577,24 +597,17 @@ html, body {
 
 .ptree-toggle {
   background: none; border: none; cursor: pointer; padding: 0 2px;
-  color: var(--text-muted); display: flex; align-items: center;
+  color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 24px; flex-shrink: 0;
 }
 .ptree-toggle svg { transition: transform 0.15s; }
 .ptree-toggle.open svg { transform: rotate(90deg); }
-.ptree-toggle-ph { width: 18px; flex-shrink: 0; }
+.ptree-toggle-ph { width: 18px; height: 24px; flex-shrink: 0; }
 
 .ptree-children {
-  position: relative; margin-left: 20px; padding-left: 12px;
-}
-.ptree-children::before {
-  content: ''; position: absolute;
-  left: 0; top: 4px; bottom: 10px;
-  width: 1px; background: var(--border);
-}
-.ptree-children > .ptree-node > .ptree-row::before {
-  content: ''; position: absolute;
-  left: -12px; top: 50%;
-  width: 12px; height: 1px; background: var(--border);
+  --tree-branch-width: 12px;
+  --tree-line-color: var(--border);
+  position: relative; margin-left: 20px; padding-left: var(--tree-branch-width);
 }
 
 /* Скрытые счета — по умолчанию не показываем; видны только при body.show-hidden */
@@ -774,7 +787,7 @@ body.show-hidden .ptree-node.is-hidden > .ptree-row:hover { opacity: 0.85; }
     grid-template-columns: 1fr auto;
     column-gap: 10px;
     row-gap: 2px;
-    background: var(--bg-surface);
+    background: var(--tx-row-background, var(--bg-surface));
     border: 1px solid var(--border);
     border-radius: 10px;
     margin-bottom: 8px;
@@ -873,7 +886,7 @@ body.show-hidden .ptree-node.is-hidden > .ptree-row:hover { opacity: 0.85; }
 /* Readable finance workspace */
 [data-theme="dark"] { --green: #85ddb0; --red: #ffaaaa; --accent-text: #a6c8ff; }
 body { font-variant-numeric: tabular-nums; }
-.stree-row { flex-wrap: nowrap; column-gap: 6px; padding-block: 7px; }
+.stree-row { flex-wrap: nowrap; column-gap: 6px; }
 .stree-name { min-width: 0; }
 .stree-bal { width: auto; padding-left: 0; align-items: flex-end; line-height: 1.45; }
 .sidebar-section-label { color: #a9b8d3; }
@@ -1102,7 +1115,7 @@ body { font-variant-numeric: tabular-nums; }
 .balances-hidden .ptree-balance,
 .balances-hidden .stat-balance .stat-value,
 .balances-hidden .account-balance { visibility: hidden; }
-.tx-row:target { background: var(--accent-subtle); outline: 2px solid var(--accent-text); outline-offset: -2px; scroll-margin-block: 90px; }
+.tx-row:target { --tx-row-background: var(--accent-subtle); background: var(--tx-row-background); outline: 2px solid var(--accent-text); outline-offset: -2px; scroll-margin-block: 90px; }
 
 /* Compact overview; preserve the same reading order on every screen. */
 .dashboard-overview { align-items: start; }
@@ -1126,16 +1139,16 @@ body { font-variant-numeric: tabular-nums; }
 }
 @media (max-width: 640px) {
   .capital-card, .monthly-report, .capital-history { padding: 16px; }
-  .ptree-row { grid-template-columns: minmax(0, 1fr) !important; gap: 2px; padding: 9px 10px; }
+  .ptree-row { grid-template-columns: minmax(0, 1fr) !important; gap: 2px; padding: 5px 10px; }
   .ptree-header { display: none; }
   .ptree-balance { text-align: left; padding-left: 50px; font-size: 14px; overflow-wrap: anywhere; }
   .ptree-name { gap: 6px; }
   .ptree-name > :first-child { display: none; } /* Drag handle; use the account editor on touch screens. */
   .ptree-toggle, .ptree-toggle-ph { width: 24px; min-width: 24px; min-height: 32px; justify-content: center; }
-  .ptree-children { margin-left: 6px; padding-left: 6px; }
-  .ptree-children > .ptree-node > .ptree-row::before { left: -6px; width: 6px; }
+  .ptree-children { --tree-branch-width: 6px; margin-left: 6px; }
   .ptree-children .ptree-children .ptree-children { margin-left: 0; padding-left: 0; border-left: 0; }
-  .ptree-children .ptree-children .ptree-children::before,
+  .ptree-children .ptree-children .ptree-children > .ptree-node::before,
   .ptree-children .ptree-children .ptree-children > .ptree-node > .ptree-row::before { display: none; }
-  .stree-toggle { min-width: 28px; min-height: 36px; }
+  .stree-toggle, .stree-toggle-placeholder { width: 28px; min-width: 28px; min-height: 36px; }
+  .stree-children { margin-left: 19px; }
 }

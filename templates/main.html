@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap"></noscript>
   <link rel="stylesheet" href="/static/main.css">
+  <script src="/static/account-tree.js"></script>
   <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 <body>
@@ -92,6 +93,7 @@
         var matches = Array.from(names).some(function(name) { return name.textContent.toLocaleLowerCase('ru').includes(needle); });
         item.hidden = !matches;
       });
+      AccountTree.refresh(tree);
     }
     </script>
     <div class="sidebar-accounts" id="sidebar-accounts-tree" data-user-id="{{if .User}}{{.User.ID}}{{end}}">
@@ -309,6 +311,7 @@ function toggleSidebarNode(event, accountId) {
   event.stopPropagation();
   var open = event.currentTarget.dataset.open !== 'true';
   setSidebarNode(accountId, open);
+  AccountTree.refresh(sidebarTree);
   sidebarExpanded[accountId] = open;
   try { localStorage.setItem(sidebarStorageKey, JSON.stringify(sidebarExpanded)); } catch (e) {}
 }
@@ -322,6 +325,7 @@ if (sidebarTree) {
     if (parent.matches('.stree-children')) setSidebarNode(parent.dataset.parent, true);
     parent = parent.parentElement;
   }
+  AccountTree.refresh(sidebarTree);
 }
 
 function updateBalanceButton() {

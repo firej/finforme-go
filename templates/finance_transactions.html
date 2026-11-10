@@ -133,7 +133,7 @@
 
   <!-- Table -->
   <div style="overflow-x:auto;">
-    <table class="data-table transactions-table" id="transactions-table">
+    <table class="data-table transactions-table striped-transactions" id="transactions-table">
       <thead>
         <tr>
           <th style="width:90px;">Дата</th>
@@ -227,7 +227,7 @@ function filterByPeriod() {
   document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
     var show = (!query || row.dataset.desc.toLocaleLowerCase('ru').includes(query)) &&
       (!range.from || (row.dataset.date >= range.from && row.dataset.date < range.to));
-    row.style.display = show ? '' : 'none';
+    row.hidden = !show;
   });
   recalcStats();
 }
@@ -236,7 +236,7 @@ function filterByPeriod() {
 function recalcStats() {
   var income = 0, expense = 0, incomeCount = 0, expenseCount = 0, total = 0;
   document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
-    if (row.style.display === 'none') return;
+    if (row.hidden) return;
     total++;
     var inc = parseFloat(row.dataset.income) || 0;
     var exp = parseFloat(row.dataset.expense) || 0;

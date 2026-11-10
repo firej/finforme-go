@@ -36,7 +36,7 @@
   </div>
 
   <!-- Tree body -->
-  <div id="accounts-tree" style="padding:4px 0;">
+  <div id="accounts-tree">
     {{range .AccountTree}}
       {{if eq .AccountType "ROOT"}}
         {{range .Childs}}{{template "account_page_node" .}}{{end}}
@@ -57,6 +57,7 @@ function applyHiddenAccountsState(show) {
   if (iconShow) iconShow.classList.toggle('hidden', show);
   if (iconHide) iconHide.classList.toggle('hidden', !show);
   if (label) label.textContent = show ? 'Скрыть скрытые' : 'Показать скрытые';
+  AccountTree.refresh(document.getElementById('accounts-tree'));
 }
 function toggleHiddenAccounts() {
   var next = !document.body.classList.contains('show-hidden');
@@ -78,6 +79,9 @@ function togglePageNode(event, accountId) {
     children.style.display = '';
     btn.classList.add('open');
   }
+  btn.setAttribute('aria-expanded', String(!isOpen));
+  btn.setAttribute('aria-label', isOpen ? 'Развернуть' : 'Свернуть');
+  AccountTree.refresh(document.getElementById('accounts-tree'));
 }
 
 function deleteAccount(event, accountId) {
@@ -150,7 +154,7 @@ document.addEventListener('drop', function(e) {
       </span>
 
       {{if .Childs}}
-      <button class="ptree-toggle open" onclick="togglePageNode(event, {{.ID}})">
+      <button type="button" class="ptree-toggle open" onclick="togglePageNode(event, {{.ID}})" aria-expanded="true" aria-label="Свернуть">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6 4l4 4-4 4"/>
         </svg>
