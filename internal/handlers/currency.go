@@ -100,7 +100,8 @@ func loadCurrencyRates(db *sql.DB) ([]CurrencyRateRow, string, error) {
 			CAST(cr.rate AS DOUBLE),
 			cr.source,
 			DATE_FORMAT(cr.rate_date, '%d.%m.%Y') AS rate_date,
-			COALESCE(CAST(prev.rate AS DOUBLE), 0) AS prev_rate
+			COALESCE(CAST(prev.rate AS DOUBLE), 0) AS prev_rate,
+			cr.created_at
 		FROM currency_rates cr
 		INNER JOIN (
 			SELECT code, source, MAX(rate_date) AS max_date
@@ -132,20 +133,28 @@ func loadCurrencyRates(db *sql.DB) ([]CurrencyRateRow, string, error) {
 	defer rows.Close()
 
 	var result []CurrencyRateRow
+	var latestImport time.Time
 	for rows.Next() {
 		var r CurrencyRateRow
 		var prevRate float64
-		if err := rows.Scan(&r.Code, &r.Name, &r.Rate, &r.Source, &r.RateDate, &prevRate); err != nil {
+		var importedAt sql.NullTime
+		if err := rows.Scan(&r.Code, &r.Name, &r.Rate, &r.Source, &r.RateDate, &prevRate, &importedAt); err != nil {
 			log.Printf("scan error: %v", err)
 			continue
 		}
 		if prevRate != 0 {
 			r.Change = r.Rate - prevRate
 		}
+		if importedAt.Valid && importedAt.Time.After(latestImport) {
+			latestImport = importedAt.Time
+		}
 		result = append(result, r)
 	}
 
-	updatedAt := time.Now().In(time.FixedZone("MSK", 3*60*60)).Format("02.01.2006 15:04 MSK")
+	var updatedAt string
+	if !latestImport.IsZero() {
+		updatedAt = latestImport.In(time.FixedZone("MSK", 3*60*60)).Format("02.01.2006 15:04 MSK")
+	}
 	return result, updatedAt, rows.Err()
 }
 
