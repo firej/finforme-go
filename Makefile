@@ -1,4 +1,4 @@
-.PHONY: build run clean test help up down logs shell docker docker-run docker-stop deploy db-shell bot-build bot-run bot-dev
+.PHONY: build run clean test help up down logs shell docker docker-run docker-stop deploy deploy-bot deploy-all db-shell bot-build bot-run bot-dev
 
 # Переменные
 BINARY_NAME=finforme
@@ -128,21 +128,12 @@ docker-run: up ## Алиас для up
 docker-stop: down ## Алиас для down
 
 # Деплой на сервер
-DEPLOY_HOST=firej@finfor.me
-DEPLOY_PATH=/opt/finforme
+DEPLOY_HOST ?= firej@firej.org
 
 deploy: ## Задеплоить на сервер finfor.me
-	@echo "$(GREEN)Синхронизация исходников...$(NC)"
-	@rsync -avz --exclude='.git' --exclude='bin' --exclude='*.db' --exclude='*.gnucash' --exclude='.idea' --exclude='.vscode' . $(DEPLOY_HOST):$(DEPLOY_PATH)/
-	@echo "$(GREEN)Сборка образа на сервере...$(NC)"
-	@ssh $(DEPLOY_HOST) 'cd $(DEPLOY_PATH) && docker build -t finforme:latest .'
-	@echo "$(GREEN)Перезапуск контейнера...$(NC)"
-	@ssh $(DEPLOY_HOST) 'cd /opt/traefik && docker compose up -d --force-recreate finforme'
-	@echo "$(GREEN)✓ Деплой завершён: https://finfor.me$(NC)"
+	@DEPLOY_HOST="$(DEPLOY_HOST)" bash scripts/deploy-prod.sh
 
-deploy-bot: ## Задеплоить Telegram бот на сервер finfor.me (образ уже должен быть собран через deploy)
-	@echo "$(GREEN)Перезапуск контейнера бота...$(NC)"
-	@ssh $(DEPLOY_HOST) 'cd /opt/traefik && docker compose up -d --force-recreate finforme-bot'
-	@echo "$(GREEN)✓ Деплой бота завершён$(NC)"
+deploy-bot: ## Задеплоить сайт и Telegram-бот (нужен TELEGRAM_BOT_TOKEN на сервере)
+	@DEPLOY_HOST="$(DEPLOY_HOST)" bash scripts/deploy-prod.sh bot
 
-deploy-all: deploy deploy-bot ## Задеплоить всё (приложение + бот)
+deploy-all: deploy-bot ## Задеплоить всё (приложение + бот)

@@ -47,35 +47,22 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
-      - name: Setup SSH
+      - name: Deploy to firej.org
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H finfor.me >> ~/.ssh/known_hosts
-
-      - name: Deploy to server
-        run: |
-          # Синхронизация исходников
-          rsync -avz --delete -e "ssh -i ~/.ssh/deploy_key" \
-            --exclude='.git' \
-            --exclude='bin' \
-            --exclude='*.db' \
-            --exclude='*.gnucash' \
-            --exclude='.idea' \
-            --exclude='.vscode' \
-            --exclude='docker-compose.yml' \
-            --exclude='docker-compose.prod.yml' \
-            . firej@finfor.me:/opt/finforme/
-
-          # Сборка и перезапуск на сервере
-          ssh -i ~/.ssh/deploy_key firej@finfor.me '
-            cd /opt/finforme && \
-            docker build -t finforme:latest . && \
-            cd /opt/traefik && \
-            docker compose up -d --force-recreate finforme
-          '
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' 'firej.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHER3/rt7Op6zGK2Qtf4rMbxQFRYZJoGi/QhPkz6pzM6' >> ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)"
+          trap 'ssh-agent -k >/dev/null' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+          unset SSH_PRIVATE_KEY
+          make deploy
 
       - name: Health check
         run: |
@@ -91,7 +78,3 @@ jobs:
           done
           echo "❌ Health check failed"
           exit 1
-
-      - name: Cleanup SSH key
-        if: always()
-        run: rm -f ~/.ssh/deploy_key

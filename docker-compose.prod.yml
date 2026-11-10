@@ -1,37 +1,73 @@
-# Продакшен конфигурация для сервера finfor.me
-# Используется совместно с Traefik
+# Installed as /opt/finforme/docker-compose.yml by scripts/deploy-prod.sh.
+name: finforme
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
+  mariadb:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: finforme
+      MARIADB_USER: finforme
+      MARIADB_PASSWORD: ${FINFORME_DB_PASSWORD:?Set FINFORME_DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${FINFORME_DB_ROOT_PASSWORD:?Set FINFORME_DB_ROOT_PASSWORD}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
   finforme:
     image: finforme:latest
     container_name: finforme
     restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
     networks:
-      - traefik
+      - default
+      - proxy
     environment:
-      - PORT=8080
-      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
-      - SESSION_SECRET=${SESSION_SECRET:?Set a random SESSION_SECRET of at least 32 bytes}
-      - SECURE_COOKIE=true
-      - PUBLIC_URL=https://finfor.me
+      PORT: "8080"
+      DATABASE_DSN: finforme:${FINFORME_DB_PASSWORD:?Set FINFORME_DB_PASSWORD}@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      SESSION_SECRET: ${SESSION_SECRET:?Set a random SESSION_SECRET of at least 32 bytes}
+      SECURE_COOKIE: "true"
+      PUBLIC_URL: https://finfor.me
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.finforme.rule=Host(`finfor.me`)"
-      - "traefik.http.routers.finforme.entrypoints=websecure"
-      - "traefik.http.routers.finforme.tls.certresolver=letsencrypt"
-      - "traefik.http.services.finforme.loadbalancer.server.port=8080"
+      traefik.enable: "true"
+      traefik.docker.network: traefik_default
+      traefik.http.routers.finforme.rule: Host(`finfor.me`)
+      traefik.http.routers.finforme.entrypoints: websecure
+      traefik.http.routers.finforme.tls.certresolver: letsencrypt
+      traefik.http.services.finforme.loadbalancer.server.port: "8080"
+    logging: *logging
 
   finforme-bot:
     image: finforme:latest
     container_name: finforme-bot
+    profiles: [bot]
     restart: unless-stopped
     command: ["./telegram-bot"]
-    networks:
-      - traefik
-    env_file:
-      - .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
     environment:
-      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      DATABASE_DSN: finforme:${FINFORME_DB_PASSWORD:?Set FINFORME_DB_PASSWORD}@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    logging: *logging
+
+volumes:
+  mariadb_data:
 
 networks:
-  traefik:
+  proxy:
+    name: traefik_default
     external: true
