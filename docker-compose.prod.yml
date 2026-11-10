@@ -50,20 +50,6 @@ services:
       traefik.http.services.finforme.loadbalancer.server.port: "8080"
     logging: *logging
 
-  finforme-bot:
-    image: finforme:latest
-    container_name: finforme-bot
-    profiles: [bot]
-    restart: unless-stopped
-    command: ["./telegram-bot"]
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    environment:
-      DATABASE_DSN: finforme:${FINFORME_DB_PASSWORD:?Set FINFORME_DB_PASSWORD}@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-    logging: *logging
-
 volumes:
   mariadb_data:
 

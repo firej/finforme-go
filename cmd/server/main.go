@@ -73,6 +73,7 @@ func main() {
 	r.HandleFunc("/mortgage/", h.MortgageCalculator).Methods("GET")
 	r.HandleFunc("/currency/", h.CurrencyPage).Methods("GET")
 	r.HandleFunc("/api/currency/charts", h.CurrencyChartsAPI).Methods("GET")
+	r.HandleFunc("/api/currency/rates", h.CurrencyRatesAPI).Methods("GET")
 
 	// Аутентификация
 	r.HandleFunc("/accounts/login/", h.Login).Methods("GET", "POST")

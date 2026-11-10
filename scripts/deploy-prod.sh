@@ -5,7 +5,11 @@ cd "$(dirname "$0")/.."
 host=${DEPLOY_HOST:-firej@firej.org}
 mode=${1:-web}
 case "$mode" in
-  web|bot) ;;
+  web) ;;
+  bot)
+    bash scripts/deploy-prod.sh web
+    exec bash scripts/deploy-bot.sh
+    ;;
   *) echo 'Usage: bash scripts/deploy-prod.sh [web|bot]' >&2; exit 2 ;;
 esac
 
@@ -27,10 +31,9 @@ if [[ ! "$remote_release" =~ ^/opt/finforme/releases/release\.[A-Za-z0-9]+$ ]]; 
 fi
 COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C "$release" . | ssh -o BatchMode=yes "$host" "tar -xzf - -C '$remote_release'"
 
-ssh -o BatchMode=yes "$host" "bash -s -- '$remote_release' '$mode'" <<'REMOTE'
+ssh -o BatchMode=yes "$host" "bash -s -- '$remote_release'" <<'REMOTE'
 set -euo pipefail
 release=$1
-mode=$2
 trap 'rm -rf -- "$release"' EXIT
 
 # Serialize changes to the live Compose project.
@@ -55,19 +58,9 @@ ENV
 
 compose=(sudo -n docker compose --env-file /opt/finforme/.env)
 "${compose[@]}" -f "$release/docker-compose.prod.yml" config -q
-if [[ "$mode" == bot ]]; then
-  sudo -n awk -F= '$1 == "TELEGRAM_BOT_TOKEN" && $2 ~ /^[0-9]+:.+/ { found=1 } END { exit !found }' /opt/finforme/.env || {
-    echo 'Set TELEGRAM_BOT_TOKEN in /opt/finforme/.env first' >&2
-    exit 1
-  }
-fi
 sudo -n install -m 0644 "$release/docker-compose.prod.yml" /opt/finforme/docker-compose.yml
 compose+=(-f /opt/finforme/docker-compose.yml)
-services=(finforme)
-if [[ "$mode" == bot ]]; then
-  services+=(finforme-bot)
-fi
-"${compose[@]}" up -d --wait --wait-timeout 120 "${services[@]}"
+"${compose[@]}" up -d --wait --wait-timeout 120 finforme
 for ((i = 0; i < 24; i++)); do
   status=$(curl -s --max-time 5 --resolve finfor.me:443:127.0.0.1 -o /dev/null -w '%{http_code}' https://finfor.me/ || true)
   if [[ "$status" == 200 ]]; then

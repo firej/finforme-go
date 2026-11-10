@@ -1,0 +1,25 @@
+# Installed on the bot host as /opt/finforme-bot/docker-compose.yml.
+name: finforme-bot
+
+services:
+  finforme-bot:
+    image: finforme-bot:latest
+    container_name: finforme-bot
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN}
+      CURRENCY_RATES_URL: ${CURRENCY_RATES_URL:-https://finfor.me/api/currency/rates}
+    healthcheck:
+      test: [CMD, ./telegram-bot, -check]
+      interval: 60s
+      timeout: 30s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

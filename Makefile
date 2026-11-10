@@ -5,7 +5,7 @@ BINARY_NAME=finforme
 BUILD_DIR=bin
 MAIN_PATH=cmd/server/main.go
 BOT_BINARY_NAME=telegram-bot
-BOT_MAIN_PATH=cmd/telegram-bot/main.go
+BOT_MAIN_PATH=./cmd/telegram-bot
 
 # Цвета для вывода
 GREEN=\033[0;32m
@@ -93,20 +93,16 @@ bot-build: ## Собрать Telegram бот
 	@CGO_ENABLED=0 go build -o $(BUILD_DIR)/$(BOT_BINARY_NAME) $(BOT_MAIN_PATH)
 	@echo "$(GREEN)✓ Сборка завершена: $(BUILD_DIR)/$(BOT_BINARY_NAME)$(NC)"
 
-bot-run: ## Запустить Telegram бот (требуется запущенная MariaDB и токен)
+bot-run: ## Запустить Telegram бот (нужен токен; котировки через HTTPS API)
 	@echo "$(GREEN)Запуск Telegram бота...$(NC)"
 	@if [ -z "$$TELEGRAM_BOT_TOKEN" ]; then \
 		echo "$(GREEN)⚠️  TELEGRAM_BOT_TOKEN не задан. Установите переменную окружения:$(NC)"; \
 		echo "export TELEGRAM_BOT_TOKEN=ваш_токен"; \
 		exit 1; \
 	fi
-	@if [ -z "$$DATABASE_DSN" ]; then \
-		echo "$(GREEN)⚠️  DATABASE_DSN не задан. Используется значение по умолчанию:$(NC)"; \
-		echo "finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"; \
-	fi
-	@DATABASE_DSN=$${DATABASE_DSN:-"finforme:finforme@tcp(localhost:3306)/finforme?parseTime=true&charset=utf8mb4"} go run $(BOT_MAIN_PATH)
+	@go run $(BOT_MAIN_PATH)
 
-bot-dev: db-only bot-run ## Запустить MariaDB и Telegram бот локально
+bot-dev: bot-run ## Запустить бота локально с котировками через API
 
 rebuild: ## Пересобрать и перезапустить контейнеры
 	@echo "$(GREEN)Пересборка контейнеров...$(NC)"
@@ -129,11 +125,13 @@ docker-stop: down ## Алиас для down
 
 # Деплой на сервер
 DEPLOY_HOST ?= firej@firej.org
+BOT_DEPLOY_HOST ?= firej@45.144.233.69
 
 deploy: ## Задеплоить на сервер finfor.me
 	@DEPLOY_HOST="$(DEPLOY_HOST)" bash scripts/deploy-prod.sh
 
-deploy-bot: ## Задеплоить сайт и Telegram-бот (нужен TELEGRAM_BOT_TOKEN на сервере)
-	@DEPLOY_HOST="$(DEPLOY_HOST)" bash scripts/deploy-prod.sh bot
+deploy-bot: ## Задеплоить Telegram-бот на отдельный сервер в Германии
+	@BOT_DEPLOY_HOST="$(BOT_DEPLOY_HOST)" bash scripts/deploy-bot.sh
 
-deploy-all: deploy-bot ## Задеплоить всё (приложение + бот)
+deploy-all: deploy ## Задеплоить сайт, затем бот в Германии
+	@$(MAKE) deploy-bot

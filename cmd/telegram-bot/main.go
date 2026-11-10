@@ -1,50 +1,60 @@
 package main
 
 import (
-	"database/sql"
+	"bytes"
+	"context"
+	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
-	_ "github.com/go-sql-driver/mysql"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 func main() {
-	// Получаем DSN базы данных из переменной окружения
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == "" {
-		log.Fatal("DATABASE_DSN не задан")
-	}
-
-	// Подключаемся к базе данных
-	db, err := sql.Open("mysql", dsn)
-	if err != nil {
-		log.Fatalf("Ошибка подключения к базе данных: %s", err)
-	}
-	defer db.Close()
-
-	// Проверяем подключение
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Ошибка проверки подключения к базе данных: %s", err)
-	}
+	check := flag.Bool("check", false, "Проверить API котировок и авторизацию Telegram без получения или отправки сообщений")
+	flag.Parse()
 
 	// Получаем токен бота из переменной окружения
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	if token == "" {
 		log.Fatal("TELEGRAM_BOT_TOKEN не задан")
 	}
+	// Telegram includes the token in request URLs, including network errors.
+	log.SetOutput(tokenRedactingWriter{writer: os.Stderr, token: token})
+	if err := tgbotapi.SetLogger(log.Default()); err != nil {
+		log.Fatal(err)
+	}
+	rates, err := newRatesClient(os.Getenv("CURRENCY_RATES_URL"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Создаем нового бота
-	bot, err := tgbotapi.NewBotAPI(token)
+	client := &http.Client{Timeout: 15 * time.Second}
+	bot, err := tgbotapi.NewBotAPIWithClient(token, tgbotapi.APIEndpoint, client)
 	if err != nil {
 		log.Fatalf("Ошибка при создании бота: %s", err)
 	}
+	// Allow the 60-second long poll to finish, but bound stalled requests.
+	client.Timeout = 75 * time.Second
 
-	// Включаем режим отладки
-	bot.Debug = true
 	log.Printf("Авторизован как @%s (id=%d)", bot.Self.UserName, bot.Self.ID)
+	if *check {
+		quotes, err := rates.latest(context.Background())
+		if err != nil {
+			log.Fatalf("Ошибка проверки API котировок: %v", err)
+		}
+		if len(quotes) != 3 {
+			log.Fatal("В API отсутствуют обязательные котировки BTC/USD, USD/RUB или EUR/RUB")
+		}
+		log.Printf("API котировок доступен: %s", formatRates(quotes))
+		return
+	}
 
 	// Регистрируем команды бота в Telegram — они появятся в меню "/"
 	// и будут корректно доставляться в групповых чатах
@@ -64,25 +74,46 @@ func main() {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
+	log.Println("Получение обновлений Telegram запущено")
 
 	// Обрабатываем входящие обновления
 	for update := range updates {
 		// Каждое обновление обрабатываем с защитой от паники,
 		// чтобы одно плохое сообщение не убило весь цикл
-		handleUpdate(bot, db, update)
+		handleUpdate(bot, rates, update)
 	}
+}
+
+type tokenRedactingWriter struct {
+	writer io.Writer
+	token  string
+}
+
+func (w tokenRedactingWriter) Write(p []byte) (int, error) {
+	redacted := p
+	if w.token != "" {
+		redacted = bytes.ReplaceAll(p, []byte(w.token), []byte("[REDACTED_TOKEN]"))
+	}
+	n, err := w.writer.Write(redacted)
+	if err != nil {
+		return 0, err
+	}
+	if n != len(redacted) {
+		return 0, io.ErrShortWrite
+	}
+	return len(p), nil
 }
 
 // handleUpdate обрабатывает одно обновление от Telegram.
 // Паника внутри перехватывается, чтобы бот продолжал работу.
-func handleUpdate(bot *tgbotapi.BotAPI, db *sql.DB, update tgbotapi.Update) {
+func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotapi.Update) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("ПАНИКА при обработке обновления update_id=%d: %v", update.UpdateID, r)
 		}
 	}()
 
-	if update.Message == nil {
+	if update.Message == nil || update.Message.Chat == nil {
 		// Игнорируем не-сообщения (callback, inline и т.д.)
 		return
 	}
@@ -131,7 +162,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, db *sql.DB, update tgbotapi.Update) {
 		}
 
 	case "rate", "rates":
-		rates, err := getLatestCurrenciesRate(db)
+		rates, err := ratesClient.latest(context.Background())
 		if err != nil {
 			log.Printf("Ошибка получения курсов: %v", err)
 			reply := tgbotapi.NewMessage(msg.Chat.ID, "Не удалось получить курсы валют")
@@ -139,21 +170,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, db *sql.DB, update tgbotapi.Update) {
 				log.Printf("Ошибка отправки сообщения об ошибке: %v", sendErr)
 			}
 		} else {
-			var parts []string
-			if btc, ok := rates["BTC/USD"]; ok && btc > 0 {
-				parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
-			}
-			if usd, ok := rates["USD/RUB"]; ok && usd > 0 {
-				parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
-			}
-			if eur, ok := rates["EUR/RUB"]; ok && eur > 0 {
-				parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
-			}
-			text := "Котировки: " + strings.Join(parts, "  ")
-			if len(parts) == 0 {
-				text = "Нет данных о курсах валют"
-			}
-			reply := tgbotapi.NewMessage(msg.Chat.ID, text)
+			reply := tgbotapi.NewMessage(msg.Chat.ID, formatRates(rates))
 			if _, err := bot.Send(reply); err != nil {
 				log.Printf("Ошибка отправки курсов: %v", err)
 			}
@@ -165,43 +182,19 @@ func handleUpdate(bot *tgbotapi.BotAPI, db *sql.DB, update tgbotapi.Update) {
 	}
 }
 
-// getLatestCurrenciesRate возвращает список всех последних значений курсов валют
-func getLatestCurrenciesRate(db *sql.DB) (map[string]float64, error) {
-	// Карта для хранения результатов
-	results := make(map[string]float64)
-
-	// SQL-запрос для получения последних курсов
-	query := `
-		SELECT code, rate
-		FROM currency_rates
-		WHERE (code, rate_date) IN (
-			SELECT code, MAX(rate_date)
-			FROM currency_rates
-			GROUP BY code
-		)
-		ORDER BY code;
-	`
-
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
+func formatRates(rates map[string]float64) string {
+	var parts []string
+	if btc := rates["BTC/USD"]; btc > 0 {
+		parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
 	}
-	defer rows.Close()
-
-	// Проходим по всем строкам результата
-	for rows.Next() {
-		var code string
-		var rate float64
-
-		// Считываем данные строки
-		err := rows.Scan(&code, &rate)
-		if err != nil {
-			return nil, err
-		}
-
-		// Сохраняем в результат
-		results[code] = rate
+	if usd := rates["USD/RUB"]; usd > 0 {
+		parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
 	}
-
-	return results, nil
+	if eur := rates["EUR/RUB"]; eur > 0 {
+		parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
+	}
+	if len(parts) == 0 {
+		return "Нет данных о курсах валют"
+	}
+	return "Котировки: " + strings.Join(parts, "  ")
 }

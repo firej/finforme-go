@@ -17,12 +17,13 @@ services:
   telegram-bot:
     build: .
     command: ["./telegram-bot"]
+    profiles: [bot]
     environment:
-      - DATABASE_DSN=finforme:finforme@tcp(mariadb:3306)/finforme?parseTime=true&charset=utf8mb4
+      - CURRENCY_RATES_URL=http://app:8080/api/currency/rates
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     depends_on:
-      mariadb:
-        condition: service_healthy
+      app:
+        condition: service_started
     restart: unless-stopped
 
   mariadb:
