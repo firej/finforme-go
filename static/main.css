@@ -904,7 +904,8 @@ body { font-variant-numeric: tabular-nums; }
 .transactions-table th:first-child { width: 96px !important; }
 .transactions-table th:nth-child(4), .transactions-table th:nth-child(5) { width: 125px; }
 .transactions-table th.tx-account-heading { width: 22%; }
-.transactions-table td { vertical-align: top; padding-block: 12px; }
+.transactions-table td { vertical-align: middle; padding-block: 4px; }
+.transactions-table .row-actions .btn { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
 .tx-description { font-weight: 500; overflow-wrap: anywhere; }
 .tx-account { display: inline; font-size: 13px; color: var(--accent-text); text-decoration: none; overflow-wrap: anywhere; }
 .tx-tags { display: inline; }
