@@ -30,31 +30,9 @@ func newRatesClient(endpoint string) (*ratesClient, error) {
 }
 
 func (c *ratesClient) latest(ctx context.Context) (map[string]float64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "finforme-telegram-bot/1.0")
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("rates API request: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("rates API returned HTTP %d", resp.StatusCode)
-	}
-	const maxBody = 1 << 20
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
-	if err != nil {
-		return nil, fmt.Errorf("read rates API response: %w", err)
-	}
-	if len(body) > maxBody {
-		return nil, fmt.Errorf("rates API response exceeds 1 MiB")
-	}
 	var data exchangerates.LatestRates
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("decode rates API response: %w", err)
+	if err := c.getJSON(ctx, c.endpoint, &data); err != nil {
+		return nil, err
 	}
 	if data.Rates == nil {
 		return nil, fmt.Errorf("rates API response has no rates array")
@@ -77,4 +55,33 @@ func (c *ratesClient) latest(ctx context.Context) (map[string]float64, error) {
 		result[rate.Code] = rate.Rate
 	}
 	return result, nil
+}
+
+func (c *ratesClient) getJSON(ctx context.Context, endpoint string, data any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "finforme-telegram-bot/1.0")
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("rates API request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("rates API returned HTTP %d", resp.StatusCode)
+	}
+	const maxBody = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
+	if err != nil {
+		return fmt.Errorf("read rates API response: %w", err)
+	}
+	if len(body) > maxBody {
+		return fmt.Errorf("rates API response exceeds 1 MiB")
+	}
+	if err := json.Unmarshal(body, data); err != nil {
+		return fmt.Errorf("decode rates API response: %w", err)
+	}
+	return nil
 }

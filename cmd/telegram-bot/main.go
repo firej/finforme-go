@@ -17,7 +17,30 @@ import (
 
 func main() {
 	check := flag.Bool("check", false, "Проверить API котировок и авторизацию Telegram без получения или отправки сообщений")
+	preview := flag.String("chart-preview", "", "Записать PNG в stdout без Telegram: -chart-preview 'USD/RUB 14'")
 	flag.Parse()
+	rates, err := newRatesClient(os.Getenv("CURRENCY_RATES_URL"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	if *preview != "" {
+		req, err := parseChartRequest(*preview)
+		if err != nil {
+			log.Fatal(err)
+		}
+		data, err := rates.history(context.Background(), req, time.Now())
+		if err != nil {
+			log.Fatal(err)
+		}
+		png, err := renderQuoteChart(data)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if _, err := os.Stdout.Write(png); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 
 	// Получаем токен бота из переменной окружения
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -29,11 +52,6 @@ func main() {
 	if err := tgbotapi.SetLogger(log.Default()); err != nil {
 		log.Fatal(err)
 	}
-	rates, err := newRatesClient(os.Getenv("CURRENCY_RATES_URL"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// Создаем нового бота
 	client := &http.Client{Timeout: 15 * time.Second}
 	bot, err := tgbotapi.NewBotAPIWithClient(token, tgbotapi.APIEndpoint, client)
@@ -61,6 +79,7 @@ func main() {
 	commands := tgbotapi.NewSetMyCommands(
 		tgbotapi.BotCommand{Command: "rate", Description: "Показать последние курсы валют"},
 		tgbotapi.BotCommand{Command: "rates", Description: "Показать последние курсы валют"},
+		tgbotapi.BotCommand{Command: "chart", Description: "График котировки: /chart USD 14 или /chart BTC 2w"},
 		tgbotapi.BotCommand{Command: "help", Description: "Показать справку"},
 		tgbotapi.BotCommand{Command: "start", Description: "Начать работу с ботом"},
 	)
@@ -146,6 +165,7 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 			"Привет! Я бот для просмотра курсов валют.\n\n"+
 				"Доступные команды:\n"+
 				"/rate — показать последние курсы валют\n"+
+				"/chart — график USD/RUB за 2 недели\n"+
 				"/help — показать справку")
 		if _, err := bot.Send(reply); err != nil {
 			log.Printf("Ошибка отправки ответа на /start: %v", err)
@@ -156,10 +176,13 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 			"Доступные команды:\n"+
 				"/start — начать работу с ботом\n"+
 				"/rate — показать последние курсы валют\n"+
-				"/help — показать эту справку")
+				"/help — показать эту справку\n\n"+chartHelp)
 		if _, err := bot.Send(reply); err != nil {
 			log.Printf("Ошибка отправки ответа на /help: %v", err)
 		}
+
+	case "chart":
+		handleChart(bot, ratesClient, msg)
 
 	case "rate", "rates":
 		rates, err := ratesClient.latest(context.Background())
