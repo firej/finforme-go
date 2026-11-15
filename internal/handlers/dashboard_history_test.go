@@ -165,7 +165,7 @@ func TestCapitalHistoryHandlerAndTemplate(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.renderDashboard(w, httptest.NewRequest("GET", "/?month=2026-09", nil), 2)
 	body := w.Body.String()
-	for _, want := range []string{"Прирост капитала по месяцам", "history-negative", "Суммы по месяцам и влияние курсов", "data-history-link", "#monthly-report"} {
+	for _, want := range []string{"Динамика капитала · 12 месяцев", "capital-trend-known", "Прирост капитала по месяцам", "history-negative", "Суммы по месяцам и влияние курсов", "data-history-link", "#monthly-report"} {
 		if w.Code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("missing %q: status %d: %s", want, w.Code, body)
 		}

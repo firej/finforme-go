@@ -21,6 +21,9 @@ type monthCurrencyReport struct {
 	PreviousIncome, PreviousExpense, PreviousNet float64
 	IncomeChange, ExpenseChange, NetChange       string
 	Expenses, Incomes                            []monthCategory
+	ExpenseChart                                 expenseChart
+	SpendingTrend                                spendingTrend
+	CashFlow                                     cashFlowChart
 }
 type dashboardMonth struct {
 	Value, Label, PreviousLabel, PreviousURL, NextURL string
@@ -155,7 +158,9 @@ func buildDashboardMonth(month, now time.Time, current, previous *PeriodReport, 
 		c.ExpenseChange = amountChange(c.Expense, c.PreviousExpense)
 		c.NetChange = amountChange(c.Net, c.PreviousNet)
 		c.Expenses = monthCategories(current.Expense, previous.Expense, c.Currency, result.Value)
+		c.ExpenseChart = buildExpenseChart(c.Expenses)
 		c.Incomes = monthCategories(current.Income, previous.Income, c.Currency, result.Value)
+		c.CashFlow = buildCashFlowChart(c.Incomes, c.Expenses)
 		result.Currencies = append(result.Currencies, *c)
 	}
 	sort.Slice(result.Currencies, func(i, j int) bool { return currencyLess(result.Currencies[i].Currency, result.Currencies[j].Currency) })
@@ -171,5 +176,26 @@ func (h *Handler) dashboardMonthlyReport(userID int64, month, now time.Time, que
 	if err != nil {
 		return dashboardMonth{}, err
 	}
-	return buildDashboardMonth(month, now, current, previous, query), nil
+	result := buildDashboardMonth(month, now, current, previous, query)
+	trends, err := h.dashboardSpendingTrends(userID, month, now)
+	if err != nil {
+		return dashboardMonth{}, err
+	}
+	for i := range result.Currencies {
+		report := &result.Currencies[i]
+		report.SpendingTrend = trends[report.Currency]
+		delete(trends, report.Currency)
+	}
+	// Spending and refunds can cancel out over a month but still move the daily curve.
+	if len(trends) > 0 {
+		for currency, trend := range trends {
+			zeroChange := amountChange(0, 0)
+			result.Currencies = append(result.Currencies, monthCurrencyReport{
+				Currency: currency, SpendingTrend: trend,
+				IncomeChange: zeroChange, ExpenseChange: zeroChange, NetChange: zeroChange,
+			})
+		}
+		sort.Slice(result.Currencies, func(i, j int) bool { return currencyLess(result.Currencies[i].Currency, result.Currencies[j].Currency) })
+	}
+	return result, nil
 }

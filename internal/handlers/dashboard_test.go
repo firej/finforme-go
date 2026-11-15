@@ -25,7 +25,7 @@ func TestDashboardMonthlyReport(t *testing.T) {
 		}
 	}
 	month := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
-	report, err := h.dashboardMonthlyReport(2, month, month, url.Values{"currency": {"USD"}, "rate_RUB_USD": {"USD/RUB@cbr"}})
+	report, err := h.dashboardMonthlyReport(2, month, month.AddDate(0, 1, 0), url.Values{"currency": {"USD"}, "rate_RUB_USD": {"USD/RUB@cbr"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,6 +41,15 @@ func TestDashboardMonthlyReport(t *testing.T) {
 	}
 	if report.Currencies[1].Expense != 100 {
 		t.Fatal("currencies mixed")
+	}
+	if trend := rub.SpendingTrend; trend.CurrentTotal != "75,00" || trend.PreviousTotal != "80,00" || trend.Days[29].Current != "75,00" || trend.Days[30].Current != "—" || trend.Days[30].Previous != "80,00" {
+		t.Fatalf("closed month totals and end dates: %+v", trend)
+	}
+	if trend := report.Currencies[1].SpendingTrend; trend.CurrentTotal != "100,00" || trend.PreviousTotal != "0,00" {
+		t.Fatalf("currency or internal transfer leaked into trend: %+v", trend)
+	}
+	if flow := rub.CashFlow; len(flow.Sources) != 1 || flow.Sources[0].Cents != 50000 || len(flow.Uses) != 2 || flow.Uses[0].Cents != 7500 || flow.Uses[1].Kind != "surplus" || flow.Uses[1].Cents != 42500 {
+		t.Fatalf("currency, refund or internal transfer miscounted in cash flow: %+v", flow)
 	}
 	if !strings.Contains(report.PreviousURL, "month=2026-08") || !strings.Contains(report.NextURL, "currency=USD") || !strings.Contains(report.NextURL, "rate_RUB_USD=") {
 		t.Fatal("navigation loses selections")
@@ -209,7 +218,7 @@ func TestDashboardPage(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.renderDashboard(w, httptest.NewRequest("GET", "/?month=2026-09&currency=USD", nil), 2)
 	body := w.Body.String()
-	for _, want := range []string{"Общий капитал", "Отчёт за месяц", "Сентябрь 2026", "Август 2026", "Неполная оценка", "Расходы по категориям", `/finance/account/2?month=2026-09`, "Новости"} {
+	for _, want := range []string{"Общий капитал", "Отчёт за месяц", "Сентябрь 2026", "Август 2026", "Неполная оценка", "Расходы по категориям", `stroke-dasharray="100 100"`, `/finance/account/2?month=2026-09`, "Темп расходов", `data-spending-points data-currency="RUB"`, "Денежные потоки · RUB", "Дефицит", "Новости"} {
 		if w.Code != 200 || !strings.Contains(body, want) {
 			t.Fatalf("missing %q, status=%d: %s", want, w.Code, body)
 		}

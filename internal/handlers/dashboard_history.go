@@ -23,6 +23,7 @@ type dashboardHistory struct {
 	Currency, From, To, Start, End, Change string
 	Known, HasData                         bool
 	Rows                                   []capitalHistoryRow
+	Chart                                  capitalTrend
 }
 type capitalSnapshot struct {
 	Date     time.Time
@@ -232,6 +233,7 @@ func buildCapitalHistory(snapshots []capitalSnapshot, history []capitalQuote, ba
 	result.From = snapshots[0].Date.AddDate(0, 0, 1).Format("02.01.2006")
 	result.To = snapshots[len(snapshots)-1].Date.Format("02.01.2006")
 	values := make([]dashboardCapital, len(snapshots))
+	closingValues := make([]*big.Rat, len(snapshots)-1)
 	quotes := make([][]capitalQuote, len(snapshots))
 	for i, snapshot := range snapshots {
 		quotes[i] = historyQuotesAt(history, snapshot.Date, query)
@@ -268,6 +270,7 @@ func buildCapitalHistory(snapshots []capitalSnapshot, history []capitalQuote, ba
 		}
 		if len(closing.Missing) == 0 {
 			row.End = closing.Net
+			closingValues[i-1] = closing.netCents
 		} else {
 			row.Status += "Нет курса на " + row.Date + ": " + strings.Join(closing.Missing, ", ") + "."
 		}
@@ -318,6 +321,7 @@ func buildCapitalHistory(snapshots []capitalSnapshot, history []capitalQuote, ba
 			}
 		}
 	}
+	result.Chart = buildCapitalTrend(closingValues, result.Rows)
 	return result
 }
 func (h *Handler) dashboardCapitalHistory(ctx context.Context, userID int64, now time.Time, base, selectedMonth string, query url.Values) (dashboardHistory, error) {

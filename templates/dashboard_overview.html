@@ -19,6 +19,7 @@
       <div><dt>{{if .Missing}}Учтённые активы{{else}}Активы{{end}}</dt><dd>{{.Assets}} <span class="stat-currency">{{.Currency}}</span></dd></div>
       <div><dt>{{if .Missing}}Учтённые обязательства{{else}}Обязательства{{end}}</dt><dd>{{.Debt}} <span class="stat-currency">{{.Currency}}</span></dd></div>
     </dl>
+    {{template "dashboard_capital_trend" $.CapitalHistory}}
     <details class="capital-details" {{if .Missing}}open{{end}}>
       <summary>Остатки по валютам и курсы</summary>
       <div class="capital-table-wrap"><table class="data-table capital-table">
@@ -65,6 +66,9 @@
       <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousExpense}}">{{.ExpenseChange}}</div></div>
       <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousNet}}">{{.NetChange}}</div></div>
     </dl>
+    {{template "dashboard_expense_chart" .}}
+    {{template "dashboard_spending_trend" (dict "Trend" .SpendingTrend "Currency" .Currency "Month" $.MonthReport)}}
+    {{template "dashboard_cash_flow" .}}
     <details class="report-category-details">
       <summary>Доходы и расходы по категориям</summary>
     <div class="report-categories">

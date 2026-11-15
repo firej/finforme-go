@@ -1,0 +1,154 @@
+{{define "dashboard_capital_trend"}}
+{{if .HasData}}{{if .Chart.HasValues}}
+<figure class="capital-trend account-balance">
+  <figcaption>Динамика капитала · 12 месяцев</figcaption>
+  <div class="capital-trend-plot">
+    <svg aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="capital-trend-fill" x2="0" y2="1">
+          <stop offset="0%" stop-color="currentColor" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="currentColor" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="{{.Chart.Area}}" fill="url(#capital-trend-fill)"/>
+      <path d="{{.Chart.Line}}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    </svg>
+    <div class="capital-trend-points">
+      {{range .Chart.Points}}
+      <a href="{{.URL}}" data-history-link class="capital-trend-point{{if .Available}} capital-trend-known{{end}}"
+         {{if .Selected}}aria-current="true"{{end}} {{if .Available}}style="--point-y: {{.Y}}%"{{end}}
+         aria-label="{{.Date}} · {{if .Available}}{{.End}} {{$.Currency}}{{else}}нет исторического курса{{end}}. Открыть отчёт за месяц.">
+        <span class="capital-trend-marker" aria-hidden="true"></span>
+        <span class="capital-trend-tooltip" aria-hidden="true"><span>{{.Date}}</span><strong>{{if .Available}}{{.End}} {{$.Currency}}{{else}}Нет курса{{end}}</strong></span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+  <div class="capital-trend-labels" aria-hidden="true"><span>{{.Chart.FirstLabel}}</span><span>{{.Chart.LastLabel}}</span></div>
+</figure>
+{{end}}{{end}}
+{{end}}
+
+{{define "dashboard_cash_flow"}}
+{{if .CashFlow.Height}}
+<figure class="cash-flow">
+  <figcaption>Денежные потоки · {{.Currency}}</figcaption>
+  {{if .CashFlow.Balanced}}<p class="form-hint cash-flow-balance">Осталось {{formatMoney 0.0}} {{.Currency}}</p>{{end}}
+  <div class="cash-flow-grid" style="--flow-height: {{.CashFlow.Height}}px">
+    <p class="cash-flow-heading cash-flow-heading-source">Источники</p>
+    <p class="cash-flow-heading">Расходы и остаток</p>
+    <ul class="cash-flow-labels cash-flow-sources" aria-label="Источники">
+      {{range .CashFlow.Sources}}{{template "cash_flow_label" .}}{{end}}
+    </ul>
+    <svg class="cash-flow-plot" aria-hidden="true" viewBox="0 0 100 {{.CashFlow.Height}}" preserveAspectRatio="none">
+      <g>{{range .CashFlow.Sources}}{{template "cash_flow_ribbon" .}}{{end}}</g>
+      <g transform="translate(100 0) scale(-1 1)">{{range .CashFlow.Uses}}{{template "cash_flow_ribbon" .}}{{end}}</g>
+      <rect class="cash-flow-center" x="49" y="{{.CashFlow.CenterTop}}" width="2" height="{{.CashFlow.CenterHeight}}"/>
+    </svg>
+    <ul class="cash-flow-labels" aria-label="Расходы и остаток">
+      {{range .CashFlow.Uses}}{{template "cash_flow_label" .}}{{end}}
+    </ul>
+  </div>
+</figure>
+{{end}}
+{{end}}
+
+{{define "cash_flow_label"}}
+<li class="cash-flow-{{.Kind}}" style="top: {{.LabelY}}px">
+  {{if .URL}}<a href="{{.URL}}" title="{{.Name}} · {{.Amount}}">{{end}}
+  <span class="cash-flow-label-name">{{.Name}}</span>
+  <strong>{{.Amount}}</strong>
+  {{if .URL}}</a>{{end}}
+</li>
+{{end}}
+
+{{define "cash_flow_ribbon"}}
+{{if .URL}}<a href="{{.URL}}" tabindex="-1">{{end}}
+<g class="cash-flow-{{.Kind}}{{if eq .Kind "expense"}} expense-swatch-{{.Color}}{{end}}">
+  <title>{{.Name}} · {{.Amount}}</title>
+  <path d="{{.Ribbon}}"/>
+  <rect x="0" y="{{.Top}}" width="3" height="{{.Height}}"/>
+</g>
+{{if .URL}}</a>{{end}}
+{{end}}
+
+{{define "dashboard_expense_chart"}}
+{{if .ExpenseChart.Segments}}
+<figure class="expense-chart">
+  <figcaption>Расходы по категориям · {{.Currency}}</figcaption>
+  <div class="expense-chart-body">
+    <div class="expense-ring">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <g transform="rotate(-90 60 60)" fill="none" stroke-width="9">
+          <circle class="expense-ring-track" cx="60" cy="60" r="55"/>
+          {{range $i, $segment := .ExpenseChart.Segments}}
+          {{if .URL}}<a href="{{.URL}}" tabindex="-1">{{end}}
+            <circle class="expense-swatch-{{$i}} expense-arc" cx="60" cy="60" r="55" pathLength="100"
+                    stroke-dasharray="{{.Length}} 100" stroke-dashoffset="{{.Start}}"><title>{{.Name}} · {{.Share}}</title></circle>
+          {{if .URL}}</a>{{end}}
+          {{end}}
+        </g>
+      </svg>
+      <div class="expense-ring-total" role="group" aria-label="Расходы на диаграмме · {{formatMoney .ExpenseChart.Total}} {{.Currency}}">
+        <span>Расходы</span>
+        <strong>{{.ExpenseChart.Label}}</strong>
+        <span>{{.Currency}}</span>
+      </div>
+    </div>
+    <ul class="expense-legend">
+      {{range $i, $segment := .ExpenseChart.Segments}}
+      <li>
+        {{if .URL}}<a href="{{.URL}}" class="expense-legend-row">{{else}}<span class="expense-legend-row">{{end}}
+          <span class="expense-dot expense-swatch-{{$i}}" aria-hidden="true"></span>
+          <span class="expense-category-name">{{.Name}}</span>
+          <strong>{{formatMoney .Amount}}</strong><span class="expense-share">{{.Share}}</span>
+        {{if .URL}}</a>{{else}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+  </div>
+  {{if .ExpenseChart.HasRefund}}<p class="form-hint">В кольце показаны категории с положительным итогом. Возвраты по остальным категориям учтены в сумме отчёта.</p>{{end}}
+</figure>
+{{end}}
+{{end}}
+
+{{define "dashboard_spending_trend"}}
+{{with .Trend}}
+{{if .Days}}
+<figure class="spending-trend" data-spending-trend>
+  <figcaption>Темп расходов</figcaption>
+  <dl class="spending-trend-legend">
+    <div class="spending-trend-current">
+      <dt>{{$.Month.Label}}{{if $.Month.Current}} · 1–{{.CurrentThrough}}{{end}}</dt>
+      <dd><strong>{{.CurrentTotal}} {{$.Currency}}</strong></dd>
+    </div>
+    <div class="spending-trend-previous">
+      <dt>{{$.Month.PreviousLabel}}{{if $.Month.Current}} · 1–{{.PreviousThrough}}{{end}}</dt>
+      <dd><strong>{{.PreviousTotal}} {{$.Currency}}</strong></dd>
+    </div>
+  </dl>
+  <p class="spending-trend-change {{if gt .ChangeSign 0}}text-red{{else if lt .ChangeSign 0}}text-green{{end}}">{{.Change}}</p>
+  <div class="spending-trend-chart">
+    <div class="spending-trend-plot" data-spending-plot>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {{range .Ticks}}<path class="spending-trend-grid" d="M0 {{.Y}} H100" vector-effect="non-scaling-stroke"/>{{end}}
+        <path class="spending-trend-area" d="{{.CurrentArea}}"/>
+        <path class="spending-trend-previous" d="{{.PreviousLine}}" vector-effect="non-scaling-stroke"/>
+        <path class="spending-trend-current" d="{{.CurrentLine}}" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="spending-trend-cursor" data-spending-cursor hidden aria-hidden="true"></div>
+      <div class="spending-trend-tooltip" data-spending-tooltip hidden aria-hidden="true"></div>
+      <input class="sr-only" type="range" min="1" max="{{len .Days}}" value="{{.CurrentThrough}}" aria-label="Накопленные расходы по дням" data-spending-day hidden>
+    </div>
+    <div class="spending-trend-axis" aria-hidden="true">
+      {{range .Ticks}}<span style="top: {{.Y}}%">{{.Label}}</span>{{end}}
+    </div>
+    <div class="spending-trend-days" aria-hidden="true"><span>1</span><span>День месяца</span><span>{{len .Days}}</span></div>
+  </div>
+  <template data-spending-points data-currency="{{$.Currency}}" data-current-month="{{$.Month.Label}}" data-previous-month="{{$.Month.PreviousLabel}}">
+    {{range .Days}}<span data-current="{{.Current}}" data-previous="{{.Previous}}"></span>{{end}}
+  </template>
+</figure>
+{{end}}
+{{end}}
+{{end}}

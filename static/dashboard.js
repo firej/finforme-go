@@ -35,4 +35,55 @@
     var selected = Array.from(buttons).find(function(button) { return button.dataset.reportCurrency === preferred; });
     selectCurrency((selected || buttons[0]).dataset.reportCurrency, false);
   }
+
+  form.querySelectorAll('[data-spending-trend]').forEach(function(figure) {
+    var plot = figure.querySelector('[data-spending-plot]');
+    var slider = figure.querySelector('[data-spending-day]');
+    var cursor = figure.querySelector('[data-spending-cursor]');
+    var tooltip = figure.querySelector('[data-spending-tooltip]');
+    var template = figure.querySelector('[data-spending-points]');
+    var points = template.content.children;
+    var labels = template.dataset;
+
+    function update(day, show) {
+      var point = points[day - 1].dataset;
+      var title = day + '-й день месяца';
+      function describe(month, value) {
+        return month + ': ' + (value === '—' ? value : value + ' ' + labels.currency);
+      }
+      var comparison = [title, describe(labels.currentMonth, point.current), describe(labels.previousMonth, point.previous)];
+      slider.value = day;
+      slider.setAttribute('aria-valuetext', comparison.join('. '));
+      cursor.style.left = (100 * day / points.length) + '%';
+      tooltip.textContent = comparison.join('\n');
+      cursor.hidden = tooltip.hidden = !show;
+      if (show) {
+        var x = plot.clientWidth * day / points.length;
+        var xTooltip = Math.max(0, Math.min(x - tooltip.offsetWidth / 2, plot.clientWidth - tooltip.offsetWidth));
+        tooltip.style.left = xTooltip + 'px';
+      }
+    }
+
+    function showAtPointer(event) {
+      var rect = plot.getBoundingClientRect();
+      var day = Math.round((event.clientX - rect.left) / rect.width * points.length);
+      update(Math.max(1, Math.min(day, points.length)), true);
+    }
+
+    function hide() { cursor.hidden = tooltip.hidden = true; }
+    plot.addEventListener('pointermove', function(event) {
+      if (event.pointerType === 'mouse') showAtPointer(event);
+    });
+    plot.addEventListener('pointerdown', showAtPointer);
+    plot.addEventListener('pointerleave', function(event) {
+      if (event.pointerType === 'mouse' && document.activeElement !== slider) hide();
+    });
+    plot.addEventListener('pointercancel', hide);
+    slider.addEventListener('focus', function() { update(slider.valueAsNumber, true); });
+    slider.addEventListener('input', function() { update(slider.valueAsNumber, true); });
+    slider.addEventListener('blur', hide);
+    slider.addEventListener('keydown', function(event) { if (event.key === 'Escape') hide(); });
+    update(slider.valueAsNumber, false);
+    slider.hidden = false;
+  });
 })();
