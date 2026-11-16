@@ -439,7 +439,7 @@ func TestTemplates_FinanceTransactionsByTag(t *testing.T) {
 	data["Transactions"] = []map[string]interface{}{
 		{
 			"id": int64(1), "post_date": "2024-03-15",
-			"description": "Test", "value": 100.0,
+			"description": "Test",
 			"splits": []map[string]interface{}{
 				{"account_name": "Bank", "value": 100.0},
 			},

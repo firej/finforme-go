@@ -19,7 +19,6 @@
           <th>Дата</th>
           <th>Описание</th>
           <th>Счета</th>
-          <th class="right">Сумма</th>
           <th></th>
         </tr>
       </thead>
@@ -33,7 +32,6 @@
             <div style="font-size:12px;color:var(--text-secondary);">{{.account_name}}: <span class="font-mono">{{formatMoney .value}}</span></div>
             {{end}}
           </td>
-          <td class="mono right">{{formatMoney .value}}</td>
           <td style="white-space:nowrap;">
             <a href="/finance/transaction/0/{{.id}}" class="btn btn-ghost btn-sm">Просмотр</a>
           </td>
