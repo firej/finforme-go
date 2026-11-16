@@ -30,9 +30,9 @@
 {{end}}
 
 {{define "dashboard_cash_flow"}}
-{{if .CashFlow.Height}}
 <figure class="cash-flow">
   <figcaption>Денежные потоки · {{.Currency}}</figcaption>
+  {{if .CashFlow.Height}}
   {{if .CashFlow.Balanced}}<p class="form-hint cash-flow-balance">Осталось {{formatMoney 0.0}} {{.Currency}}</p>{{end}}
   <div class="cash-flow-grid" style="--flow-height: {{.CashFlow.Height}}px">
     <p class="cash-flow-heading cash-flow-heading-source">Источники</p>
@@ -49,8 +49,8 @@
       {{range .CashFlow.Uses}}{{template "cash_flow_label" .}}{{end}}
     </ul>
   </div>
+  {{else}}<p class="dashboard-empty">Пока мало данных</p>{{end}}
 </figure>
-{{end}}
 {{end}}
 
 {{define "cash_flow_label"}}

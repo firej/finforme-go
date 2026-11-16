@@ -229,3 +229,29 @@ func TestDashboardPage(t *testing.T) {
 		t.Fatalf("invalid month: %d", invalid.Code)
 	}
 }
+
+func TestDashboardMonthHasEmptyStateWithOrWithoutPreviousActivity(t *testing.T) {
+	h := rateBindingsTestHandler(t)
+	if _, err := h.saveTransaction(2, validFinanceInput()); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		month               string
+		showCashFlowHeading bool
+	}{
+		{month: "2026-10", showCashFlowHeading: true},
+		{month: "2026-11"},
+	} {
+		t.Run(tc.month, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.renderDashboard(w, httptest.NewRequest("GET", "/?month="+tc.month, nil), 2)
+			body := w.Body.String()
+			if w.Code != 200 || strings.Count(body, "Пока мало данных") != 1 || strings.Contains(body, `class="cash-flow-plot"`) {
+				t.Fatalf("expected one empty state without a plot, status %d", w.Code)
+			}
+			if strings.Contains(body, "Денежные потоки · RUB") != tc.showCashFlowHeading {
+				t.Fatal("expected the cash flow heading only when the previous month has activity")
+			}
+		})
+	}
+}
