@@ -453,7 +453,7 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 		LEFT JOIN splits s ON t.id = s.tx_id
 		LEFT JOIN accounts a ON s.account_id = a.id
 		WHERE t.user_id = ? AND INSTR(t.tags, ?) > 0
-		ORDER BY t.post_date DESC
+		ORDER BY t.post_date DESC, t.id DESC
 	`, userID, tag)
 
 	if err != nil {
@@ -463,6 +463,7 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 	defer rows.Close()
 
 	transactionsMap := make(map[int64]map[string]interface{})
+	transactions := make([]map[string]interface{}, 0)
 
 	for rows.Next() {
 		var txID, accountID, splitID, valueNum, valueDenom int64
@@ -486,6 +487,7 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 				"tags":        strings.Split(tags, ","),
 				"splits":      []map[string]interface{}{},
 			}
+			transactions = append(transactions, transactionsMap[txID])
 		}
 
 		split := map[string]interface{}{
@@ -496,11 +498,6 @@ func (h *Handler) FinanceTransactionsByTag(w http.ResponseWriter, r *http.Reques
 
 		splits := transactionsMap[txID]["splits"].([]map[string]interface{})
 		transactionsMap[txID]["splits"] = append(splits, split)
-	}
-
-	transactions := make([]map[string]interface{}, 0, len(transactionsMap))
-	for _, tx := range transactionsMap {
-		transactions = append(transactions, tx)
 	}
 
 	data := h.pageData(userID, "transactions")
