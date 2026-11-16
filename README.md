@@ -555,24 +555,23 @@ Telegram-бот получает котировки через этот API.
 
 ### Первоначальный импорт исторических данных
 
-После деплоя нужно однократно загрузить исторические данные. Скрипт запускается
-**внутри контейнера** `app`:
+При запуске с новой базой загрузите исторические данные в контейнере `finforme`:
 
 ```bash
 # Импорт за последние 3 года (по умолчанию)
-docker exec finforme-app-1 ./import-rates-history
+docker exec finforme ./import-rates-history
 
 # Или за конкретный период
-docker exec finforme-app-1 ./import-rates-history -from 2020-01-01 -to 2026-04-04
+docker exec finforme ./import-rates-history -from 2020-01-01 -to 2026-04-04
 ```
 
 ### Blue Dollar Sell: история с июня 2023 года
 
 `import-blue-rates` читает исторический график Sell с
 [bluedollar.net](https://bluedollar.net/informal-rate/) и существующие курсы
-`USD/RUB` источника `cbr` из базы. Утилита запускается вручную из исходников
-и не входит в Docker-образ приложения. Перед запуском задайте `DATABASE_DSN`
-для нужной MariaDB. По умолчанию выполняется только проверка:
+`USD/RUB` источника `cbr` из базы. Утилита входит в Docker-образ; при запуске из
+исходников задайте `DATABASE_DSN` для нужной MariaDB. По умолчанию выполняется
+только проверка:
 
 ```bash
 go run ./cmd/import-blue-rates -from 2023-06-01 -to 2026-09-12
@@ -631,10 +630,10 @@ go run ./cmd/import-blue-rates -from 2023-06-01 -to 2025-08-31 -replace-official
 
 `import-blue-rates` включён в Docker-образ. Отдельное задание запускает его
 каждый час, включая вечер по Аргентине; ошибки Coinbase или BCRA ему не мешают.
-Расписание для root на сервере также сохранено в `scripts/blue-rates.cron`:
+Расписание для root на сервере сохранено в `scripts/finforme.cron`:
 
 ```cron
-10 * * * * flock -n /var/lock/finforme-blue-rates.lock docker exec finforme ./import-blue-rates -recent-days 14 -apply >> /var/log/import-blue-rates.log 2>&1
+10 * * * * root flock -n /run/lock/finforme-blue-rates.lock docker exec finforme ./import-blue-rates -recent-days 14 -apply 2>&1 | logger -t finforme-blue-rates
 ```
 
 `-recent-days 14` задаёт последние 14 календарных дней включительно, до текущей
@@ -655,12 +654,14 @@ docker exec finforme ./import-blue-rates -from 2025-09-01 -to 2026-10-03 -missin
 
 ### Ежедневное обновление курсов (cron)
 
-Скрипт `import-rates` запускается каждые 15 минут с 10:00 до 16:00 МСК (07:00–13:00 UTC).
-Добавьте задачу в cron на сервере (`crontab -e`):
+Скрипт `import-rates` запускается каждые 15 минут с 10:00 до 16:45 МСК и раз в
+час с 17:05 до 02:05 МСК, чтобы забирать вечерние публикации. Расписание в
+`scripts/finforme.cron` задано в UTC:
 
 ```cron
 # Обновление курсов валют каждые 15 минут с 10:00 до 16:00 МСК (07:00-13:00 UTC)
-*/15 7-13 * * * docker exec finforme-app-1 ./import-rates >> /var/log/import-rates.log 2>&1
+*/15 7-13 * * * root flock -n /run/lock/finforme-rates.lock docker exec finforme ./import-rates 2>&1 | logger -t finforme-rates
+5 14-23 * * * root flock -n /run/lock/finforme-rates.lock docker exec finforme ./import-rates 2>&1 | logger -t finforme-rates
 ```
 
 > **Примечание:** ЦБ РФ публикует курсы в рабочие дни. В выходные и праздники
@@ -738,6 +739,42 @@ Telegram-бот развёрнут отдельно на `firej@45.144.233.69` (
 Проверка и настройки описаны в [README бота](cmd/telegram-bot/README.md).
 GitHub Actions использует `SSH_PRIVATE_KEY`; его
 публичный ключ должен быть разрешён на `firej.org`.
+
+Для настройки фоновых заданий установите `scripts/backup-prod.sh` на сервере как
+`/opt/finforme/backup.sh` с правами `0700`, а `scripts/finforme.cron` — как
+`/etc/cron.d/finforme` с правами `0644`, оба от root. Дампы базы создаются каждый
+день в 05:25 МСК в `/var/backups/finforme` и хранятся 14 дней. Рядом с каждым
+дампом публикуется контрольная сумма SHA-256. Если существует группа
+`finforme-backup`, каталог и готовые файлы доступны этой группе только для чтения.
+
+### Копии на NAS UGREEN
+
+На NAS копии сохраняются в
+`/volume1/backups/finforme/database`. Скрипт `scripts/backup-pull-nas.sh`
+установлен как `/volume1/backups/finforme/.config/pull.sh`, а
+`scripts/finforme-nas.cron` — как `/etc/cron.d/finforme-backup`.
+NAS проверяет новые дампы каждый час в `:35`; ежедневный дамп переносится
+в 05:35 МСК, пропущенные загрузки повторяются автоматически. Mac не участвует.
+
+На NAS хранится история за 90 дней, минимум 14 копий после их накопления.
+Удаление старых файлов на сервере не удаляет историю NAS. Копирование проверяет
+монтирование `/volume1`, SHA-256, целостность gzip и свежесть последнего дампа
+(не старше 48 часов). Очистка истории выполняется только после успешной проверки.
+Состояние последнего успеха — `/volume1/backups/finforme/last-success.txt`;
+журнал — `journalctl -t finforme-backup`. Ошибки помечаются `FAILED`.
+
+Отдельный ключ NAS находится в `.config/id_ed25519` (доступ только root).
+На сервере пользователь `finforme-backup` принимает этот ключ с ограничением
+`restrict,command="/usr/bin/rrsync -ro /var/backups/finforme"`.
+Он не может запускать shell, изменять данные или читать другие каталоги.
+Ключ хоста закреплён в `.config/known_hosts`; пароль сервера NAS не хранит.
+Sync & Backup установлен в UGOS, но дублирующее задание в нём не создано.
+
+10 ноября 2026 проверено восстановление копии с NAS в отдельную MariaDB без
+сетевого доступа: проверены операции, контрольный баланс и целостность таблиц.
+Рабочая база при проверке не изменялась.
+Для восстановления используйте `gzip -dc <дамп.sql.gz> | mariadb ...` только
+на подготовленной целевой базе: SQL содержит `CREATE DATABASE` и `USE finforme`.
 
 ## Лицензия
 

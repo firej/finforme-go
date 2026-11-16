@@ -1,0 +1,5 @@
+# Install as /etc/cron.d/finforme-backup on the NAS (Europe/Moscow).
+# Server creates the daily dump at 05:25 MSK. Hourly pulls retry missed transfers.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+35 * * * * root /usr/bin/timeout 30m /volume1/backups/finforme/.config/pull.sh 2>&1 | /usr/bin/logger -t finforme-backup

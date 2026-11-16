@@ -50,3 +50,8 @@ Thumbs.db
 
 # Claude Code local settings and worktrees
 .claude/
+
+# Personal exports and recovery data
+/bybit-export-*/
+/Attachments_*/
+/recovery/
