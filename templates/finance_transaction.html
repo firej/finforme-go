@@ -85,7 +85,7 @@
       {{end}}
       <div style="display:flex;gap:8px;margin-top:20px;">
         <button type="submit" class="btn btn-primary">Сохранить</button>
-        <a href="/finance/account/{{.AccountID}}" class="btn btn-ghost">Отмена</a>
+        <a href="{{if .AccountID}}/finance/account/{{.AccountID}}{{else}}/finance/{{end}}" class="btn btn-ghost">Отмена</a>
       </div>
     </form>
 
@@ -98,7 +98,7 @@
       if (evt.detail.elt && evt.detail.elt.matches('form')) {
         try {
           var r = JSON.parse(evt.detail.xhr.responseText);
-          if (r.result === 'ok') { window.location.href = '/finance/account/{{.AccountID}}'; }
+          if (r.result === 'ok') { window.location.href = '{{if .AccountID}}/finance/account/{{.AccountID}}{{else}}/finance/{{end}}'; }
           else if (r.error) {
             document.getElementById('result').textContent = 'Ошибка: ' + r.error;
           }

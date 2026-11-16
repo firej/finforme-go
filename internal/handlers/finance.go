@@ -405,7 +405,7 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 	txIDStr := vars["tx_id"]
 
 	accountID, _ := strconv.ParseInt(accountIDStr, 10, 64)
-	if !h.requirePageAccount(w, r, userID, accountID) {
+	if !(accountIDStr == "0" && txIDStr != "") && !h.requirePageAccount(w, r, userID, accountID) {
 		return
 	}
 
