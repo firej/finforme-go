@@ -2,6 +2,7 @@
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+*/15 * * * * root flock -n /run/lock/finforme-stock-rates.lock docker exec finforme ./import-stock-rates 2>&1 | logger -t finforme-stock-rates
 */15 7-13 * * * root flock -n /run/lock/finforme-rates.lock docker exec finforme ./import-rates 2>&1 | logger -t finforme-rates
 5 14-23 * * * root flock -n /run/lock/finforme-rates.lock docker exec finforme ./import-rates 2>&1 | logger -t finforme-rates
 10 * * * * root flock -n /run/lock/finforme-blue-rates.lock docker exec finforme ./import-blue-rates -recent-days 14 -apply 2>&1 | logger -t finforme-blue-rates

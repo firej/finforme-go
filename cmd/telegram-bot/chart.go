@@ -17,8 +17,8 @@ import (
 const chartHelp = "График: /chart [пара] [дни]\n" +
 	"/chart help — показать эту справку\n" +
 	"/chart — USD/RUB за 14 дней\n" +
-	"/chart EUR 30\n/chart BTC/USD 2w\n" +
-	"Пары: USD/RUB, EUR/RUB, BTC/USD, USD/ARS, RUB/ARS.\n" +
+	"/chart EUR 30\n/chart BTC/USD 2w\n/chart NVDA 30\n/chart NBIS 30\n/chart YDEX 30\n" +
+	"Пары: USD/RUB, EUR/RUB, BTC/USD, USD/ARS, RUB/ARS, NVDA/USD, NBIS/USD, YDEX/RUB.\n" +
 	"Период: от 2 до 365 дней; 2w = 14 дней. ARS — Blue Sell."
 
 type chartInstrument struct {
@@ -27,11 +27,14 @@ type chartInstrument struct {
 }
 
 var chartInstruments = map[string]chartInstrument{
-	"USD/RUB": {"USD/RUB", "cbr", "ЦБ РФ", 4},
-	"EUR/RUB": {"EUR/RUB", "cbr", "ЦБ РФ", 4},
-	"BTC/USD": {"BTC/USD", "coinbase", "Coinbase", 2},
-	"USD/ARS": {"USD/ARS", "bluedollar_sell", "Blue Dollar Sell", 2},
-	"RUB/ARS": {"RUB/ARS", "cross_blue_sell", "Blue Sell × ЦБ РФ", 4},
+	"USD/RUB":  {"USD/RUB", "cbr", "ЦБ РФ", 4},
+	"EUR/RUB":  {"EUR/RUB", "cbr", "ЦБ РФ", 4},
+	"BTC/USD":  {"BTC/USD", "coinbase", "Coinbase", 2},
+	"USD/ARS":  {"USD/ARS", "bluedollar_sell", "Blue Dollar Sell", 2},
+	"RUB/ARS":  {"RUB/ARS", "cross_blue_sell", "Blue Sell × ЦБ РФ", 4},
+	"NVDA/USD": {"NVDA/USD", "yahoo", "Yahoo Finance", 2},
+	"NBIS/USD": {"NBIS/USD", "yahoo", "Yahoo Finance", 2},
+	"YDEX/RUB": {"YDEX/RUB", "moex", "MOEX (задержка 15 мин)", 2},
 }
 
 type chartRequest struct {
@@ -48,7 +51,8 @@ func parseChartRequest(args string) (chartRequest, error) {
 	if len(fields) == 0 {
 		return req, nil
 	}
-	aliases := map[string]string{"USD": "USD/RUB", "EUR": "EUR/RUB", "BTC": "BTC/USD"}
+	aliases := map[string]string{"USD": "USD/RUB", "EUR": "EUR/RUB", "BTC": "BTC/USD",
+		"NVDA": "NVDA/USD", "NBIS": "NBIS/USD", "YDEX": "YDEX/RUB"}
 	code := fields[0]
 	if alias, ok := aliases[code]; ok {
 		code = alias

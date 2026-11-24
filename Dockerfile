@@ -15,6 +15,7 @@ COPY . .
 # Собираем основное приложение и скрипты импорта
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o finforme ./cmd/server/main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates ./cmd/import-rates/
+RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-stock-rates ./cmd/import-stock-rates/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-rates-history ./cmd/import-rates-history/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o import-blue-rates ./cmd/import-blue-rates/
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags '-w -s' -o telegram-bot ./cmd/telegram-bot/
@@ -33,6 +34,7 @@ WORKDIR /app
 # Копируем бинарники из этапа сборки
 COPY --from=builder /app/finforme .
 COPY --from=builder /app/import-rates .
+COPY --from=builder /app/import-stock-rates .
 COPY --from=builder /app/import-rates-history .
 COPY --from=builder /app/import-blue-rates .
 COPY --from=builder /app/telegram-bot .

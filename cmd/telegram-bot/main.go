@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evbogdanov/finforme/internal/exchangerates"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -67,8 +68,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("Ошибка проверки API котировок: %v", err)
 		}
-		if len(quotes) != 3 {
-			log.Fatal("В API отсутствуют обязательные котировки BTC/USD, USD/RUB или EUR/RUB")
+		for code := range quoteSources {
+			if _, ok := quotes[code]; !ok {
+				log.Fatalf("В API отсутствует обязательная котировка %s", code)
+			}
 		}
 		log.Printf("API котировок доступен: %s", formatRates(quotes))
 		return
@@ -77,8 +80,8 @@ func main() {
 	// Регистрируем команды бота в Telegram — они появятся в меню "/"
 	// и будут корректно доставляться в групповых чатах
 	commands := tgbotapi.NewSetMyCommands(
-		tgbotapi.BotCommand{Command: "rate", Description: "Показать последние курсы валют"},
-		tgbotapi.BotCommand{Command: "rates", Description: "Показать последние курсы валют"},
+		tgbotapi.BotCommand{Command: "rate", Description: "Курсы валют или акция: /rate NVDA"},
+		tgbotapi.BotCommand{Command: "rates", Description: "Показать курсы валют"},
 		tgbotapi.BotCommand{Command: "chart", Description: "График котировки: /chart USD 14 или /chart BTC 2w"},
 		tgbotapi.BotCommand{Command: "help", Description: "Показать справку"},
 		tgbotapi.BotCommand{Command: "start", Description: "Начать работу с ботом"},
@@ -162,9 +165,10 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 	switch command {
 	case "start":
 		reply := tgbotapi.NewMessage(msg.Chat.ID,
-			"Привет! Я бот для просмотра курсов валют.\n\n"+
+			"Привет! Я бот для просмотра котировок валют и акций.\n\n"+
 				"Доступные команды:\n"+
-				"/rate — показать последние курсы валют\n"+
+				"/rates — BTC/USD, USD/RUB и EUR/RUB\n"+
+				"/rate NVDA — акция (также NBIS и YDEX)\n"+
 				"/chart — график USD/RUB за 2 недели\n"+
 				"/help — показать справку")
 		if _, err := bot.Send(reply); err != nil {
@@ -175,7 +179,8 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 		reply := tgbotapi.NewMessage(msg.Chat.ID,
 			"Доступные команды:\n"+
 				"/start — начать работу с ботом\n"+
-				"/rate — показать последние курсы валют\n"+
+				"/rates — BTC/USD, USD/RUB и EUR/RUB\n"+
+				"/rate NVDA — акция (также NBIS и YDEX)\n"+
 				"/help — показать эту справку\n\n"+chartHelp)
 		if _, err := bot.Send(reply); err != nil {
 			log.Printf("Ошибка отправки ответа на /help: %v", err)
@@ -185,6 +190,17 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 		handleChart(bot, ratesClient, msg)
 
 	case "rate", "rates":
+		var stock stockRate
+		if command == "rate" && strings.TrimSpace(msg.CommandArguments()) != "" {
+			var ok bool
+			stock, ok = findStockRate(msg.CommandArguments())
+			if !ok {
+				if _, err := bot.Send(tgbotapi.NewMessage(msg.Chat.ID, "Укажите одну акцию: /rate NVDA, /rate NBIS или /rate YDEX.")); err != nil {
+					log.Printf("Ошибка отправки справки /rate: %v", err)
+				}
+				return
+			}
+		}
 		rates, err := ratesClient.latest(context.Background())
 		if err != nil {
 			log.Printf("Ошибка получения курсов: %v", err)
@@ -193,7 +209,11 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 				log.Printf("Ошибка отправки сообщения об ошибке: %v", sendErr)
 			}
 		} else {
-			reply := tgbotapi.NewMessage(msg.Chat.ID, formatRates(rates))
+			text := formatRates(rates)
+			if stock.code != "" {
+				text = formatStockRate(rates, stock)
+			}
+			reply := tgbotapi.NewMessage(msg.Chat.ID, text)
 			if _, err := bot.Send(reply); err != nil {
 				log.Printf("Ошибка отправки курсов: %v", err)
 			}
@@ -205,19 +225,50 @@ func handleUpdate(bot *tgbotapi.BotAPI, ratesClient *ratesClient, update tgbotap
 	}
 }
 
-func formatRates(rates map[string]float64) string {
+func formatRates(rates map[string]exchangerates.CurrencyRate) string {
 	var parts []string
-	if btc := rates["BTC/USD"]; btc > 0 {
+	if btc := rates["BTC/USD"].Rate; btc > 0 {
 		parts = append(parts, fmt.Sprintf("₿ $%.0f", btc))
 	}
-	if usd := rates["USD/RUB"]; usd > 0 {
+	if usd := rates["USD/RUB"].Rate; usd > 0 {
 		parts = append(parts, fmt.Sprintf("💵 %.2f₽", usd))
 	}
-	if eur := rates["EUR/RUB"]; eur > 0 {
+	if eur := rates["EUR/RUB"].Rate; eur > 0 {
 		parts = append(parts, fmt.Sprintf("💶 %.2f₽", eur))
 	}
 	if len(parts) == 0 {
 		return "Нет данных о курсах валют"
 	}
 	return "Котировки: " + strings.Join(parts, "  ")
+}
+
+type stockRate struct{ code, ticker, unit, source string }
+
+var stockRates = []stockRate{
+	{"NVDA/USD", "NVDA", "$", "Yahoo Finance"},
+	{"NBIS/USD", "NBIS", "$", "Yahoo Finance"},
+	{"YDEX/RUB", "YDEX", "₽", "MOEX · задержка 15 мин"},
+}
+
+func findStockRate(args string) (stockRate, bool) {
+	ticker := strings.ToUpper(strings.TrimSpace(args))
+	for _, stock := range stockRates {
+		if ticker == stock.ticker || ticker == stock.code {
+			return stock, true
+		}
+	}
+	return stockRate{}, false
+}
+
+func formatStockRate(rates map[string]exchangerates.CurrencyRate, stock stockRate) string {
+	rate, ok := rates[stock.code]
+	if !ok {
+		return "Нет данных о котировке " + stock.ticker
+	}
+	date, _ := time.Parse(time.DateOnly, rate.RateDate)
+	asOf := date.Format("02.01.2006")
+	if at, err := time.Parse(time.RFC3339, rate.QuotedAt); err == nil {
+		asOf = at.In(time.FixedZone("MSK", 3*60*60)).Format("02.01.2006 15:04 МСК")
+	}
+	return fmt.Sprintf("%s %.2f %s · %s · %s", stock.ticker, rate.Rate, stock.unit, asOf, stock.source)
 }

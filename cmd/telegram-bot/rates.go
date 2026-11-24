@@ -29,7 +29,12 @@ func newRatesClient(endpoint string) (*ratesClient, error) {
 	return &ratesClient{endpoint: endpoint, client: &http.Client{Timeout: 5 * time.Second}}, nil
 }
 
-func (c *ratesClient) latest(ctx context.Context) (map[string]float64, error) {
+var quoteSources = map[string]string{
+	"BTC/USD": "coinbase", "USD/RUB": "cbr", "EUR/RUB": "cbr",
+	"NVDA/USD": "yahoo", "NBIS/USD": "yahoo", "YDEX/RUB": "moex",
+}
+
+func (c *ratesClient) latest(ctx context.Context) (map[string]exchangerates.CurrencyRate, error) {
 	var data exchangerates.LatestRates
 	if err := c.getJSON(ctx, c.endpoint, &data); err != nil {
 		return nil, err
@@ -37,10 +42,9 @@ func (c *ratesClient) latest(ctx context.Context) (map[string]float64, error) {
 	if data.Rates == nil {
 		return nil, fmt.Errorf("rates API response has no rates array")
 	}
-	sources := map[string]string{"BTC/USD": "coinbase", "USD/RUB": "cbr", "EUR/RUB": "cbr"}
-	result := make(map[string]float64)
+	result := make(map[string]exchangerates.CurrencyRate)
 	for _, rate := range data.Rates {
-		if source, ok := sources[rate.Code]; !ok || rate.Source != source {
+		if source, ok := quoteSources[rate.Code]; !ok || rate.Source != source {
 			continue
 		}
 		if rate.Rate <= 0 || math.IsNaN(rate.Rate) || math.IsInf(rate.Rate, 0) {
@@ -49,10 +53,15 @@ func (c *ratesClient) latest(ctx context.Context) (map[string]float64, error) {
 		if _, err := time.Parse(time.DateOnly, rate.RateDate); err != nil {
 			return nil, fmt.Errorf("invalid quote date for %s/%s", rate.Code, rate.Source)
 		}
+		if rate.QuotedAt != "" {
+			if _, err := time.Parse(time.RFC3339, rate.QuotedAt); err != nil {
+				return nil, fmt.Errorf("invalid quote timestamp for %s/%s", rate.Code, rate.Source)
+			}
+		}
 		if _, exists := result[rate.Code]; exists {
 			return nil, fmt.Errorf("duplicate quote for %s/%s", rate.Code, rate.Source)
 		}
-		result[rate.Code] = rate.Rate
+		result[rate.Code] = rate
 	}
 	return result, nil
 }

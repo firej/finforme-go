@@ -15,7 +15,10 @@ const testRatesJSON = `{"rates":[
 	{"code":"USD/RUB","source":"other","rate":999,"rate_date":"2026-11-11"},
 	{"code":"USD/RUB","source":"cbr","rate":82.5486,"rate_date":"2026-11-11"},
 	{"code":"EUR/RUB","source":"cbr","rate":92.3966,"rate_date":"2026-11-11"},
-	{"code":"BTC/USD","source":"coinbase","rate":73848.71,"rate_date":"2026-11-10"}
+	{"code":"BTC/USD","source":"coinbase","rate":73848.71,"rate_date":"2026-11-10"},
+	{"code":"NVDA/USD","source":"yahoo","rate":153.21,"rate_date":"2025-02-14","quoted_at":"2025-02-14T21:00:00Z"},
+	{"code":"NBIS/USD","source":"yahoo","rate":86.94,"rate_date":"2025-02-14","quoted_at":"2025-02-14T20:30:00Z"},
+	{"code":"YDEX/RUB","source":"moex","rate":3282,"rate_date":"2025-02-13"}
 ]}`
 
 func TestRatesClientHTTPSAndSources(t *testing.T) {
@@ -53,6 +56,7 @@ func TestRatesClientRejectsUnavailableOrInvalidData(t *testing.T) {
 		{"null rates", 200, `{"rates":null}`},
 		{"negative rate", 200, `{"rates":[{"code":"USD/RUB","source":"cbr","rate":-1,"rate_date":"2026-11-11"}]}`},
 		{"invalid date", 200, `{"rates":[{"code":"USD/RUB","source":"cbr","rate":82,"rate_date":"11.11.2026"}]}`},
+		{"invalid stock timestamp", 200, `{"rates":[{"code":"NVDA/USD","source":"yahoo","rate":153,"rate_date":"2025-02-14","quoted_at":"yesterday"}]}`},
 		{"duplicate source", 200, `{"rates":[{"code":"USD/RUB","source":"cbr","rate":82,"rate_date":"2026-11-11"},{"code":"USD/RUB","source":"cbr","rate":81,"rate_date":"2026-11-10"}]}`},
 		{"oversized response", 200, strings.Repeat(" ", (1<<20)+1)},
 	} {
@@ -70,6 +74,30 @@ func TestRatesClientRejectsUnavailableOrInvalidData(t *testing.T) {
 				t.Fatal("invalid upstream response accepted")
 			}
 		})
+	}
+}
+
+func TestStockRatesSourcesAndTimestamps(t *testing.T) {
+	const body = `{"rates":[
+		{"code":"NVDA/USD","source":"other","rate":999,"rate_date":"2025-02-14"},
+		{"code":"NVDA/USD","source":"yahoo","rate":153.21,"rate_date":"2025-02-14","quoted_at":"2025-02-14T21:00:00Z"},
+		{"code":"NBIS/USD","source":"yahoo","rate":86.94,"rate_date":"2025-02-14","quoted_at":"2025-02-14T20:30:00Z"},
+		{"code":"YDEX/RUB","source":"moex","rate":3282,"rate_date":"2025-02-13"}
+	]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(body)) }))
+	defer server.Close()
+	client, _ := newRatesClient(server.URL)
+	rates, err := client.latest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "NVDA 153.21 $ · 15.02.2025 00:00 МСК · Yahoo Finance\nNBIS 86.94 $ · 14.02.2025 23:30 МСК · Yahoo Finance\nYDEX 3282.00 ₽ · 13.02.2025 · MOEX · задержка 15 мин"
+	var lines []string
+	for _, stock := range stockRates {
+		lines = append(lines, formatStockRate(rates, stock))
+	}
+	if got := strings.Join(lines, "\n"); got != want {
+		t.Fatalf("got=%q want=%q", got, want)
 	}
 }
 
@@ -91,9 +119,17 @@ func TestRatesClientEmptyAndCancelled(t *testing.T) {
 }
 
 func TestRateCommandsUseAPIAndReportOutage(t *testing.T) {
-	for _, command := range []string{"rate", "rates"} {
+	for _, tc := range []struct{ command, args, want string }{
+		{"rate", "", "Котировки: ₿ $73849  💵 82.55₽  💶 92.40₽"},
+		{"rates", "", "Котировки: ₿ $73849  💵 82.55₽  💶 92.40₽"},
+		{"rate", "NVDA", "NVDA 153.21 $ · 15.02.2025 00:00 МСК · Yahoo Finance"},
+		{"rate@test_bot", " nvda ", "NVDA 153.21 $ · 15.02.2025 00:00 МСК · Yahoo Finance"},
+		{"rate", "NBIS/USD", "NBIS 86.94 $ · 14.02.2025 23:30 МСК · Yahoo Finance"},
+		{"rate", "YDEX", "YDEX 3282.00 ₽ · 13.02.2025 · MOEX · задержка 15 мин"},
+	} {
+		command := tc.command
 		for _, available := range []bool{true, false} {
-			t.Run(command+map[bool]string{true: "/ok", false: "/outage"}[available], func(t *testing.T) {
+			t.Run(command+tc.args+map[bool]string{true: "/ok", false: "/outage"}[available], func(t *testing.T) {
 				ratesServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if !available {
 						http.Error(w, "unavailable", 503)
@@ -123,12 +159,12 @@ func TestRateCommandsUseAPIAndReportOutage(t *testing.T) {
 					t.Fatal(err)
 				}
 				handleUpdate(bot, client, tgbotapi.Update{Message: &tgbotapi.Message{
-					Chat: &tgbotapi.Chat{ID: 1, Type: "private"}, Text: "/" + command,
+					Chat: &tgbotapi.Chat{ID: 1, Type: "private"}, Text: "/" + command + " " + tc.args,
 					Entities: []tgbotapi.MessageEntity{{Type: "bot_command", Offset: 0, Length: len(command) + 1}},
 				}})
 				want := "Не удалось получить курсы валют"
 				if available {
-					want = "Котировки: ₿ $73849  💵 82.55₽  💶 92.40₽"
+					want = tc.want
 				}
 				select {
 				case got := <-replies:
@@ -139,6 +175,21 @@ func TestRateCommandsUseAPIAndReportOutage(t *testing.T) {
 					t.Fatal("command did not produce a reply")
 				}
 			})
+		}
+	}
+}
+
+func TestStockRateMissingAndInvalidTicker(t *testing.T) {
+	stock, ok := findStockRate("NVDA")
+	if !ok {
+		t.Fatal("NVDA not recognized")
+	}
+	if got := formatStockRate(nil, stock); got != "Нет данных о котировке NVDA" {
+		t.Fatalf("missing quote: %s", got)
+	}
+	for _, args := range []string{"AAPL", "NVDA NBIS", "NVDA/RUB"} {
+		if _, ok := findStockRate(args); ok {
+			t.Errorf("accepted unsupported request %q", args)
 		}
 	}
 }

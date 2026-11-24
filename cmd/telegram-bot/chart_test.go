@@ -23,6 +23,7 @@ func TestParseChartRequest(t *testing.T) {
 		{"", "USD/RUB", 14}, {"14", "USD/RUB", 14}, {"eur", "EUR/RUB", 14},
 		{"btc/usd 2w", "BTC/USD", 14}, {"USD 2н", "USD/RUB", 14},
 		{"  RUB/ARS  30д ", "RUB/ARS", 30}, {"USD/ARS 365", "USD/ARS", 365},
+		{"nvda 30", "NVDA/USD", 30}, {"NBIS 2w", "NBIS/USD", 14}, {"YDEX", "YDEX/RUB", 14},
 		{"BTC 2", "BTC/USD", 2}, {"EUR 52w", "EUR/RUB", 364},
 	} {
 		t.Run(tc.args, func(t *testing.T) {
@@ -102,6 +103,9 @@ func TestChartCommandsUploadPhotoOrExplainError(t *testing.T) {
 		points, status                              int
 	}{
 		{"default", "chart", "", "USD/RUB", "cbr", "", 2, 200},
+		{"NVDA", "chart", "NVDA 30", "NVDA/USD", "yahoo", "", 2, 200},
+		{"NBIS", "chart", "NBIS", "NBIS/USD", "yahoo", "", 2, 200},
+		{"YDEX", "chart", "YDEX", "YDEX/RUB", "moex", "", 2, 200},
 		{"group and pair", "chart@test_bot", "BTC 2w", "BTC/USD", "coinbase", "", 2, 200},
 		{"invalid period", "chart", "USD 999", "", "", "период должен быть", 0, 200},
 		{"empty", "chart", "", "USD/RUB", "cbr", "недостаточно данных", 0, 200},

@@ -18,7 +18,7 @@ trap 'rm -rf -- "$release"' EXIT
 mkdir "$release/release-bin"
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-w -s' \
   -o "$release/release-bin/" ./cmd/server ./cmd/import-rates ./cmd/import-rates-history \
-  ./cmd/import-blue-rates ./cmd/telegram-bot
+  ./cmd/import-blue-rates ./cmd/import-stock-rates ./cmd/telegram-bot
 mv "$release/release-bin/server" "$release/release-bin/finforme"
 cp Dockerfile.release docker-compose.prod.yml "$release/"
 cp -R static templates "$release/"

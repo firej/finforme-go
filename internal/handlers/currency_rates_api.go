@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -31,7 +32,7 @@ func (h *Handler) CurrencyRatesAPI(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) latestCurrencyRates(ctx context.Context) (exchangerates.LatestRates, error) {
 	out := exchangerates.LatestRates{Rates: []exchangerates.CurrencyRate{}}
 	rows, err := h.db.QueryContext(ctx, `
-		SELECT cr.code, cr.name, cr.rate, cr.source, CAST(cr.rate_date AS CHAR)
+		SELECT cr.code, cr.name, cr.rate, cr.source, CAST(cr.rate_date AS CHAR), cr.quoted_at
 		FROM currency_rates cr
 		JOIN (
 			SELECT code, source, MAX(rate_date) AS rate_date
@@ -46,8 +47,12 @@ func (h *Handler) latestCurrencyRates(ctx context.Context) (exchangerates.Latest
 	defer rows.Close()
 	for rows.Next() {
 		var rate exchangerates.CurrencyRate
-		if err := rows.Scan(&rate.Code, &rate.Name, &rate.Rate, &rate.Source, &rate.RateDate); err != nil {
+		var quotedAt sql.NullInt64
+		if err := rows.Scan(&rate.Code, &rate.Name, &rate.Rate, &rate.Source, &rate.RateDate, &quotedAt); err != nil {
 			return out, err
+		}
+		if quotedAt.Valid {
+			rate.QuotedAt = time.Unix(quotedAt.Int64, 0).UTC().Format(time.RFC3339)
 		}
 		out.Rates = append(out.Rates, rate)
 	}

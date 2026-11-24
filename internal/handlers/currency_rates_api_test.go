@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/evbogdanov/finforme/internal/exchangerates"
 )
@@ -20,7 +21,7 @@ func ratesAPIHandler(t *testing.T) *Handler {
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { db.Close() })
 	_, err = db.Exec(`CREATE TABLE currency_rates (
-		code TEXT, name TEXT, rate REAL, source TEXT, rate_date TEXT,
+		code TEXT, name TEXT, rate REAL, source TEXT, rate_date TEXT, quoted_at INTEGER,
 		PRIMARY KEY (code, source, rate_date))`)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +31,7 @@ func ratesAPIHandler(t *testing.T) *Handler {
 
 func TestCurrencyRatesAPIPublicLatestPerSource(t *testing.T) {
 	h := ratesAPIHandler(t)
-	_, err := h.db.Exec(`INSERT INTO currency_rates VALUES
+	_, err := h.db.Exec(`INSERT INTO currency_rates (code, name, rate, source, rate_date) VALUES
 		('USD/RUB', 'Dollar', 80, 'cbr', '2026-11-10'),
 		('USD/RUB', 'Dollar', 82, 'cbr', '2026-11-11'),
 		('USD/RUB', 'Dollar', 90, 'other', '2026-11-09'),
@@ -72,5 +73,36 @@ func TestCurrencyRatesAPIEmptyAndUnavailable(t *testing.T) {
 	h.CurrencyRatesAPI(w, httptest.NewRequest(http.MethodGet, "/api/currency/rates", nil))
 	if w.Code != http.StatusServiceUnavailable || strings.TrimSpace(w.Body.String()) != "currency rates unavailable" {
 		t.Fatalf("database error exposed or hidden: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCurrencyRatesAPIStockTimestamps(t *testing.T) {
+	h := ratesAPIHandler(t)
+	const timestamp = int64(1739572200)
+	_, err := h.db.Exec(`INSERT INTO currency_rates (code,name,rate,source,rate_date,quoted_at) VALUES
+		('NVDA/USD','NVIDIA',150,'yahoo','2025-02-13',?),
+		('NVDA/USD','NVIDIA',153.21,'yahoo','2025-02-14',?),
+		('NBIS/USD','Nebius Group',86.94,'yahoo','2025-02-14',?),
+		('YDEX/RUB','Яндекс',3282,'moex','2025-02-13',NULL)`, timestamp-86400, timestamp, timestamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	h.CurrencyRatesAPI(w, httptest.NewRequest(http.MethodGet, "/api/currency/rates", nil))
+	var data exchangerates.LatestRates
+	if err := json.Unmarshal(w.Body.Bytes(), &data); err != nil || w.Code != 200 {
+		t.Fatalf("API: %d %s (%v)", w.Code, w.Body.String(), err)
+	}
+	if len(data.Rates) != 3 {
+		t.Fatalf("unexpected rows: %+v", data)
+	}
+	for _, r := range data.Rates {
+		if r.Code == "YDEX/RUB" {
+			if r.QuotedAt != "" || r.RateDate != "2025-02-13" {
+				t.Fatalf("invented close time/date: %+v", r)
+			}
+		} else if r.QuotedAt != time.Unix(timestamp, 0).UTC().Format(time.RFC3339) || r.RateDate != "2025-02-14" {
+			t.Fatalf("lost source date/time: %+v", r)
+		}
 	}
 }

@@ -133,6 +133,7 @@ func InitDB(db *sql.DB) error {
 			rate DECIMAL(18,6) NOT NULL COMMENT 'Курс к рублю',
 			source VARCHAR(50) NOT NULL COMMENT 'Источник: cbr, binance, bybit и т.д.',
 			rate_date DATE NOT NULL COMMENT 'Дата курса',
+			quoted_at BIGINT NULL COMMENT 'Unix time of source quote, if available',
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 			PRIMARY KEY (code, source, rate_date)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
@@ -148,6 +149,10 @@ func InitDB(db *sql.DB) error {
 	}
 
 	// Миграции: добавляем новые колонки если их нет (для существующих БД)
+	if _, err := db.Exec(`ALTER TABLE currency_rates ADD COLUMN IF NOT EXISTS quoted_at BIGINT NULL`); err != nil {
+		return fmt.Errorf("failed to migrate quote timestamps: %w", err)
+	}
+
 	migrations := []string{
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin TINYINT DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version BIGINT NOT NULL DEFAULT 1`,

@@ -7,6 +7,7 @@ type CurrencyRate struct {
 	Rate     float64 `json:"rate"`
 	Source   string  `json:"source"`
 	RateDate string  `json:"rate_date"`
+	QuotedAt string  `json:"quoted_at,omitempty"` // Source timestamp, RFC3339; absent for date-only quotes.
 }
 
 // LatestRates is the public GET /api/currency/rates response.
