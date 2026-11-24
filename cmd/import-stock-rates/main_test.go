@@ -64,4 +64,21 @@ func TestSaveQuoteMariaDB(t *testing.T) {
 	if err := db.QueryRow(`SELECT quoted_at FROM currency_rates WHERE code='YDEX/RUB'`).Scan(&timestamp); err != nil || timestamp.Valid {
 		t.Fatalf("previous close timestamp: %+v %v", timestamp, err)
 	}
+	history := []stockquotes.Quote{
+		{Instrument: stockquotes.Instruments[0], Date: "2025-02-13", Price: 145},
+		{Instrument: stockquotes.Instruments[0], Date: "2025-02-14", Price: 999},
+	}
+	for _, want := range []int64{1, 0} {
+		inserted, err := saveHistory(context.Background(), db, history)
+		if err != nil || inserted != want {
+			t.Fatalf("history inserted=%d want=%d err=%v", inserted, want, err)
+		}
+	}
+	var price float64
+	if err := db.QueryRow(`SELECT rate,quoted_at FROM currency_rates WHERE code='NVDA/USD' AND rate_date='2025-02-14'`).Scan(&price, &timestamp); err != nil || price != 151 || !timestamp.Valid {
+		t.Fatalf("history replaced live quote: %v %+v %v", price, timestamp, err)
+	}
+	if err := db.QueryRow(`SELECT rate,quoted_at FROM currency_rates WHERE code='NVDA/USD' AND rate_date='2025-02-13'`).Scan(&price, &timestamp); err != nil || price != 145 || timestamp.Valid {
+		t.Fatalf("invalid historical close: %v %+v %v", price, timestamp, err)
+	}
 }

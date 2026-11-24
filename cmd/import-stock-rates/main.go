@@ -20,7 +20,14 @@ import (
 
 func main() {
 	preview := flag.Bool("preview", false, "Получить котировки и вывести JSON без подключения к базе")
+	historyDays := flag.Int("history-days", 0, "Загрузить дневную историю за N прошедших дней (1–365), только отсутствующие даты")
 	flag.Parse()
+	if *historyDays != 0 {
+		if err := runHistory(*historyDays, *preview); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if err := run(*preview); err != nil {
 		log.Fatal(err)
 	}
