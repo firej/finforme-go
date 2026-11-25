@@ -121,12 +121,12 @@ func TestDashboardCapitalHoldings(t *testing.T) {
 		t.Fatal(err)
 	}
 	holdings, err := h.capitalHoldings(context.Background(), 2, validFinanceInput().PostDate)
-	want := []capitalHolding{{"RUB", 40000, 0}, {"USD", 25000, 5000}}
+	want := []capitalHolding{{"RUB", "40000", "0"}, {"USD", "25000", "5000"}}
 	if err != nil || !reflect.DeepEqual(holdings, want) {
 		t.Fatalf("hidden/container/debt/future: %+v %v", holdings, err)
 	}
 	foreign, err := h.capitalHoldings(context.Background(), 1, validFinanceInput().PostDate)
-	if err != nil || len(foreign) != 1 || foreign[0].Assets != 0 || foreign[0].Debt != 0 {
+	if err != nil || len(foreign) != 1 || foreign[0].Assets != "0" || foreign[0].Debt != "0" {
 		t.Fatalf("leaked holdings: %+v %v", foreign, err)
 	}
 }
@@ -138,7 +138,7 @@ func TestDashboardCapitalConversion(t *testing.T) {
 		{Base: "USD", Quote: "ARS", Code: "USD/ARS", Source: "bluedollar_sell", Rate: "1400", Date: "2026-09-04"},
 		{Base: "EUR", Quote: "USD", Code: "EUR/USD", Source: "test", Rate: "1.2", Date: "2026-09-04"},
 	}
-	holdings := []capitalHolding{{"RUB", 10000, 0}, {"USD", 10000, 2000}, {"ARS", 140000, 0}, {"EUR", 0, 1000}}
+	holdings := []capitalHolding{{"RUB", "10000", "0"}, {"USD", "10000", "2000"}, {"ARS", "140000", "0"}, {"EUR", "0", "1000"}}
 	day := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
 	report := buildDashboardCapital(holdings, quotes, "RUB", day, nil)
 	if report.Assets != "9\u00a0190,00" || report.Debt != "2\u00a0880,00" || report.Net != "6\u00a0310,00" || len(report.Missing) != 0 {
@@ -159,12 +159,12 @@ func TestDashboardCapitalConversion(t *testing.T) {
 	if len(fallback.Warnings) != 1 || fallback.Net != report.Net {
 		t.Fatalf("silent source fallback: %+v", fallback)
 	}
-	rounded := buildDashboardCapital([]capitalHolding{{"USD", 2, 1}}, []capitalQuote{{Base: "USD", Quote: "RUB", Code: "USD/RUB", Source: "test", Rate: "0.6"}}, "RUB", day, nil)
+	rounded := buildDashboardCapital([]capitalHolding{{"USD", "2", "1"}}, []capitalQuote{{Base: "USD", Quote: "RUB", Code: "USD/RUB", Source: "test", Rate: "0.6"}}, "RUB", day, nil)
 	if rounded.Assets != "0,01" || rounded.Debt != "0,01" || rounded.Net != "0,00" || rounded.Rows[0].Converted != "0,00" {
 		t.Fatalf("displayed totals do not add up: %+v", rounded)
 	}
 	// Equal assets and debts in an unconvertible currency still mean incomplete coverage.
-	holdings = append(holdings, capitalHolding{"GBP", 300, 300}, capitalHolding{"CHF", 0, 0})
+	holdings = append(holdings, capitalHolding{"GBP", "300", "300"}, capitalHolding{"CHF", "0", "0"})
 	partial := buildDashboardCapital(holdings, quotes, "RUB", day, nil)
 	if !reflect.DeepEqual(partial.Missing, []string{"GBP"}) || partial.Net != report.Net {
 		t.Fatalf("partial: %+v", partial)

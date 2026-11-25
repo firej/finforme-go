@@ -62,9 +62,9 @@
   {{range $i,$c := .Currencies}}
   <div data-report-panel="{{.Currency}}">
     <dl class="report-metrics">
-      <div><dt>Доходы · {{.Currency}}</dt><dd class="text-green">{{formatMoney .Income}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousIncome}}">{{.IncomeChange}}</div></div>
-      <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatMoney .Expense}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousExpense}}">{{.ExpenseChange}}</div></div>
-      <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatMoney .Net}}</dd><div class="report-comparison" title="Было {{formatMoney .PreviousNet}}">{{.NetChange}}</div></div>
+      <div><dt>Доходы · {{.Currency}}</dt><dd class="text-green">{{formatAmount .Income}}</dd><div class="report-comparison" title="Было {{formatAmount .PreviousIncome}}">{{.IncomeChange}}</div></div>
+      <div><dt>Расходы · {{.Currency}}</dt><dd>{{formatAmount .Expense}}</dd><div class="report-comparison" title="Было {{formatAmount .PreviousExpense}}">{{.ExpenseChange}}</div></div>
+      <div><dt>Разница · {{.Currency}}</dt><dd {{if lt .Net 0.0}}class="text-red"{{end}}>{{formatAmount .Net}}</dd><div class="report-comparison" title="Было {{formatAmount .PreviousNet}}">{{.NetChange}}</div></div>
     </dl>
     {{template "dashboard_expense_chart" .}}
     {{template "dashboard_spending_trend" (dict "Trend" .SpendingTrend "Currency" .Currency "Month" $.MonthReport)}}
@@ -89,9 +89,9 @@
 {{end}}
 
 {{define "dashboard_category"}}
-<a class="report-category" href="{{.URL}}" title="Было {{formatMoney .Previous}}">
+<a class="report-category" href="{{.URL}}" title="Было {{formatAmount .Previous}}">
   <span class="report-category-bar" style="transform: scaleX({{.Bar}})" aria-hidden="true"></span>
   <span class="report-category-label"><span class="report-category-name">{{.Name}}</span><span class="report-comparison">{{.Change}}</span></span>
-  <strong>{{formatMoney .Amount}}</strong>
+  <strong>{{formatAmount .Amount}}</strong>
 </a>
 {{end}}

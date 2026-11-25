@@ -39,7 +39,7 @@
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/>
       </svg>
-      <input class="search-input" type="text" id="tx-search" placeholder="Поиск..." oninput="filterTransactions(this.value)">
+      <input class="search-input" type="text" id="tx-search" placeholder="Описание, комментарий, тег…" value="{{.Search}}" oninput="filterTransactions(this.value)">
     </div>
     {{if .Account}}{{if eq .Account.Placeholder 0}}
     <button class="btn btn-primary" onclick="openTransactionDrawer(0, {{.Account.ID}})">
@@ -95,19 +95,19 @@
       <div class="stat-label">Текущий остаток</div>
       {{range .Account.DisplayBalances}}
       <div class="stat-value">
-        {{formatMoney .Amount}} <span class="stat-currency">{{.Currency}}</span>
+        {{formatAmount .Amount}} <span class="stat-currency">{{.Currency}}</span>
       </div>
       {{end}}
       <div class="stat-delta">за всё время</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">Приход</div>
-      <div class="stat-value text-green" id="stat-income">{{formatMoney .TotalIncome}}</div>
+      <div class="stat-value text-green" id="stat-income">{{formatAmount .TotalIncome}}</div>
       <div class="stat-delta" id="stat-income-count">{{.IncomeCount}} транз.</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">Расход</div>
-      <div class="stat-value text-red" id="stat-expense">{{formatMoney .TotalExpense}}</div>
+      <div class="stat-value text-red" id="stat-expense">{{formatAmount .TotalExpense}}</div>
       <div class="stat-delta" id="stat-expense-count">{{.ExpenseCount}} транз.</div>
     </div>
 
@@ -115,6 +115,19 @@
 </div>
 {{end}}
 
+{{if .Account}}{{if eq .Account.Placeholder 0}}
+<details class="card" style="padding:16px;margin-bottom:16px">
+ <summary>Сверка с выпиской{{with .Reconciliation}} · {{.Date}}{{if .Stale}} — операции изменились, проверьте заново{{else}} — остаток подтверждён{{end}}{{end}}</summary>
+ <p class="form-hint">Введите остаток на конец дня в валюте счёта. Задолженность указывайте со знаком минус. Отметки «Проверено» у операций помогают разбирать выписку; сверка сама их не меняет.</p>
+ <form id="reconcile-form" onsubmit="return checkReconciliation(event,false)">
+  <div class="form-row"><div class="form-group"><label class="form-label" for="reconcile-date">Дата</label><input class="form-input" id="reconcile-date" type="date" name="date" required></div>
+  <div class="form-group"><label class="form-label" for="reconcile-expected">Остаток по выписке, {{.Account.Currency}}</label><input class="form-input" id="reconcile-expected" type="number" step="any" name="expected" required></div></div>
+  <button type="submit" class="btn btn-ghost">Сравнить</button>
+  <button type="button" class="btn btn-primary" onclick="checkReconciliation(event,true)">Сохранить сверку</button>
+  <p id="reconcile-result" role="status"></p>
+ </form>
+</details>
+{{end}}{{end}}
 <!-- Transactions table -->
 <div class="card" style="overflow:hidden;">
   <div class="transactions-heading"><h2>Операции</h2><span class="text-muted"><span id="stat-total">{{.TotalCount}}</span> за выбранный период</span></div>
@@ -151,6 +164,11 @@
   </div>
 </div>
 
+<nav aria-label="Страницы операций" style="display:flex;align-items:center;gap:12px;margin:16px 0">
+ <button class="btn btn-ghost" id="page-previous" onclick="loadTransactionPage(Math.max(0,pageOffset-50))" {{if not .PageOffset}}disabled{{end}}>← Назад</button>
+ <span id="page-caption" role="status">{{.TotalCount}} операций</span>
+ <button class="btn btn-ghost" id="page-next" onclick="loadTransactionPage(pageOffset+50)" {{if not .PageHasMore}}disabled{{end}}>Далее →</button>
+</nav>
 <!-- ═══ TRANSACTION DRAWER ═══ -->
 <div id="tx-drawer-overlay" class="drawer-overlay hidden" onclick="closeTransactionDrawer()"></div>
 <div id="tx-drawer" class="drawer hidden" style="transform:translateX(100%)">
@@ -171,29 +189,20 @@
 <script>
 var currentAccountId = {{if .Account}}{{.Account.ID}}{{else}}0{{end}};
 var currentSortOrder = '{{.SortOrder}}';
-var currentPeriod    = 'all';
-var currentMonth = TransactionPeriod.monthKey(new Date());
-var linkedMonth = new URLSearchParams(window.location.search).get('month');
-if (linkedMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(linkedMonth)) {
-  currentMonth = linkedMonth;
-  currentPeriod = 'month';
-  document.querySelectorAll('a.sort-tab').forEach(function(link) {
-    var url = new URL(link.href); url.searchParams.set('month', linkedMonth); link.href = url.toString();
-  });
-  updatePeriod();
-}
+var initialQuery = new URLSearchParams(window.location.search);
+var currentPeriod = initialQuery.get('period') || (initialQuery.has('month') ? 'month' : 'all');
+if (!['all','month','quarter','year','custom'].includes(currentPeriod)) currentPeriod = 'all';
+var currentMonth = initialQuery.get('month') || TransactionPeriod.monthKey(new Date());
+var pageOffset = {{if .PageOffset}}{{.PageOffset}}{{else}}0{{end}};
+var pageGeneration = 0, pageController, searchTimer;
 
 function revealLinkedTransaction() {
   if (!/^#transaction-\d+$/.test(window.location.hash)) return;
-  var row = document.getElementById(window.location.hash.slice(1));
-  if (!row) return;
-  currentPeriod = 'all';
-  document.getElementById('tx-search').value = '';
-  updatePeriod();
-  requestAnimationFrame(function() { row.scrollIntoView({block: 'center'}); });
+  currentPeriod = 'all'; document.getElementById('tx-search').value = '';
+  loadTransactionPage(0,window.location.hash.slice('#transaction-'.length));
 }
 window.addEventListener('hashchange', revealLinkedTransaction);
-revealLinkedTransaction();
+
 
 function setPeriod(p) {
   currentPeriod = p;
@@ -210,7 +219,7 @@ function shiftPeriod(direction) {
   document.getElementById('month-picker').style.display = 'none';
   updatePeriod();
 }
-function updatePeriod() {
+function updatePeriod(reload) {
   document.querySelectorAll('#period-tabs .sort-tab').forEach(function(button) {
     button.classList.toggle('active', button.dataset.period === currentPeriod);
     button.setAttribute('aria-pressed', String(button.dataset.period === currentPeriod));
@@ -219,41 +228,58 @@ function updatePeriod() {
   document.getElementById('period-navigation').hidden = currentPeriod === 'all';
   document.getElementById('period-caption').textContent = range.label;
   document.getElementById('period-hint').textContent = range.hint;
-  filterByPeriod();
+  if(reload!==false)filterByPeriod();
 }
-function filterByPeriod() {
-  var range = TransactionPeriod.bounds(currentPeriod, currentMonth);
-  var query = document.getElementById('tx-search').value.toLocaleLowerCase('ru');
-  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
-    var show = (!query || row.dataset.desc.toLocaleLowerCase('ru').includes(query)) &&
-      (!range.from || (row.dataset.date >= range.from && row.dataset.date < range.to));
-    row.hidden = !show;
-  });
-  recalcStats();
+function filterByPeriod() { loadTransactionPage(0); }
+function filterTransactions() { clearTimeout(searchTimer); searchTimer=setTimeout(function(){loadTransactionPage(0);},250); }
+async function loadTransactionPage(offset,focus) {
+  clearTimeout(searchTimer);
+  if(pageController)pageController.abort();
+  pageController=new AbortController(); var generation=++pageGeneration;
+  var range=TransactionPeriod.bounds(currentPeriod,currentMonth);
+  var params=new URLSearchParams({account_id:currentAccountId,sort:currentSortOrder,offset:offset,search:document.getElementById('tx-search').value});
+  if(range.from)params.set('from',range.from);if(range.to)params.set('to',range.to);if(focus)params.set('focus',focus);
+  document.getElementById('page-caption').textContent='Загрузка…';
+  try {
+    var response=await fetch('/api/v1/finance/transaction/page?'+params,{signal:pageController.signal});
+    var data=await response.json();if(!response.ok)throw new Error(data.error||'Не удалось загрузить операции');
+    if(generation!==pageGeneration)return;
+    var body=document.getElementById('transactions-tbody');body.innerHTML=data.html;htmx.process(body);
+    pageOffset=data.offset;
+    document.getElementById('stat-income').textContent=data.income;
+    document.getElementById('stat-expense').textContent=data.expense;
+    document.getElementById('stat-income-count').textContent=data.income_count+' транз.';
+    document.getElementById('stat-expense-count').textContent=data.expense_count+' транз.';
+    document.getElementById('stat-total').textContent=data.total;
+    document.getElementById('page-previous').disabled=pageOffset===0;
+    document.getElementById('page-next').disabled=!data.has_more;
+    document.getElementById('page-caption').textContent=data.total ? (pageOffset+1)+'–'+Math.min(pageOffset+50,data.total)+' из '+data.total : 'Нет операций';
+    var query=new URLSearchParams(params);query.delete('account_id');query.delete('focus');query.set('offset',pageOffset);query.set('period',currentPeriod);if(currentPeriod!=='all')query.set('month',currentMonth);
+    history.replaceState(null,'','?'+query+(focus?'#transaction-'+focus:''));
+    document.querySelectorAll('a.sort-tab').forEach(function(link){var url=new URL(link.href);var order=url.searchParams.get('sort');url.search=query.toString();url.searchParams.set('sort',order);url.searchParams.delete('offset');link.href=url.toString();});
+    if(focus){var row=document.getElementById('transaction-'+focus);if(row)row.scrollIntoView({block:'center'});}
+  } catch(error){if(error.name!=='AbortError'&&generation===pageGeneration){document.getElementById('page-caption').textContent='Не удалось загрузить выбранный период';showToast(error.message,'error');}}
 }
-
-// ── Пересчёт статистики по видимым строкам ────────────────────────────────
-function recalcStats() {
-  var income = 0, expense = 0, incomeCount = 0, expenseCount = 0, total = 0;
-  document.querySelectorAll('#transactions-tbody .tx-row').forEach(function(row) {
-    if (row.hidden) return;
-    total++;
-    var inc = parseFloat(row.dataset.income) || 0;
-    var exp = parseFloat(row.dataset.expense) || 0;
-    if (inc > 0) { income += inc; incomeCount++; }
-    if (exp > 0) { expense += exp; expenseCount++; }
-  });
-  var fmt = function(v) { return new Intl.NumberFormat('ru-RU', {minimumFractionDigits:2, maximumFractionDigits:2}).format(v); };
-  var el = function(id) { return document.getElementById(id); };
-  if (el('stat-income'))       el('stat-income').textContent       = fmt(income);
-  if (el('stat-expense'))      el('stat-expense').textContent      = fmt(expense);
-  if (el('stat-income-count')) el('stat-income-count').textContent = incomeCount + ' транз.';
-  if (el('stat-expense-count'))el('stat-expense-count').textContent= expenseCount + ' транз.';
-  if (el('stat-total'))        el('stat-total').textContent        = total;
+async function setTransactionChecked(id,input) {
+  input.disabled=true;
+  try{var response=await fetch('/api/v1/finance/transaction/check',{method:'POST',body:new URLSearchParams({id:id,checked:input.checked})});if(!response.ok){var data=await response.json();throw new Error(data.error);}}
+  catch(error){input.checked=!input.checked;showToast(error.message||'Не удалось сохранить отметку','error');}
+  finally{input.disabled=false;}
 }
-
-// ── Search ────────────────────────────────────────────────────────────────
-function filterTransactions() { filterByPeriod(); }
+async function checkReconciliation(event,save){
+ event.preventDefault();var form=document.getElementById('reconcile-form');if(!form.reportValidity())return false;
+ var buttons=form.querySelectorAll('button');buttons.forEach(function(b){b.disabled=true;});
+ try{var body=new URLSearchParams(new FormData(form));body.set('account_id',currentAccountId);body.set('save',String(save));var response=await fetch('/api/v1/finance/account/reconcile',{method:'POST',body:body});var data=await response.json();if(!response.ok)throw new Error(data.error);
+ var format=function(value){return new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:8}).format(Number(value));};
+ document.getElementById('reconcile-result').textContent=(save?'Сверка сохранена. ':'')+'По учёту: '+format(data.actual)+' '+data.currency+'. Расхождение: '+format(data.difference)+(data.matches?' — остатки совпадают.':'. Проверьте операции.');
+ if(save)window.location.reload();
+ }catch(error){document.getElementById('reconcile-result').textContent=error.message||'Не удалось выполнить сверку';}
+ finally{buttons.forEach(function(b){b.disabled=false;});}return false;
+}
+var reconcileDate=document.getElementById('reconcile-date');if(reconcileDate){var today=new Date();reconcileDate.value=TransactionPeriod.monthKey(today)+'-'+String(today.getDate()).padStart(2,'0');}
+// The first page is server rendered. Fetch only when locating an anchored operation.
+if(window.location.hash)revealLinkedTransaction();
+else if(currentPeriod!=='all')updatePeriod(false);
 
 // ── Drawer ────────────────────────────────────────────────────────────────
 function openTransactionDrawer(txId, accountId) {

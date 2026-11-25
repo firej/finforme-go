@@ -119,7 +119,7 @@ func TestFinanceCommentBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if backup.Version != 3 || backup.Transactions[0].Comment != note {
+	if backup.Version != backupFormatVersion || backup.Transactions[0].Comment != note {
 		t.Fatalf("export: %+v", backup)
 	}
 	raw, err := json.Marshal(backup)

@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/evbogdanov/finforme/internal/amount"
 	"github.com/evbogdanov/finforme/internal/gnucash"
 )
 
@@ -55,7 +56,7 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 			if s.ValueDenom <= 0 {
 				return fmt.Errorf("проводка %s: неверный знаменатель value", s.GUID)
 			}
-			if _, err := gnucash.Cents(s.QuantityNum, s.QuantityDenom); err != nil {
+			if _, _, err := amount.Normalize(s.QuantityNum, s.QuantityDenom); err != nil {
 				return fmt.Errorf("проводка %s: %w", s.GUID, err)
 			}
 			total.Add(total, new(big.Rat).SetFrac(big.NewInt(s.ValueNum), big.NewInt(s.ValueDenom)))
@@ -233,13 +234,16 @@ func (h *Handler) importFromGnuCashXML(userID int64, data *gnucash.ParsedData) e
 					return fmt.Errorf("проводка %s: value и quantity различаются при одинаковой валюте", s.GUID)
 				}
 			}
-			cents, err := gnucash.Cents(s.QuantityNum, s.QuantityDenom)
+			units, denom, err := amount.Normalize(s.QuantityNum, s.QuantityDenom)
 			if err != nil {
 				return err
 			}
-			if _, err = tx.Exec(`INSERT INTO splits(user_id,tx_id,account_id,value_num,value_denom) VALUES(?,?,?,?,100)`, userID, id, accountIDs[s.AccountGUID], cents); err != nil {
+			if _, err = tx.Exec(`INSERT INTO splits(user_id,tx_id,account_id,value_num,value_denom) VALUES(?,?,?,?,?)`, userID, id, accountIDs[s.AccountGUID], units, denom); err != nil {
 				return err
 			}
+		}
+		if err := recordTransactionHistory(tx, userID, id, "create", "import", nil); err != nil {
+			return err
 		}
 	}
 	statement, err := tx.Prepare(`INSERT INTO gnucash_import_ids(user_id,entity_kind,source_id) VALUES(?,?,?)`)

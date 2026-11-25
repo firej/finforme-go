@@ -480,12 +480,12 @@
   }
   function pad2(s) { s = String(s); return s.length < 2 ? '0' + s : s; }
 
-  function parseAmount(s, decimalSep) {
+  function parseAmount(s, decimalSep, exact) {
     if (s === undefined || s === null) return NaN;
     s = String(s).trim();
     if (!s) return NaN;
     // Удалим валютные символы и пробелы (включая неразрывные)
-    s = s.replace(/[\s ]/g, '').replace(/[^\d\-+,.]/g, '');
+    s = s.replace(/−/g, '-').replace(/[\s ]/g, '').replace(/[^\d\-+,.]/g, '');
     if (!s) return NaN;
     var hasDot = s.indexOf('.') >= 0;
     var hasComma = s.indexOf(',') >= 0;
@@ -510,7 +510,8 @@
       s = s.replace(/\./g, '').replace(',', '.');
     }
     var v = parseFloat(s);
-    return isNaN(v) ? NaN : Math.round(v * 100) / 100;
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(s) || !Number.isFinite(v)) return NaN;
+    return exact ? s : v;
   }
 
   // ── Шаг 2 → подготовка строк для превью ──────────────────────────────────
@@ -537,21 +538,22 @@
       var dateStr = parseDate(r[dateCol] || '', fmt);
       if (!dateStr) { skipped++; continue; }
 
-      var amount = NaN;
+      var amount = NaN, amountExact = "";
       if (amountCol >= 0) {
         amount = parseAmount(r[amountCol] || '', decSel);
+        amountExact = parseAmount(r[amountCol] || '', decSel, true);
       } else {
         var deb = debitCol >= 0 ? parseAmount(r[debitCol] || '', decSel) : NaN;
         var cre = creditCol >= 0 ? parseAmount(r[creditCol] || '', decSel) : NaN;
-        if (!isNaN(deb) && deb !== 0) amount = Math.abs(deb);
-        else if (!isNaN(cre) && cre !== 0) amount = -Math.abs(cre);
+        if (!isNaN(deb) && deb !== 0) {amount = Math.abs(deb); amountExact = parseAmount(r[debitCol],decSel,true).replace(/^[+-]/,'');}
+        else if (!isNaN(cre) && cre !== 0) {amount = -Math.abs(cre); amountExact = '-'+parseAmount(r[creditCol],decSel,true).replace(/^[+-]/,'');}
       }
       if (isNaN(amount)) { skipped++; continue; }
-      if (invert) amount = -amount;
+      if (invert) {amount = -amount; amountExact=amountExact[0]==='-'?amountExact.slice(1):'-'+amountExact.replace(/^\+/,'');}
 
       var desc = descCol >= 0 ? (r[descCol] || '').trim() : '';
 
-      out.push({ date: dateStr, amount: amount, description: desc, currency: currencyCol >= 0 ? (r[currencyCol] || '').trim() : '' });
+      out.push({ date: dateStr, amount: amount, amount_exact: amountExact, description: desc, currency: currencyCol >= 0 ? (r[currencyCol] || '').trim() : '' });
     }
     return { rows: out, skipped: skipped };
   }
@@ -638,7 +640,7 @@
       var tdAmt = document.createElement('td');
       var amtCls = 'csvi-amt ' + (it.amount < 0 ? 'neg' : 'pos');
       tdAmt.className = amtCls;
-      tdAmt.textContent = formatAmount(it.amount);
+      tdAmt.textContent = formatAmount(it.amount,it.amount_exact);
       tr.appendChild(tdAmt);
 
       // description
@@ -682,9 +684,10 @@
     });
   }
 
-  function formatAmount(n) {
+  function formatAmount(n,exact) {
+    if(exact) return exact.replace(/^-/,"−").replace(".",",");
     var sign = n < 0 ? '−' : '';
-    var v = Math.abs(n).toFixed(2);
+    var v = Math.abs(n).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:8});
     return sign + v;
   }
 
@@ -724,6 +727,7 @@
         return {
           date: it.date,
           amount: it.amount,
+          amount_exact: it.amount_exact,
           description: it.description,
           currency: it.currency,
           other_account_id: it.other_account_id

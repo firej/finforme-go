@@ -1,0 +1,30 @@
+{{define "finance_history.html"}}
+{{template "header" .}}
+<div class="topbar"><div class="topbar-title">История изменений</div><a class="btn btn-ghost" href="/finance/">Счета</a></div>
+<p class="form-hint">Здесь сохраняются изменения операций с момента включения истории. Удалённую операцию можно восстановить вместе со всеми проводками.</p>
+{{range .History}}
+<article class="card" style="padding:16px;margin-bottom:12px">
+ <p><strong>{{if eq .Action "create"}}Создание{{else if eq .Action "update"}}Изменение{{else if eq .Action "delete"}}Удаление{{else}}Восстановление{{end}}</strong> · {{.CreatedAt.Format "02.01.2006 15:04:05"}} UTC · {{if eq .Source "ui"}}Интерфейс{{else if eq .Source "mcp"}}ИИ-агент{{else if eq .Source "import"}}Импорт{{else}}API{{end}} · операция {{.TransactionID}}</p>
+ <div style="display:flex;gap:24px;flex-wrap:wrap">
+ {{with .Before}}<section><h3>Было</h3>{{template "history_snapshot" .}}</section>{{end}}
+ {{with .After}}<section><h3>Стало</h3>{{template "history_snapshot" .}}</section>{{end}}
+ </div>
+ {{if eq .Action "delete"}}{{if .RestoredID}}<p>{{if gt .RestoredID 0}}Восстановлена как операция {{.RestoredID}}{{else}}Эта запись уже восстанавливалась{{end}}</p>{{else}}<button class="btn btn-primary" data-restore="{{.ID}}">Восстановить операцию</button>{{end}}{{end}}
+</article>
+{{else}}<p>Изменений пока нет.</p>{{end}}
+{{if .NextHistoryID}}<a class="btn btn-ghost" href="?transaction_id={{.TransactionID}}&before={{.NextHistoryID}}">Более ранние изменения →</a>{{end}}
+<script>
+document.querySelectorAll('[data-restore]').forEach(function(button){button.addEventListener('click',async function(){
+ button.disabled=true;
+ try{var response=await fetch('/api/v1/finance/transaction/restore',{method:'POST',body:new URLSearchParams({history_id:button.dataset.restore})});var data=await response.json();if(!response.ok)throw new Error(data.error);window.location.reload();}
+ catch(error){showToast(error.message||'Не удалось восстановить операцию','error');button.disabled=false;}
+});});
+</script>
+{{template "footer" .}}
+{{end}}
+{{define "history_snapshot"}}
+<p>{{.Date.Format "02.01.2006 15:04:05"}} · {{.Description}}</p>
+{{if .Comment}}<p style="white-space:pre-wrap">{{.Comment}}</p>{{end}}
+{{if .Tags}}<p>Теги: {{.Tags}}</p>{{end}}
+<ul>{{range .Splits}}<li>{{.Account}}: <span class="mono">{{.Amount}} {{.Currency}}</span></li>{{end}}</ul>
+{{end}}

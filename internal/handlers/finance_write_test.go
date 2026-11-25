@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/evbogdanov/finforme/internal/database"
 	"github.com/evbogdanov/finforme/internal/models"
 )
 
@@ -34,6 +35,9 @@ func financeTestHandler(t *testing.T) *Handler {
 				t.Fatal(err)
 			}
 		}
+	}
+	if err := database.InitLedgerDB(h.db, os.Getenv("FINFORME_TEST_MYSQL_DSN") == ""); err != nil {
+		t.Fatal(err)
 	}
 	for _, a := range []struct {
 		id, user, currency, placeholder int

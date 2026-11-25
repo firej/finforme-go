@@ -1,18 +1,28 @@
 (function (root) {
   'use strict';
-  // All arithmetic is in integer cents and the exact stored decimal rate.
-  function convert(amount, rate, inverse) {
-    if (!/^\d+(?:\.\d{0,2})?$/.test(amount) || !/^\d+(?:\.\d{1,6})?$/.test(rate)) return '';
+  // Integer arithmetic preserves both the source and target currency precision.
+  function convert(amount, rate, inverse, fromDigits, toDigits) {
+    fromDigits = fromDigits === undefined ? 2 : fromDigits;
+    toDigits = toDigits === undefined ? 2 : toDigits;
+    if (!Number.isInteger(fromDigits) || !Number.isInteger(toDigits) || fromDigits < 0 || fromDigits > 8 || toDigits < 0 || toDigits > 8) return '';
+    if (!/^\d+(?:\.\d*)?$/.test(amount) || !/^\d+(?:\.\d{1,6})?$/.test(rate)) return '';
     var a = amount.split('.'), r = rate.split('.');
-    var cents = BigInt(a[0]) * 100n + BigInt((a[1] || '').padEnd(2, '0'));
+    if ((a[1] || '').replace(/0+$/, '').length > fromDigits) return '';
+    var sourceScale = 10n ** BigInt(fromDigits), targetScale = 10n ** BigInt(toDigits);
+    var units = BigInt(a[0]) * sourceScale + BigInt((a[1] || '').slice(0, fromDigits).padEnd(fromDigits, '0') || '0');
     var scale = 10n ** BigInt((r[1] || '').length);
     var numerator = BigInt(r[0]) * scale + BigInt(r[1] || '0');
-    if (cents <= 0n || cents > 9007199254740991n || numerator <= 0n) return '';
-    var divisor = inverse ? numerator : scale;
-    var product = cents * (inverse ? scale : numerator);
+    if (units <= 0n || units > 9007199254740991n || numerator <= 0n) return '';
+    var divisor = sourceScale * (inverse ? numerator : scale);
+    var product = units * targetScale * (inverse ? scale : numerator);
     var result = (product * 2n + divisor) / (divisor * 2n);
     if (result <= 0n || result > 9007199254740991n) return '';
-    return (result / 100n).toString() + '.' + (result % 100n).toString().padStart(2, '0');
+    return (result / targetScale).toString() + (toDigits ? '.' + (result % targetScale).toString().padStart(toDigits, '0') : '');
+  }
+  function digits(option) {
+    var fraction = Number(option && option.dataset.fraction || 100);
+    var d = Math.log10(fraction);
+    return Number.isInteger(d) && d >= 0 && d <= 8 ? d : 2;
   }
 
   function attach(form, fetcher) {
@@ -45,12 +55,14 @@
         status.textContent = 'Сумма сохранена или введена вручную. Для замены нажмите «Пересчитать по курсу».';
         return;
       }
-      target.value = convert(amount.value, rate.rate, rate.inverse);
-      status.textContent = target.value ? 'Сумма рассчитана по выбранному курсу.' : 'Введите сумму для расчёта. Результат должен быть не меньше 0,01.';
+      target.value = convert(amount.value, rate.rate, rate.inverse, digits(from.selectedOptions[0]), digits(to.selectedOptions[0]));
+      status.textContent = target.value ? 'Сумма рассчитана по выбранному курсу.' : 'Введите сумму для расчёта. Результат должен быть не меньше минимальной единицы валюты.';
     }
     async function refresh() {
       var request = ++generation;
       var fromOption = from.selectedOptions[0], toOption = to.selectedOptions[0];
+      amount.step = amount.min = (10 ** -digits(fromOption)).toFixed(digits(fromOption));
+      target.step = target.min = (10 ** -digits(toOption)).toFixed(digits(toOption));
       different = !!(fromOption && toOption && fromOption.dataset.commodityId && toOption.dataset.commodityId && fromOption.dataset.commodityId !== toOption.dataset.commodityId);
       target.disabled = !different;
       target.required = different;

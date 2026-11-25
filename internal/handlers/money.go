@@ -3,16 +3,21 @@ package handlers
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 )
 
 // formatMoney is display-only: input values and API numbers remain unlocalized.
-func formatMoney(value float64) string {
-	if math.Abs(value) < 0.005 {
+func formatAmount(value float64) string {
+	if math.Abs(value) < 0.000000005 {
 		value = 0
 	}
-	parts := strings.SplitN(fmt.Sprintf("%.2f", math.Abs(value)), ".", 2)
+	precision := 2
+	for precision < 8 && math.Abs(value-math.Round(value*math.Pow10(precision))/math.Pow10(precision)) > 0.0000000001 {
+		precision++
+	}
+	parts := strings.SplitN(fmt.Sprintf("%.*f", precision, math.Abs(value)), ".", 2)
 	whole := parts[0]
 	for i := len(whole) - 3; i > 0; i -= 3 {
 		whole = whole[:i] + "\u00a0" + whole[i:]
@@ -49,4 +54,52 @@ func formatMoneyShort(value float64) string {
 // formatMoneyInput preserves the float value without scientific notation or rounding.
 func formatMoneyInput(value float64) string {
 	return strconv.FormatFloat(value, 'f', -1, 64)
+}
+
+// exactCents is used only for valuation aggregates, with no binary float step.
+type exactCents string
+
+func (c exactCents) rat() *big.Rat {
+	if c == "" {
+		return new(big.Rat)
+	}
+	r, _ := new(big.Rat).SetString(string(c))
+	return r
+}
+func (c *exactCents) Scan(value any) error {
+	var text string
+	switch v := value.(type) {
+	case int64:
+		text = strconv.FormatInt(v, 10)
+	case float64:
+		text = strconv.FormatFloat(v, 'f', -1, 64)
+	case []byte:
+		text = string(v)
+	case string:
+		text = v
+	default:
+		return fmt.Errorf("invalid monetary aggregate %T", value)
+	}
+	r, ok := new(big.Rat).SetString(text)
+	if !ok {
+		return fmt.Errorf("invalid monetary aggregate")
+	}
+	*c = exactCents(r.RatString())
+	return nil
+}
+
+// Reports rounded to cents retain their existing formatting contract.
+func formatMoney(value float64) string {
+	if math.Abs(value) < 0.005 {
+		value = 0
+	}
+	parts := strings.SplitN(fmt.Sprintf("%.2f", math.Abs(value)), ".", 2)
+	whole := parts[0]
+	for i := len(whole) - 3; i > 0; i -= 3 {
+		whole = whole[:i] + "\u00a0" + whole[i:]
+	}
+	if value < 0 {
+		whole = "−" + whole
+	}
+	return whole + "," + parts[1]
 }

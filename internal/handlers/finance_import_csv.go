@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/evbogdanov/finforme/internal/amount"
 	"math"
 	"net/http"
 	"strings"
@@ -29,6 +32,7 @@ func (h *Handler) FinanceImportCSV(w http.ResponseWriter, r *http.Request) {
 
 // csvImportRow - одна строка для превью/сохранения
 type csvImportRow struct {
+	AmountExact string  `json:"amount_exact,omitempty"`
 	Currency    string  `json:"currency,omitempty"`
 	Date        string  `json:"date"`   // YYYY-MM-DD
 	Amount      float64 `json:"amount"` // знаковая сумма со стороны source_account
@@ -44,6 +48,7 @@ type csvImportPreviewReq struct {
 
 // csvImportPreviewItem - результат превью одной строки
 type csvImportPreviewItem struct {
+	AmountExact      string  `json:"amount_exact,omitempty"`
 	Currency         string  `json:"currency,omitempty"`
 	Index            int     `json:"index"`
 	Date             string  `json:"date"`
@@ -61,6 +66,7 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 	w.Header().Set("Content-Type", "application/json")
 
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
 	var req csvImportPreviewReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -68,6 +74,10 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Rows) > 10000 {
+		writeFinanceError(w, validationError("Не более 10000 строк за один импорт"))
+		return
+	}
 	// Проверяем, что source account принадлежит пользователю и не контейнерный
 	srcAcc, err := h.getAccountByID(userID, req.SourceAccountID)
 	if err != nil {
@@ -82,7 +92,8 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sourceCurrency string
-	if err := h.db.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency); err != nil {
+	var sourceFraction int64
+	if err := h.db.QueryRow(`SELECT mnemonic,fraction FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency, &sourceFraction); err != nil {
 		writeFinanceError(w, err)
 		return
 	}
@@ -106,6 +117,7 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 	for i, row := range req.Rows {
 		item := csvImportPreviewItem{
 			Index:       i,
+			AmountExact: row.AmountExact,
 			Date:        row.Date,
 			Amount:      row.Amount,
 			Description: strings.TrimSpace(row.Description),
@@ -120,7 +132,7 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Проверка на дубликат на исходном счёте: та же дата + та же сумма
-		valueNum, err := csvAmountCents(row.Amount)
+		valueNum, err := csvAmountUnits(row.Amount, sourceFraction, row.AmountExact)
 		if err != nil {
 			item.Error = err.Error()
 			items = append(items, item)
@@ -131,7 +143,9 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 			items = append(items, item)
 			continue
 		}
-		dupTxID := h.findDuplicateTransaction(userID, req.SourceAccountID, row.Date, valueNum)
+		item.AmountExact = amount.Decimal(valueNum, sourceFraction)
+		item.Amount = float64(valueNum) / float64(sourceFraction)
+		dupTxID := h.findDuplicateAmount(userID, req.SourceAccountID, row.Date, valueNum, sourceFraction)
 		if dupTxID > 0 {
 			item.IsDuplicate = true
 			item.ExistingTxID = dupTxID
@@ -179,11 +193,13 @@ func (h *Handler) APIImportCSVPreview(w http.ResponseWriter, r *http.Request) {
 
 // csvImportSaveReq - запрос сохранения
 type csvImportSaveReq struct {
+	RequestID       string              `json:"request_id,omitempty"`
 	SourceAccountID int64               `json:"source_account_id"`
 	Items           []csvImportSaveItem `json:"items"`
 }
 
 type csvImportSaveItem struct {
+	AmountExact    string  `json:"amount_exact,omitempty"`
 	Currency       string  `json:"currency,omitempty"`
 	Date           string  `json:"date"`
 	Amount         float64 `json:"amount"`
@@ -196,6 +212,7 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 	userID, _ := h.getUserID(r)
 	w.Header().Set("Content-Type", "application/json")
 
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<20)
 	var req csvImportSaveReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -211,6 +228,36 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	// Serialize request identity and ledger writes under the same user lock.
+	if len(req.Items) > 10000 || len(req.RequestID) > 128 {
+		writeFinanceError(w, validationError("Слишком большой импорт"))
+		return
+	}
+	identity := req
+	identity.RequestID = ""
+	payload, _ := json.Marshal(identity)
+	digest := sha256.Sum256(payload)
+	payloadHash := hex.EncodeToString(digest[:])
+	key := payloadHash
+	if req.RequestID != "" {
+		sum := sha256.Sum256([]byte(req.RequestID))
+		key = hex.EncodeToString(sum[:])
+	}
+	var existingHash string
+	var existingCount int
+	err = tx.QueryRow(`SELECT payload_hash,saved_count FROM csv_import_batches WHERE user_id=? AND request_key=?`, userID, key).Scan(&existingHash, &existingCount)
+	if err == nil {
+		if existingHash != payloadHash {
+			writeFinanceError(w, validationError("Этот ключ импорта уже использован для других данных"))
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": "ok", "saved": existingCount, "already_imported": true})
+		return
+	}
+	if err != sql.ErrNoRows {
+		writeFinanceError(w, err)
+		return
+	}
 	// Проверяем источник
 	srcAcc, err := getAccountByIDFrom(tx, userID, req.SourceAccountID)
 	if err != nil {
@@ -231,7 +278,8 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var sourceCurrency string
-	if err := tx.QueryRow(`SELECT mnemonic FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency); err != nil {
+	var sourceFraction int64
+	if err := tx.QueryRow(`SELECT mnemonic,fraction FROM commodities WHERE id=?`, srcAcc.CommodityID).Scan(&sourceCurrency, &sourceFraction); err != nil {
 		writeFinanceError(w, err)
 		return
 	}
@@ -269,7 +317,7 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 			writeFinanceError(w, validationError(fmt.Sprintf("Строка %d: %s", i+1, err)))
 			return
 		}
-		valueNum, err := csvAmountCents(it.Amount)
+		valueNum, err := csvAmountUnits(it.Amount, sourceFraction, it.AmountExact)
 		if err != nil {
 			writeFinanceError(w, validationError(fmt.Sprintf("Строка %d: %s", i+1, err)))
 			return
@@ -284,13 +332,17 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-		txID, _ := res.LastInsertId()
+		txID, err := res.LastInsertId()
+		if err != nil {
+			writeFinanceError(w, err)
+			return
+		}
 
 		// Сплит на исходный счёт (со знаком как в CSV)
 		_, err = tx.Exec(`
 			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, 100)
-		`, userID, txID, req.SourceAccountID, valueNum)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, req.SourceAccountID, valueNum, sourceFraction)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -300,16 +352,24 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 		// Парный сплит
 		_, err = tx.Exec(`
 			INSERT INTO splits (user_id, tx_id, account_id, value_num, value_denom)
-			VALUES (?, ?, ?, ?, 100)
-		`, userID, txID, it.OtherAccountID, -valueNum)
+			VALUES (?, ?, ?, ?, ?)
+		`, userID, txID, it.OtherAccountID, -valueNum, sourceFraction)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
+		if err := recordTransactionHistory(tx, userID, txID, "create", "import", nil); err != nil {
+			writeFinanceError(w, err)
+			return
+		}
 		saved++
 	}
 
+	if _, err := tx.Exec(`INSERT INTO csv_import_batches(user_id,request_key,payload_hash,saved_count,created_at) VALUES(?,?,?,?,?)`, userID, key, payloadHash, saved, time.Now().UTC()); err != nil {
+		writeFinanceError(w, err)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
@@ -325,6 +385,9 @@ func (h *Handler) APIImportCSVSave(w http.ResponseWriter, r *http.Request) {
 // findDuplicateTransaction - ищет существующую транзакцию с такой же датой и суммой
 // на указанном счёте (для пользователя). Возвращает 0, если не найдено.
 func (h *Handler) findDuplicateTransaction(userID, accountID int64, date string, valueNum int64) int64 {
+	return h.findDuplicateAmount(userID, accountID, date, valueNum, 100)
+}
+func (h *Handler) findDuplicateAmount(userID, accountID int64, date string, valueNum, denom int64) int64 {
 	var txID int64
 	err := h.db.QueryRow(`
 		SELECT t.id FROM transactions t
@@ -332,9 +395,9 @@ func (h *Handler) findDuplicateTransaction(userID, accountID int64, date string,
 		WHERE t.user_id = ?
 		  AND DATE(t.post_date) = ?
 		  AND s.account_id = ?
-		  AND s.value_num = ?
+		  AND CAST(s.value_num AS DECIMAL(65,0)) * ? = CAST(? AS DECIMAL(65,0)) * s.value_denom
 		LIMIT 1
-	`, userID, date, accountID, valueNum).Scan(&txID)
+	`, userID, date, accountID, denom, valueNum).Scan(&txID)
 	if err != nil {
 		return 0
 	}
@@ -462,4 +525,18 @@ func (h *Handler) getAccountsMap(userID int64) (map[int64]*models.Account, error
 		result[acc.ID] = acc
 	}
 	return result, nil
+}
+
+func csvAmountUnits(value float64, fraction int64, exact ...string) (int64, error) {
+	n, err := amount.Float(value, fraction)
+	if len(exact) > 0 && exact[0] != "" {
+		n, err = amount.Parse(exact[0], fraction)
+	}
+	if err != nil {
+		return 0, validationError(err.Error())
+	}
+	if n == 0 {
+		return 0, validationError("Сумма должна отличаться от нуля")
+	}
+	return n, nil
 }

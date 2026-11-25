@@ -109,3 +109,10 @@ test('network failure keeps manual input and leaves automatic input empty', asyn
     assert.match(attrs['rate-status'].textContent, /Не удалось/);
   }
 });
+
+test('currency precision supports whole units and eight decimals without intermediate rounding', () => {
+  assert.equal(convert('0.00000001', '100000.000000', false, 8, 8), '0.00100000');
+  assert.equal(convert('1', '2.500000', false, 0, 0), '3');
+  assert.equal(convert('1.01', '1.000000', false, 0, 2), '');
+  assert.equal(convert('0.01', '1000000.000000', true, 2, 8), '0.00000001');
+});

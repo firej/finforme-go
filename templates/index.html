@@ -19,7 +19,7 @@
       <div class="dashboard-accounts">
       {{range .TopAccounts}}
         <a class="dashboard-account" href="/finance/account/{{.ID}}">
-          <span>{{.Name}}</span><strong class="account-balance">{{formatMoney .Balance}} <span class="stat-currency">{{.Currency}}</span></strong>
+          <span>{{.Name}}</span><strong class="account-balance">{{formatAmount .Balance}} <span class="stat-currency">{{.Currency}}</span></strong>
         </a>
       {{else}}<p class="form-hint">Нет данных</p>{{end}}
       </div>
@@ -45,7 +45,7 @@
               </td>
               <td style="padding:7px 0 7px 8px;text-align:right;white-space:nowrap;">
                 <span style="font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--text-primary);">
-                  {{if eq .AccountType "EXPENSE"}}−{{else}}+{{end}}{{formatMoney .Amount}} {{.Currency}}
+                  {{if eq .AccountType "EXPENSE"}}−{{else}}+{{end}}{{formatAmount .Amount}} {{.Currency}}
                 </span>
               </td>
             </tr>

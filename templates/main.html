@@ -132,6 +132,7 @@
         Ипотечный калькулятор
       </a>
       {{if .Authenticated}}
+      <a href="/finance/history" class="sidebar-nav-item {{if eq .ActivePage "history"}}active{{end}}">История изменений</a>
       <a href="/finance/settings" class="sidebar-nav-item {{if eq .ActivePage "settings"}}active{{end}}">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="8" cy="8" r="2.5"/>
@@ -470,7 +471,7 @@ document.addEventListener('keydown', function(e) {
     <span class="stree-name">{{.Name}}</span>
     <span class="stree-bal" style="display:flex;flex-direction:column;align-items:flex-end;">
     {{range .DisplayBalances}}{{if ne .Amount 0.0}}
-      <span title="{{formatMoney .Amount}} {{.Currency}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
+      <span title="{{formatAmount .Amount}} {{.Currency}}">{{formatMoneyShort .Amount}} {{.Currency}}</span>
     {{end}}{{end}}
     </span>
   </a>

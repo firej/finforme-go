@@ -100,6 +100,8 @@ func main() {
 	r.HandleFunc("/finance/settings/tokens/delete", h.RequireAuth(h.APITokenDelete)).Methods("POST")
 	r.HandleFunc("/finance/import/csv", h.RequireAuth(h.FinanceImportCSV)).Methods("GET")
 
+	r.HandleFunc("/finance/history", h.RequireAuth(h.FinanceHistory)).Methods("GET")
+
 	// Админка
 	r.HandleFunc("/admin/", h.RequireAdmin(h.AdminIndex)).Methods("GET")
 	r.HandleFunc("/admin/commodities/", h.RequireAdmin(h.AdminCommodities)).Methods("GET", "POST")
@@ -124,7 +126,12 @@ func main() {
 	api.HandleFunc("/finance/transaction/rates", h.APITransactionRates).Methods("GET")
 	api.HandleFunc("/finance/transaction/save", h.APITransactionSave).Methods("POST")
 	api.HandleFunc("/finance/transaction/form", h.APITransactionFormGet).Methods("GET")
+	api.HandleFunc("/finance/transaction/page", h.APITransactionPage).Methods("GET")
 	api.HandleFunc("/finance/transaction/table", h.APITransactionTableGet).Methods("GET")
+	api.HandleFunc("/finance/account/reconcile", h.APIReconcileAccount).Methods("POST")
+	api.HandleFunc("/finance/transaction/check", h.APITransactionCheck).Methods("POST")
+	api.HandleFunc("/finance/transaction/history", h.APITransactionHistory).Methods("GET")
+	api.HandleFunc("/finance/transaction/restore", h.APITransactionRestore).Methods("POST")
 	api.HandleFunc("/finance/transaction/delete", h.APITransactionDelete).Methods("DELETE")
 	api.HandleFunc("/finance/export/json", h.APIExportJSON).Methods("GET")
 	api.HandleFunc("/finance/import/json", h.APIImportJSON).Methods("POST")

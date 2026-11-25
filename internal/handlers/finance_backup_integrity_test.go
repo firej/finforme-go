@@ -28,7 +28,7 @@ func TestFinanceBackupRejectsInvalidReplacement(t *testing.T) {
 				mode = "replcae"
 			case "precision":
 				input.Transactions[0].Splits[0].ValueNum = 1
-				input.Transactions[0].Splits[0].ValueDenom = 1000
+				input.Transactions[0].Splits[0].ValueDenom = 1000000000
 			case "zero denominator":
 				input.Transactions[0].Splits[0].ValueDenom = 0
 			case "overflow":

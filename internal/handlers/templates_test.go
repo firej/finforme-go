@@ -58,6 +58,7 @@ func buildTestTemplates(t *testing.T) *template.Template {
 		},
 		"formatMoneyInput": formatMoneyInput,
 		"trimSpace":        strings.TrimSpace,
+		"formatAmount":     formatAmount,
 		"formatMoney":      formatMoney,
 		"formatMoneyShort": formatMoneyShort,
 		"slice": func(s string, i, j int) string {

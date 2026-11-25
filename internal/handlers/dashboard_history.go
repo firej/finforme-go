@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"math/big"
 	"net/url"
@@ -48,8 +47,8 @@ func (h *Handler) capitalSnapshots(ctx context.Context, userID int64, dates []ti
 	rows, err := h.db.QueryContext(ctx, `SELECT
  CASE WHEN t.post_date<? THEN '' ELSE SUBSTR(CAST(t.post_date AS CHAR),1,7) END AS month_key,
  c.mnemonic,
- SUM(CASE WHEN a.account_type<>'LIABILITY' THEN s.value_num ELSE 0 END),
- SUM(CASE WHEN a.account_type='LIABILITY' THEN -s.value_num ELSE 0 END)
+ SUM(CASE WHEN a.account_type<>'LIABILITY' THEN CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom ELSE 0 END),
+ SUM(CASE WHEN a.account_type='LIABILITY' THEN -CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom ELSE 0 END)
  FROM splits s JOIN accounts a ON a.id=s.account_id AND a.user_id=s.user_id
  JOIN transactions t ON t.id=s.tx_id AND t.user_id=s.user_id
  JOIN commodities c ON c.id=a.commodity_id
@@ -75,12 +74,10 @@ func (h *Handler) capitalSnapshots(ctx context.Context, userID int64, dates []ti
 	}
 	balances := map[string]capitalHolding{}
 	snapshots := make([]capitalSnapshot, 0, len(dates))
-	add := func(a, b int64) (int64, error) {
-		if (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b) {
-			return 0, fmt.Errorf("capital history balance overflow")
-		}
-		return a + b, nil
+	add := func(a, b exactCents) (exactCents, error) {
+		return exactCents(new(big.Rat).Add(a.rat(), b.rat()).RatString()), nil
 	}
+
 	for i, date := range dates {
 		period := ""
 		if i > 0 {

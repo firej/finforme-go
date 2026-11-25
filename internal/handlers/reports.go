@@ -39,7 +39,7 @@ func (h *Handler) periodReport(userID int64, from, to time.Time) (*PeriodReport,
 		return nil, validationError("Конец периода раньше начала")
 	}
 	rows, err := h.db.Query(`
-		SELECT a.id, a.name, a.account_type, c.mnemonic, SUM(s.value_num)
+		SELECT a.id, a.name, a.account_type, c.mnemonic, SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom)
 		FROM splits s
 		JOIN transactions t ON t.id = s.tx_id AND t.user_id = s.user_id
 		JOIN accounts a ON a.id = s.account_id AND a.user_id = s.user_id
@@ -48,8 +48,8 @@ func (h *Handler) periodReport(userID int64, from, to time.Time) (*PeriodReport,
 		  AND a.account_type IN ('INCOME', 'EXPENSE')
 		  AND t.post_date >= ? AND t.post_date < ?
 		GROUP BY a.id, a.name, a.account_type, c.mnemonic
-		HAVING SUM(s.value_num) <> 0
-		ORDER BY ABS(SUM(s.value_num)) DESC
+		HAVING SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom) <> 0
+		ORDER BY ABS(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom)) DESC
 	`, userID, from, to.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
@@ -66,7 +66,8 @@ func (h *Handler) periodReport(userID int64, from, to time.Time) (*PeriodReport,
 
 	totals := make(map[string]*CurrencyPeriodTotal)
 	for rows.Next() {
-		var id, valueNum int64
+		var id int64
+		var valueNum float64
 		var name, accountType, currency string
 		if err := rows.Scan(&id, &name, &accountType, &currency, &valueNum); err != nil {
 			return nil, err
@@ -142,7 +143,7 @@ type DashboardCurrencyTotal struct {
 }
 
 func (h *Handler) dashboardTotals(userID int64) ([]DashboardCurrencyTotal, error) {
-	rows, err := h.db.Query(`SELECT c.mnemonic,a.account_type,COALESCE(SUM(s.value_num),0)
+	rows, err := h.db.Query(`SELECT c.mnemonic,a.account_type,COALESCE(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom),0)
  FROM accounts a JOIN commodities c ON c.id=a.commodity_id
  LEFT JOIN splits s ON s.account_id=a.id AND s.user_id=a.user_id
  WHERE a.user_id=? AND a.account_type IN ('ASSET','BANK','CASH','LIABILITY','INCOME','EXPENSE')
@@ -154,7 +155,7 @@ func (h *Handler) dashboardTotals(userID int64) ([]DashboardCurrencyTotal, error
 	totals := make(map[string]*DashboardCurrencyTotal)
 	for rows.Next() {
 		var currency, kind string
-		var raw int64
+		var raw float64
 		if err := rows.Scan(&currency, &kind, &raw); err != nil {
 			return nil, err
 		}

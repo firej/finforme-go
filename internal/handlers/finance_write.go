@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/evbogdanov/finforme/internal/amount"
+	"github.com/evbogdanov/finforme/internal/models"
 	"math"
 	"net/http"
 	"strconv"
@@ -77,32 +79,21 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 	if in.DebitAccountID == in.CreditAccountID {
 		return 0, validationError("Выберите разные счета списания и зачисления")
 	}
-	valueNum, err := transactionCents(in.Value)
-	if err != nil {
-		return 0, err
-	}
-	target := in.Value
-	if in.ValueTarget != nil {
-		target = *in.ValueTarget
-	}
-	targetNum, err := transactionCents(target)
-	if err != nil {
-		return 0, err
-	}
 	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback()
-	var debitCurrency, creditCurrency int64
+	var debitCurrency, creditCurrency, debitFraction, creditFraction int64
 	for _, account := range []struct {
 		id       int64
 		currency *int64
+		fraction *int64
 	}{
-		{in.DebitAccountID, &debitCurrency}, {in.CreditAccountID, &creditCurrency},
+		{in.DebitAccountID, &debitCurrency, &debitFraction}, {in.CreditAccountID, &creditCurrency, &creditFraction},
 	} {
 		var placeholder int
-		err := tx.QueryRow(`SELECT commodity_id, placeholder FROM accounts WHERE id = ? AND user_id = ?`, account.id, userID).Scan(account.currency, &placeholder)
+		err := tx.QueryRow(`SELECT a.commodity_id, a.placeholder, c.fraction FROM accounts a JOIN commodities c ON c.id=a.commodity_id WHERE a.id = ? AND a.user_id = ?`, account.id, userID).Scan(account.currency, &placeholder, account.fraction)
 		if errors.Is(err, sql.ErrNoRows) {
 			return 0, validationError("Счёт не найден")
 		}
@@ -113,11 +104,43 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 			return 0, validationError("Контейнерный счёт не может участвовать в транзакции — выберите конечный счёт")
 		}
 	}
+	valueNum, err := amount.Float(in.Value, creditFraction)
+	if in.ValueText != "" {
+		valueNum, err = amount.Parse(in.ValueText, creditFraction)
+	}
+	if err != nil {
+		return 0, validationError(err.Error())
+	}
+	if valueNum <= 0 {
+		return 0, validationError("Сумма должна быть положительной")
+	}
+	target := in.Value
+	if in.ValueTarget != nil {
+		target = *in.ValueTarget
+	}
+	targetNum, err := amount.Float(target, debitFraction)
+	targetText := in.TargetText
+	if in.ValueTarget == nil && targetText == "" {
+		targetText = in.ValueText
+	}
+	if targetText != "" {
+		targetNum, err = amount.Parse(targetText, debitFraction)
+	}
+	if err != nil {
+		return 0, validationError(err.Error())
+	}
+	if targetNum <= 0 {
+		return 0, validationError("Сумма должна быть положительной")
+	}
 	if debitCurrency == creditCurrency && valueNum != targetNum {
 		return 0, validationError("Суммы списания и зачисления в одной валюте должны совпадать")
 	}
-	if debitCurrency != creditCurrency && in.ValueTarget == nil {
+	if debitCurrency != creditCurrency && in.ValueTarget == nil && in.TargetText == "" {
 		return 0, validationError("Для разных валют укажите сумму зачисления")
+	}
+	before, err := snapshotTransaction(tx, userID, in.TxID)
+	if err != nil {
+		return 0, err
 	}
 	id := in.TxID
 	in.PostDate, err = transactionDate(tx, userID, id, in.PostDate, in.PostTime)
@@ -152,10 +175,17 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 			return 0, err
 		}
 	}
-	for _, split := range []struct{ account, amount int64 }{{in.DebitAccountID, targetNum}, {in.CreditAccountID, -valueNum}} {
-		if _, err := tx.Exec(`INSERT INTO splits (user_id,tx_id,account_id,value_num,value_denom) VALUES(?,?,?,?,100)`, userID, id, split.account, split.amount); err != nil {
+	for _, split := range []struct{ account, amount, denom int64 }{{in.DebitAccountID, targetNum, debitFraction}, {in.CreditAccountID, -valueNum, creditFraction}} {
+		if _, err := tx.Exec(`INSERT INTO splits (user_id,tx_id,account_id,value_num,value_denom) VALUES(?,?,?,?,?)`, userID, id, split.account, split.amount, split.denom); err != nil {
 			return 0, err
 		}
+	}
+	action := "create"
+	if in.TxID != 0 {
+		action = "update"
+	}
+	if err := recordTransactionHistory(tx, userID, id, action, in.Source, before); err != nil {
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -164,6 +194,9 @@ func (h *Handler) saveTransaction(userID int64, in txSaveInput) (int64, error) {
 }
 
 func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, description, tags string, comment *string, clocks ...*string) error {
+	return h.updateTransactionMetadataFrom(userID, id, date, description, tags, comment, "api", clocks...)
+}
+func (h *Handler) updateTransactionMetadataFrom(userID, id int64, date time.Time, description, tags string, comment *string, source string, clocks ...*string) error {
 	if err := validateTransactionComment(comment); err != nil {
 		return err
 	}
@@ -178,6 +211,10 @@ func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, de
 	if err := requireTransaction(tx, userID, id); err != nil {
 		return err
 	}
+	before, err := snapshotTransaction(tx, userID, id)
+	if err != nil {
+		return err
+	}
 	var clock *string
 	if len(clocks) > 0 {
 		clock = clocks[0]
@@ -187,6 +224,9 @@ func (h *Handler) updateTransactionMetadata(userID, id int64, date time.Time, de
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE transactions SET post_date = ?, description = ?, tags = ?, comment = COALESCE(?,comment) WHERE id = ? AND user_id = ?`, date, description, tags, comment, id, userID); err != nil {
+		return err
+	}
+	if err := recordTransactionHistory(tx, userID, id, "update", source, before); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -208,7 +248,7 @@ func (h *Handler) APITransactionMetadataSave(w http.ResponseWriter, r *http.Requ
 		writeFinanceError(w, validationError("Некорректная дата"))
 		return
 	}
-	if err := h.updateTransactionMetadata(userID, id, date, r.FormValue("description"), r.FormValue("tags"), optionalFormComment(r), optionalFormTime(r)); err != nil {
+	if err := h.updateTransactionMetadataFrom(userID, id, date, r.FormValue("description"), r.FormValue("tags"), optionalFormComment(r), financeSource(r), optionalFormTime(r)); err != nil {
 		writeFinanceError(w, err)
 		return
 	}
@@ -230,4 +270,28 @@ func validateTransactionComment(comment *string) error {
 		return validationError("Комментарий должен содержать не более 16000 символов UTF-8")
 	}
 	return nil
+}
+
+// Old postings can be more precise than today's currency settings. Keep them
+// editable through metadata only rather than forcing a rounded replacement.
+func transactionMetadataOnly(debit, credit []map[string]interface{}, currencies map[int64]*models.Commodity) bool {
+	if len(debit) != 1 || len(credit) != 1 {
+		return true
+	}
+	for _, split := range []map[string]interface{}{debit[0], credit[0]} {
+		id, _ := split["commodity_id"].(int64)
+		currency := currencies[id]
+		if currency == nil {
+			continue
+		}
+		text, _ := split["value_exact"].(string)
+		if text == "" {
+			value, _ := split["value"].(float64)
+			text = strconv.FormatFloat(value, 'f', -1, 64)
+		}
+		if _, err := amount.Parse(text, int64(currency.Fraction)); err != nil {
+			return true
+		}
+	}
+	return false
 }

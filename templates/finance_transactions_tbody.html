@@ -9,17 +9,20 @@
     <span class="tx-tags">{{range .tags}}{{with trimSpace .}}<a class="tag" href="/finance/tag?tag={{.}}" onclick="event.stopPropagation()">{{.}}</a> {{end}}{{end}}</span>
   </td>
   <td class="tx-cell-account" data-mlabel="Счёт">
-    <a class="tx-account" href="/finance/account/{{.account_id}}#transaction-{{.id}}" onclick="event.stopPropagation()">{{.account_name}}</a>
+    {{$txID:=.id}}{{if .other_accounts}}{{range .other_accounts}}<a class="tx-account" href="/finance/account/{{.id}}#transaction-{{$txID}}" onclick="event.stopPropagation()">{{.name}}</a> {{end}}{{else}}
+    <a class="tx-account" href="/finance/account/{{.account_id}}#transaction-{{.id}}" onclick="event.stopPropagation()">{{.account_name}}</a>{{end}}
   </td>
   <td class="mono right tx-amount" data-mlabel="Сумма">
-    {{if .plus_balance_changing}}<span class="amount-in">+{{formatMoney .plus_balance_changing}}</span>{{end}}
-    {{if .balance_changing}}<span class="amount-out">−{{formatMoney .balance_changing}}</span>{{end}}
+    {{if .plus_balance_changing}}<span class="amount-in">+{{formatAmount .plus_balance_changing}}</span>{{end}}
+    {{if .balance_changing}}<span class="amount-out">−{{formatAmount .balance_changing}}</span>{{end}}
   </td>
   <td class="mono right account-balance" data-mlabel="Баланс">
-    <span{{if eq .account_balance 0.0}} class="bal-zero"{{end}}>{{formatMoney .account_balance}}</span>
+    <span{{if eq .account_balance 0.0}} class="bal-zero"{{end}}>{{formatAmount .account_balance}}</span>
   </td>
   <td onclick="event.stopPropagation()" data-empty="1">
     <div class="row-actions">
+      <input type="checkbox" {{if .checked}}checked{{end}} aria-label="Операция проверена" title="Операция проверена" onchange="setTransactionChecked({{.id}},this)">
+
       <button class="btn btn-ghost btn-sm btn-icon"
         onclick="openTransactionDrawer({{.id}}, {{$.Account.ID}})" title="Редактировать">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -29,7 +32,7 @@
       <button class="btn btn-danger btn-sm btn-icon"
         hx-delete="/api/v1/finance/transaction/delete?id={{.id}}"
         hx-confirm="Удалить транзакцию?"
-        hx-on::after-request="if(event.detail.successful){const r=this.closest('tr');r.style.transition='all 0.3s';r.style.opacity='0';r.style.transform='translateX(-20px)';setTimeout(()=>r.remove(),300);}"
+        hx-on::after-request="if(event.detail.successful){showToast('Удалено. Восстановление доступно в истории изменений','success');if(typeof refreshTransactionsTable==='function'){refreshTransactionsTable();}else{window.location.reload();}}"
         title="Удалить">
         <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M2 4h12M6 4V2h4v2M5 4v9a1 1 0 001 1h4a1 1 0 001-1V4"/>

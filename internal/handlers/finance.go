@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/evbogdanov/finforme/internal/amount"
 	"github.com/evbogdanov/finforme/internal/gnucash"
 	"github.com/evbogdanov/finforme/internal/models"
 	"github.com/gorilla/mux"
@@ -213,8 +214,17 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 		account.Description = description.String
 	}
 
-	// Получаем транзакции счета с учетом сортировки
-	transactions := h.getAccountTransactions(userID, accountID, sortOrder)
+	filter, err := parseAccountPageFilter(r.URL.Query())
+	if err != nil {
+		writeFinanceError(w, err)
+		return
+	}
+	page, err := h.accountTransactionPage(r.Context(), userID, accountID, filter)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить операции", 500)
+		return
+	}
+	transactions := page.Transactions
 	accounts, err := h.getAccountsWithBalance(userID)
 	if err != nil {
 		http.Error(w, "Не удалось загрузить баланс", http.StatusInternalServerError)
@@ -240,23 +250,28 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Статистика и список доступных месяцев
-	var totalIncome, totalExpense float64
-	var incomeCount, expenseCount, totalCount int
-	monthsSet := make(map[string]bool)
-
-	for _, tx := range transactions {
-		totalCount++
-		if v, ok := tx["plus_balance_changing"].(float64); ok && v > 0 {
-			totalIncome += v
-			incomeCount++
+	totalIncome, totalExpense := page.Income, page.Expense
+	incomeCount, expenseCount, totalCount := page.IncomeCount, page.ExpenseCount, page.Total
+	monthsSet := map[string]bool{}
+	months, err := h.db.Query(`SELECT DISTINCT SUBSTR(CAST(t.post_date AS CHAR),1,7) FROM transactions t WHERE t.user_id=? AND EXISTS(SELECT 1 FROM splits s WHERE s.tx_id=t.id AND s.user_id=t.user_id AND s.account_id=?)`, userID, accountID)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить периоды", 500)
+		return
+	}
+	for months.Next() {
+		var month string
+		if err = months.Scan(&month); err != nil {
+			break
 		}
-		if v, ok := tx["balance_changing"].(float64); ok && v > 0 {
-			totalExpense += v
-			expenseCount++
-		}
-		if d, ok := tx["post_date_raw"].(time.Time); ok {
-			monthsSet[d.Format("2006-01")] = true
-		}
+		monthsSet[month] = true
+	}
+	if err == nil {
+		err = months.Err()
+	}
+	months.Close()
+	if err != nil {
+		http.Error(w, "Не удалось загрузить периоды", 500)
+		return
 	}
 
 	monthNames := []string{
@@ -318,7 +333,16 @@ func (h *Handler) FinanceAccountView(w http.ResponseWriter, r *http.Request) {
 	data["TotalCount"] = totalCount
 	data["IncomeCount"] = incomeCount
 	data["ExpenseCount"] = expenseCount
+	reconciliation, err := h.latestReconciliation(userID, accountID)
+	if err != nil {
+		http.Error(w, "Не удалось загрузить сверку", 500)
+		return
+	}
+	data["Reconciliation"] = reconciliation
 	data["AvailableMonths"] = availableMonths
+	data["PageOffset"] = page.Offset
+	data["PageHasMore"] = page.HasMore
+	data["Search"] = filter.Search
 
 	h.renderTemplate(w, "finance_transactions.html", data)
 }
@@ -432,6 +456,13 @@ func (h *Handler) FinanceTransaction(w http.ResponseWriter, r *http.Request) {
 	data["Credit"] = credit
 	data["AccountID"] = accountID
 	data["Accounts"] = accounts
+	commodities, _ := h.getCommodities()
+	commodityMap := map[int64]*models.Commodity{}
+	for _, c := range commodities {
+		commodityMap[c.ID] = c
+	}
+	data["CommodityMap"] = commodityMap
+	data["MetadataOnly"] = transaction != nil && transactionMetadataOnly(debit, credit, commodityMap)
 	h.renderTemplate(w, "finance_transaction.html", data)
 }
 
@@ -525,7 +556,7 @@ func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error
 	rows, err := h.db.Query(`
 		SELECT a.id, a.name, a.account_type, a.commodity_id, a.commodity_scu,
 		       a.non_std_scu, a.parent_id, a.code, a.description, a.hidden, a.placeholder,
-		       COALESCE(SUM(s.value_num), 0) AS balance, c.mnemonic
+		       COALESCE(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom), 0) AS balance, c.mnemonic
 		FROM accounts a
 		LEFT JOIN splits s ON a.id = s.account_id AND s.user_id = a.user_id
 		JOIN commodities c ON c.id = a.commodity_id
@@ -545,7 +576,7 @@ func (h *Handler) getAccountsWithBalance(userID int64) ([]*models.Account, error
 		var acc models.Account
 		var parentID sql.NullInt64
 		var code, description sql.NullString
-		var balanceRaw int64
+		var balanceRaw float64
 
 		err := rows.Scan(&acc.ID, &acc.Name, &acc.AccountType, &acc.CommodityID,
 			&acc.CommoditySCU, &acc.NonStdSCU, &parentID, &code, &description,
@@ -839,7 +870,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 	// 7 счетов-активов с самой свежей транзакционной активностью
 	topRows, err := h.db.Query(`
 		SELECT a.id, a.name, a.account_type,
-		       COALESCE(SUM(s.value_num), 0) / 100.0 AS balance,
+		       COALESCE(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom), 0) / 100.0 AS balance,
 		       MAX(t.post_date) AS last_tx, c.mnemonic
 		FROM accounts a
 		JOIN splits s ON s.account_id = a.id
@@ -880,7 +911,7 @@ func (h *Handler) renderDashboard(w http.ResponseWriter, r *http.Request, userID
 	// Последние 8 транзакций пользователя
 	recentRows, err := h.db.Query(`
 		SELECT DISTINCT t.id, t.description, DATE_FORMAT(t.post_date, '%Y-%m-%d') AS post_date,
-		       s.value_num / 100.0 AS amount,
+		       CAST(s.value_num AS DECIMAL(65,16)) * 1.0 / s.value_denom AS amount,
 		       a.name AS account_name, a.account_type, c.mnemonic
 		FROM transactions t
 		JOIN splits s ON s.tx_id = t.id
@@ -929,12 +960,12 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 		       s.id, s.account_id, s.value_num, s.value_denom,
 		       a.name, current_account.account_type
 		FROM transactions t
-		JOIN splits acc_split ON t.id = acc_split.tx_id AND acc_split.account_id = ? AND acc_split.user_id = ?
-		JOIN accounts current_account ON current_account.id = acc_split.account_id
+		JOIN accounts current_filter ON current_filter.id = ? AND current_filter.user_id = ?
+		JOIN accounts current_account ON current_account.id = current_filter.id
 		JOIN splits s ON t.id = s.tx_id
 		LEFT JOIN accounts a ON s.account_id = a.id
-		WHERE t.user_id = ?
-		ORDER BY t.post_date ASC, t.id ASC
+		WHERE t.user_id = ? AND EXISTS (SELECT 1 FROM splits own WHERE own.tx_id=t.id AND own.account_id=current_filter.id AND own.user_id=t.user_id)
+		ORDER BY t.post_date ASC, t.id ASC, s.id ASC
 	`, accountID, userID, userID)
 
 	if err != nil {
@@ -972,11 +1003,14 @@ func (h *Handler) getAccountTransactions(userID, accountID int64, sortOrder stri
 			}
 			// Разделяем на приход (положительное) и расход (отрицательное)
 			if value > 0 {
-				transactionsMap[txID]["plus_balance_changing"] = value
+				previous, _ := transactionsMap[txID]["plus_balance_changing"].(float64)
+				transactionsMap[txID]["plus_balance_changing"] = previous + value
 			} else {
-				transactionsMap[txID]["balance_changing"] = -value // Показываем расход как положительное число
+				previous, _ := transactionsMap[txID]["balance_changing"].(float64)
+				transactionsMap[txID]["balance_changing"] = previous - value // Показываем расход как положительное число
 			}
-			transactionsMap[txID]["value_change"] = value // Знак для экранного накопительного баланса; проводки не меняются
+			previous, _ := transactionsMap[txID]["value_change"].(float64)
+			transactionsMap[txID]["value_change"] = previous + value // Знак для экранного накопительного баланса; проводки не меняются
 		} else {
 			transactionsMap[txID]["account_name"] = accountName
 			transactionsMap[txID]["account_id"] = splitAccountID
@@ -1046,10 +1080,12 @@ func (h *Handler) getTransaction(userID, txID int64) (*models.Transaction, []map
 
 		value := float64(valueNum) / float64(valueDenom)
 		split := map[string]interface{}{
-			"id":                 splitID,
-			"account_id":         accountID,
-			"account_name":       accountName,
-			"value":              value,
+			"id":           splitID,
+			"account_id":   accountID,
+			"account_name": accountName,
+			"value":        value,
+			"value_exact":  amount.Decimal(valueNum, valueDenom),
+			"value_num":    valueNum, "value_denom": valueDenom,
 			"commodity_id":       commodityID,
 			"commodity_sign":     commoditySign,
 			"commodity_mnemonic": commodityMnemonic,
@@ -1057,6 +1093,7 @@ func (h *Handler) getTransaction(userID, txID int64) (*models.Transaction, []map
 
 		if value < 0 {
 			split["value"] = -value
+			split["value_exact"] = strings.TrimPrefix(amount.Decimal(valueNum, valueDenom), "-")
 			credit = append(credit, split)
 		} else {
 			debit = append(debit, split)
@@ -1482,7 +1519,8 @@ func (h *Handler) listTransactions(userID int64, f txListFilter) ([]map[string]i
 			"account_id":   accountID,
 			"account_name": accountName,
 			"amount":       float64(valueNum) / float64(valueDenom),
-			"currency":     currency,
+			"amount_exact": amount.Decimal(valueNum, valueDenom), "value_num": valueNum, "value_denom": valueDenom,
+			"currency": currency,
 		}
 		txMap[txID]["splits"] = append(txMap[txID]["splits"].([]map[string]interface{}), split)
 	}
@@ -1573,7 +1611,8 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	savedID, err := h.saveTransaction(userID, txSaveInput{
-		TxID:            txID,
+		TxID:      txID,
+		ValueText: valueStr, TargetText: valueTargetStr, Source: financeSource(r),
 		Description:     description,
 		Comment:         optionalFormComment(r),
 		PostDate:        postDate,
@@ -1597,16 +1636,18 @@ func (h *Handler) APITransactionSave(w http.ResponseWriter, r *http.Request) {
 
 // txSaveInput — данные для создания/обновления транзакции
 type txSaveInput struct {
-	TxID            int64 // 0 — создать новую
-	Description     string
-	Comment         *string // nil preserves the current comment on update
-	PostDate        time.Time
-	PostTime        *string // nil preserves existing time
-	Tags            string
-	Value           float64  // сумма списания (в валюте счёта списания)
-	ValueTarget     *float64 // сумма зачисления (в валюте счёта зачисления)
-	DebitAccountID  int64    // счёт зачисления
-	CreditAccountID int64    // счёт списания
+	ValueText, TargetText string // exact HTTP decimal input; older numeric clients remain supported
+	Source                string
+	TxID                  int64 // 0 — создать новую
+	Description           string
+	Comment               *string // nil preserves the current comment on update
+	PostDate              time.Time
+	PostTime              *string // nil preserves existing time
+	Tags                  string
+	Value                 float64  // сумма списания (в валюте счёта списания)
+	ValueTarget           *float64 // сумма зачисления (в валюте счёта зачисления)
+	DebitAccountID        int64    // счёт зачисления
+	CreditAccountID       int64    // счёт списания
 }
 
 // validationError — ошибка входных данных (API отдаёт её с кодом 400)
@@ -1630,7 +1671,7 @@ func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.deleteTransaction(userID, txID); err != nil {
+	if err := h.deleteTransaction(userID, txID, financeSource(r)); err != nil {
 		var vErr validationError
 		if errors.As(err, &vErr) {
 			http.Error(w, "Transaction not found", http.StatusNotFound)
@@ -1646,13 +1687,20 @@ func (h *Handler) APITransactionDelete(w http.ResponseWriter, r *http.Request) {
 
 // deleteTransaction удаляет транзакцию пользователя вместе со сплитами.
 // Используется API и MCP-инструментами.
-func (h *Handler) deleteTransaction(userID, txID int64) error {
+func (h *Handler) deleteTransaction(userID, txID int64, sources ...string) error {
 	tx, err := h.beginFinanceWrite(userID)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
+	before, err := snapshotTransaction(tx, userID, txID)
+	if err != nil {
+		return err
+	}
+	if before == nil {
+		return validationError("Транзакция не найдена")
+	}
 	// Сначала удаляем все splits, связанные с транзакцией
 	if _, err := tx.Exec("DELETE FROM splits WHERE tx_id = ? AND user_id = ?", txID, userID); err != nil {
 		return err
@@ -1667,6 +1715,13 @@ func (h *Handler) deleteTransaction(userID, txID int64) error {
 		return validationError("Транзакция не найдена")
 	}
 
+	source := "api"
+	if len(sources) > 0 {
+		source = sources[0]
+	}
+	if err := recordTransactionHistory(tx, userID, txID, "delete", source, before); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -2193,7 +2248,7 @@ func (h *Handler) APITransactionFormGet(w http.ResponseWriter, r *http.Request) 
 
 	data := map[string]interface{}{
 		"Transaction":  transaction,
-		"MetadataOnly": transaction != nil && (len(debit) != 1 || len(credit) != 1),
+		"MetadataOnly": transaction != nil && transactionMetadataOnly(debit, credit, commodityMap),
 		"Debit":        debit,
 		"Credit":       credit,
 		"AccountID":    accountID,

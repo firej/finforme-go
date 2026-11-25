@@ -46,7 +46,7 @@ func TestCapitalHistorySnapshots(t *testing.T) {
 	if err != nil || !hasData || len(snapshots) != 13 {
 		t.Fatalf("snapshots: %v %v %v", snapshots, hasData, err)
 	}
-	if !reflect.DeepEqual(snapshots[0].Holdings, []capitalHolding{{"RUB", 100000, 0}}) || snapshots[1].Holdings[0].Assets != 95000 {
+	if !reflect.DeepEqual(snapshots[0].Holdings, []capitalHolding{{"RUB", "100000", "0"}}) || snapshots[1].Holdings[0].Assets != "95000" {
 		t.Fatalf("opening/first-day boundary: %+v", snapshots[:2])
 	}
 	current, err := h.capitalHoldings(context.Background(), 2, dates[12])
@@ -60,10 +60,10 @@ func TestCapitalHistorySnapshots(t *testing.T) {
 }
 func TestCapitalHistoryGrowthAndFX(t *testing.T) {
 	snapshots := []capitalSnapshot{
-		{historyDay("2026-01-31"), []capitalHolding{{"USD", 10000, 2000}}},
-		{historyDay("2026-02-28"), []capitalHolding{{"USD", 12000, 2000}}},
+		{historyDay("2026-01-31"), []capitalHolding{{"USD", "10000", "2000"}}},
+		{historyDay("2026-02-28"), []capitalHolding{{"USD", "12000", "2000"}}},
 		// Paying a debt with cash changes both balances, leaving net capital intact.
-		{historyDay("2026-03-15"), []capitalHolding{{"USD", 10000, 0}}},
+		{historyDay("2026-03-15"), []capitalHolding{{"USD", "10000", "0"}}},
 	}
 	quotes := []capitalQuote{
 		{Base: "USD", Quote: "RUB", Code: "USD/RUB", Source: "cbr", Rate: "90", Date: "2026-01-30"},
@@ -92,9 +92,9 @@ func TestCapitalHistoryGrowthAndFX(t *testing.T) {
 }
 func TestCapitalHistoryMissingQuotes(t *testing.T) {
 	snapshots := []capitalSnapshot{
-		{historyDay("2026-01-31"), []capitalHolding{{"USD", 10000, 0}}},
-		{historyDay("2026-02-28"), []capitalHolding{{"USD", 10000, 0}}},
-		{historyDay("2026-03-15"), []capitalHolding{{"USD", 10000, 0}}},
+		{historyDay("2026-01-31"), []capitalHolding{{"USD", "10000", "0"}}},
+		{historyDay("2026-02-28"), []capitalHolding{{"USD", "10000", "0"}}},
+		{historyDay("2026-03-15"), []capitalHolding{{"USD", "10000", "0"}}},
 	}
 	quotes := []capitalQuote{
 		{Base: "USD", Quote: "RUB", Code: "USD/RUB", Source: "cbr", Rate: "90", Date: "2026-01-31"},
@@ -177,8 +177,8 @@ func TestCapitalHistoryHandlerAndTemplate(t *testing.T) {
 
 func TestCapitalHistoryPinsDefaultSource(t *testing.T) {
 	snapshots := []capitalSnapshot{
-		{historyDay("2026-01-31"), []capitalHolding{{"ARS", 140000, 0}}},
-		{historyDay("2026-02-28"), []capitalHolding{{"ARS", 140000, 0}}},
+		{historyDay("2026-01-31"), []capitalHolding{{"ARS", "140000", "0"}}},
+		{historyDay("2026-02-28"), []capitalHolding{{"ARS", "140000", "0"}}},
 	}
 	quotes := []capitalQuote{
 		{Base: "USD", Quote: "ARS", Code: "USD/ARS", Source: "cbr", Rate: "1000", Date: "2026-01-31"},

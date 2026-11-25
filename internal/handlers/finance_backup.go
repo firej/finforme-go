@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/evbogdanov/finforme/internal/gnucash"
+	"github.com/evbogdanov/finforme/internal/amount"
 	"github.com/evbogdanov/finforme/internal/models"
 )
 
@@ -20,7 +20,7 @@ import (
 // они переназначаются, а ссылки (parent_id, account_id) переписываются по карте.
 const (
 	backupFormat        = "finforme-backup"
-	backupFormatVersion = 3
+	backupFormatVersion = 4
 	backupMaxUploadSize = 64 << 20 // 64 МБ
 )
 
@@ -30,13 +30,16 @@ type backupImportID struct {
 }
 
 type backupData struct {
-	Commodities      []backupCommodity   `json:"commodities,omitempty"`
-	GnuCashImportIDs []backupImportID    `json:"gnucash_import_ids,omitempty"`
-	Format           string              `json:"format"`
-	Version          int                 `json:"version"`
-	ExportedAt       string              `json:"exported_at"`
-	Accounts         []backupAccount     `json:"accounts"`
-	Transactions     []backupTransaction `json:"transactions"`
+	History          []transactionHistory   `json:"transaction_history,omitempty"`
+	Checked          []int64                `json:"checked_transactions,omitempty"`
+	Reconciliations  []backupReconciliation `json:"reconciliations,omitempty"`
+	Commodities      []backupCommodity      `json:"commodities,omitempty"`
+	GnuCashImportIDs []backupImportID       `json:"gnucash_import_ids,omitempty"`
+	Format           string                 `json:"format"`
+	Version          int                    `json:"version"`
+	ExportedAt       string                 `json:"exported_at"`
+	Accounts         []backupAccount        `json:"accounts"`
+	Transactions     []backupTransaction    `json:"transactions"`
 }
 
 type backupAccount struct {
@@ -243,6 +246,9 @@ func (h *Handler) exportBackup(userID int64) (*backupData, error) {
 	err = importRows.Err()
 	importRows.Close()
 	if err != nil {
+		return nil, err
+	}
+	if err := exportLedgerBackup(tx, userID, data); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -532,6 +538,7 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 	}
 
 	result := &backupRestoreResult{Accounts: len(accountIDs)}
+	transactionIDs := map[int64]int64{}
 
 	for _, t := range data.Transactions {
 		postDate, err := parseBackupTime(t.PostDate)
@@ -554,6 +561,7 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 		if err != nil {
 			return nil, err
 		}
+		transactionIDs[t.ID] = newTxID
 		result.Transactions++
 
 		for _, s := range t.Splits {
@@ -569,6 +577,24 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 			}
 			result.Splits++
 		}
+		if len(data.History) == 0 {
+			if err := recordTransactionHistory(tx, userID, newTxID, "create", "import", nil); err != nil {
+				return nil, err
+			}
+		}
+	}
+	commodityHistoryIDs := map[int64]int64{}
+	for _, entry := range data.History {
+		for _, snapshot := range []*transactionSnapshot{entry.Before, entry.After} {
+			if snapshot != nil {
+				for _, p := range snapshot.Splits {
+					commodityHistoryIDs[p.CommodityID] = commodityIDs[strings.ToUpper(p.Currency)]
+				}
+			}
+		}
+	}
+	if err := restoreLedgerBackup(tx, userID, data, accountIDs, transactionIDs, commodityHistoryIDs); err != nil {
+		return nil, err
 	}
 
 	// Merge identity history even for replace: local deletions must not reopen
@@ -591,10 +617,9 @@ func (h *Handler) restoreBackup(userID int64, data *backupData, mode string) (*b
 	return result, nil
 }
 
-// normalizeSplitValue приводит сумму сплита к знаменателю 100 (балансы считаются как SUM(value_num)/100)
+// normalizeSplitValue preserves exact decimals up to eight places.
 func normalizeSplitValue(valueNum, valueDenom int64) (int64, int64, error) {
-	cents, err := gnucash.Cents(valueNum, valueDenom)
-	return cents, models.DefaultDenom, err
+	return amount.Normalize(valueNum, valueDenom)
 }
 
 // parseBackupTime разбирает дату из резервной копии в одном из поддерживаемых форматов
@@ -619,6 +644,11 @@ func parseBackupTime(value string) (time.Time, error) {
 
 // deleteUserFinanceData удаляет все счета, транзакции и сплиты пользователя
 func deleteUserFinanceData(tx *sql.Tx, userID int64) error {
+	for _, table := range []string{"transaction_history", "csv_import_batches", "transaction_checks", "account_reconciliations"} {
+		if _, err := tx.Exec("DELETE FROM "+table+" WHERE user_id=?", userID); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec("DELETE FROM splits WHERE user_id = ?", userID); err != nil {
 		return fmt.Errorf("failed to delete splits: %w", err)
 	}

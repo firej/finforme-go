@@ -144,6 +144,9 @@ func InitDB(db *sql.DB) error {
 			return fmt.Errorf("failed to create table: %w", err)
 		}
 	}
+	if err := InitLedgerDB(db, false); err != nil {
+		return err
+	}
 	if err := InitOAuthDB(db); err != nil {
 		return fmt.Errorf("failed to initialize OAuth: %w", err)
 	}

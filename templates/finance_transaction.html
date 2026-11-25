@@ -50,7 +50,7 @@
       <div class="form-group">
         <label class="form-label" for="value">Сумма</label>
         <input class="form-input form-input-mono" type="number" step="0.01" id="value" name="value"
-               value="{{if .Credit}}{{with index .Credit 0}}{{formatMoneyInput .value}}{{end}}{{end}}" required>
+               value="{{if .Credit}}{{with index .Credit 0}}{{if .value_exact}}{{.value_exact}}{{else}}{{formatMoneyInput .value}}{{end}}{{end}}{{end}}" required>
       </div>
 
       <div class="form-group">
@@ -59,7 +59,7 @@
           {{$debitAccountID := 0}}
           {{if .Debit}}{{with index .Debit 0}}{{$debitAccountID = .account_id}}{{end}}{{end}}
           {{range .Accounts}}
-          <option value="{{.ID}}" data-commodity-id="{{.CommodityID}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
+          <option value="{{.ID}}" data-commodity-id="{{.CommodityID}}" data-fraction="{{if $.CommodityMap}}{{with index $.CommodityMap .CommodityID}}{{.Fraction}}{{else}}100{{end}}{{else}}100{{end}}" {{if eq .ID $debitAccountID}}selected{{end}}>{{.DisplayName}}</option>
           {{end}}
         </select>
       </div>
@@ -70,7 +70,7 @@
           {{$creditAccountID := 0}}
           {{if .Credit}}{{with index .Credit 0}}{{$creditAccountID = .account_id}}{{end}}{{end}}
           {{range .Accounts}}
-          <option value="{{.ID}}" data-commodity-id="{{.CommodityID}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
+          <option value="{{.ID}}" data-commodity-id="{{.CommodityID}}" data-fraction="{{if $.CommodityMap}}{{with index $.CommodityMap .CommodityID}}{{.Fraction}}{{else}}100{{end}}{{else}}100{{end}}" {{if eq .ID $creditAccountID}}selected{{end}}>{{.DisplayName}}</option>
           {{end}}
         </select>
       </div>
@@ -78,7 +78,7 @@
       <div class="form-group" data-target-group>
         <label class="form-label" for="value_target">Сумма зачисления (обязательна при разных валютах)</label>
         <input class="form-input" type="number" step="0.01" min="0.01" id="value_target" name="value_target"
-          value="{{if .CrossCurrency}}{{with index .Debit 0}}{{formatMoneyInput .value}}{{end}}{{end}}">
+          value="{{if .CrossCurrency}}{{with index .Debit 0}}{{if .value_exact}}{{.value_exact}}{{else}}{{formatMoneyInput .value}}{{end}}{{end}}{{end}}">
 
       </div>
       {{template "transaction_rate_fields" .}}

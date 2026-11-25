@@ -52,7 +52,7 @@ func TestFinanceGnuCashRollback(t *testing.T) {
 		"unbalanced":                func(d *gnucash.ParsedData) { d.Transactions[0].Splits[1].ValueNum++ },
 		"one sided":                 func(d *gnucash.ParsedData) { d.Transactions[0].Splits = d.Transactions[0].Splits[:1] },
 		"zero denominator":          func(d *gnucash.ParsedData) { d.Transactions[0].Splits[1].QuantityDenom = 0 },
-		"precision":                 func(d *gnucash.ParsedData) { d.Transactions[0].Splits[1].QuantityDenom = 1000 },
+		"precision":                 func(d *gnucash.ParsedData) { d.Transactions[0].Splits[1].QuantityDenom = 1000000000 },
 		"date":                      func(d *gnucash.ParsedData) { d.Transactions[0].PostDate = time.Time{} },
 		"same currency discrepancy": func(d *gnucash.ParsedData) { d.Transactions[0].Splits[0].QuantityNum = -50 },
 	} {

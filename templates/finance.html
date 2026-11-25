@@ -190,7 +190,7 @@ document.addEventListener('drop', function(e) {
     <!-- Balance cell -->
     <div class="ptree-balance">
       {{range .DisplayBalances}}
-      <div><span{{if eq .Amount 0.0}} class="bal-zero"{{end}}>{{formatMoney .Amount}} {{.Currency}}</span></div>
+      <div><span{{if eq .Amount 0.0}} class="bal-zero"{{end}}>{{formatAmount .Amount}} {{.Currency}}</span></div>
       {{end}}
     </div>
 

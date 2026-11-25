@@ -54,6 +54,7 @@ func New(db *sql.DB, store *sessions.CookieStore) *Handler {
 		},
 		"formatMoneyInput": formatMoneyInput,
 		"trimSpace":        strings.TrimSpace,
+		"formatAmount":     formatAmount,
 		"formatMoney":      formatMoney,
 		"derefInt64": func(ptr *int64) int64 {
 			if ptr != nil {

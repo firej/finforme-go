@@ -12,7 +12,7 @@ import (
 
 type capitalHolding struct {
 	Currency     string
-	Assets, Debt int64 // minor units, never floating point
+	Assets, Debt exactCents // rational cents, including sub-cent units
 }
 type capitalQuote struct {
 	Base, Quote, Code, Source, Rate, Date string
@@ -64,8 +64,8 @@ func (h *Handler) capitalHoldings(ctx context.Context, userID int64, date time.T
 	// Sum postings once, without rolling up container accounts; include hidden accounts.
 	// Future-dated operations do not belong to today's capital.
 	rows, err := h.db.QueryContext(ctx, `SELECT c.mnemonic,
- COALESCE(SUM(CASE WHEN a.account_type<>'LIABILITY' AND t.id IS NOT NULL THEN s.value_num ELSE 0 END),0),
- COALESCE(SUM(CASE WHEN a.account_type='LIABILITY' AND t.id IS NOT NULL THEN -s.value_num ELSE 0 END),0)
+ COALESCE(SUM(CASE WHEN a.account_type<>'LIABILITY' AND t.id IS NOT NULL THEN CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom ELSE 0 END),0),
+ COALESCE(SUM(CASE WHEN a.account_type='LIABILITY' AND t.id IS NOT NULL THEN -CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom ELSE 0 END),0)
  FROM accounts a JOIN commodities c ON c.id=a.commodity_id
  LEFT JOIN splits s ON s.account_id=a.id AND s.user_id=a.user_id
  LEFT JOIN transactions t ON t.id=s.tx_id AND t.user_id=s.user_id AND t.post_date<?
@@ -242,11 +242,11 @@ func buildDashboardCapital(holdings []capitalHolding, quotes []capitalQuote, bas
 	assets, debt := new(big.Rat), new(big.Rat)
 	used := map[string]bool{}
 	for _, h := range holdings {
-		a, d := big.NewRat(h.Assets, 1), big.NewRat(h.Debt, 1)
+		a, d := h.Assets.rat(), h.Debt.rat()
 		n := new(big.Rat).Sub(a, d)
 		row := capitalRow{Currency: h.Currency, Assets: capitalMoney(a), Debt: capitalMoney(d), Net: capitalMoney(n)}
 		path, found := capitalPath(graph, h.Currency, base)
-		row.Included = found || (h.Assets == 0 && h.Debt == 0)
+		row.Included = found || (h.Assets.rat().Sign() == 0 && h.Debt.rat().Sign() == 0)
 		if row.Included {
 			factor := big.NewRat(1, 1)
 			route := []string{h.Currency}

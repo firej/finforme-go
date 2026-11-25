@@ -25,7 +25,7 @@ func (h *Handler) MCPHandler() http.Handler {
 		}
 		server := h.buildMCPServer(userID)
 		if readOnly, _ := r.Context().Value(mcpReadOnlyKey{}).(bool); readOnly {
-			server.RemoveTools("create_account", "update_account", "delete_account", "create_transaction", "update_transaction", "update_transaction_metadata", "delete_transaction", "save_memory", "delete_memory")
+			server.RemoveTools("create_account", "update_account", "delete_account", "create_transaction", "update_transaction", "update_transaction_metadata", "delete_transaction", "save_memory", "delete_memory", "restore_transaction", "reconcile_account", "mark_transaction_checked")
 			// Fail closed for future tools too, not just today's write-tool list.
 			server.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 				return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
@@ -69,7 +69,7 @@ func (h *Handler) MCPHandler() http.Handler {
 
 func oauthReadTool(name string) bool {
 	switch name {
-	case "list_accounts", "get_account", "list_commodities", "list_transactions", "get_transaction", "get_report", "get_currency_rates", "list_memory", "get_memory":
+	case "list_accounts", "get_account", "list_commodities", "list_transactions", "get_transaction", "get_report", "get_currency_rates", "list_memory", "get_memory", "list_transaction_history":
 		return true
 	}
 	return false
@@ -171,6 +171,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 			return nil, writeTransactionOut{}, fmt.Errorf("укажите ID существующей транзакции")
 		}
 		return h.mcpSaveTransaction(userID, in.ID, writeTransactionIn{
+			AmountExact: in.AmountExact, AmountToExact: in.AmountToExact,
 			Date:          in.Date,
 			Time:          in.Time,
 			Description:   in.Description,
@@ -191,7 +192,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 		if err != nil {
 			return nil, writeTransactionOut{}, fmt.Errorf("invalid date: %w", err)
 		}
-		if err := h.updateTransactionMetadata(userID, in.ID, date, in.Description, in.Tags, in.Comment, in.Time); err != nil {
+		if err := h.updateTransactionMetadataFrom(userID, in.ID, date, in.Description, in.Tags, in.Comment, "mcp", in.Time); err != nil {
 			return nil, writeTransactionOut{}, err
 		}
 		return nil, writeTransactionOut{ID: in.ID, Result: "ok"}, nil
@@ -199,9 +200,9 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "delete_transaction",
-		Description: "Удалить транзакцию по ID вместе со всеми её сплитами. Необратимо.",
+		Description: "Удалить транзакцию по ID вместе со всеми её сплитами. Восстановление доступно через list_transaction_history и restore_transaction.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in getTransactionIn) (*mcp.CallToolResult, deleteTransactionOut, error) {
-		if err := h.deleteTransaction(userID, in.ID); err != nil {
+		if err := h.deleteTransaction(userID, in.ID, "mcp"); err != nil {
 			return nil, deleteTransactionOut{}, err
 		}
 		return nil, deleteTransactionOut{Deleted: true, ID: in.ID}, nil
@@ -255,6 +256,7 @@ func (h *Handler) buildMCPServer(userID int64) *mcp.Server {
 
 	h.addAccountTools(server, userID)
 	h.addMemoryTools(server, userID)
+	h.addLedgerTools(server, userID)
 	return server
 }
 
@@ -266,7 +268,7 @@ func (h *Handler) mcpSaveTransaction(userID, txID int64, in writeTransactionIn) 
 	}
 	valueTarget := in.AmountTo
 	savedID, err := h.saveTransaction(userID, txSaveInput{
-		TxID:            txID,
+		TxID: txID, Source: "mcp", ValueText: in.AmountExact, TargetText: in.AmountToExact,
 		Description:     in.Description,
 		Comment:         in.Comment,
 		PostDate:        postDate,
@@ -331,11 +333,13 @@ type getTransactionOut struct {
 }
 
 type writeTransactionIn struct {
+	AmountExact   string   `json:"amount_exact,omitempty" jsonschema:"точная десятичная сумма списания; если задана, используется вместо amount"`
+	AmountToExact string   `json:"amount_to_exact,omitempty" jsonschema:"точная десятичная сумма зачисления; если задана, используется вместо amount_to"`
 	Time          *string  `json:"time,omitempty" jsonschema:"время HH:MM или HH:MM:SS без преобразования часового пояса; при создании по умолчанию 00:00:00, при обновлении пропуск сохраняет время"`
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
 	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
 	Comment       *string  `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
-	Amount        float64  `json:"amount" jsonschema:"сумма в валюте счёта списания (from), положительное число"`
+	Amount        float64  `json:"amount,omitempty" jsonschema:"положительная сумма в валюте списания с точностью валюты (до 8 знаков); обязательна, если не задана amount_exact"`
 	FromAccountID int64    `json:"from_account_id" jsonschema:"ID счёта списания (откуда уходят деньги)"`
 	ToAccountID   int64    `json:"to_account_id" jsonschema:"ID счёта зачисления (куда приходят деньги)"`
 	AmountTo      *float64 `json:"amount_to,omitempty" jsonschema:"сумма в валюте счёта зачисления обязательна для разных валют; для одной валюты по умолчанию равна amount"`
@@ -343,12 +347,14 @@ type writeTransactionIn struct {
 }
 
 type updateTransactionIn struct {
+	AmountExact   string   `json:"amount_exact,omitempty" jsonschema:"точная десятичная сумма списания; если задана, используется вместо amount"`
+	AmountToExact string   `json:"amount_to_exact,omitempty" jsonschema:"точная десятичная сумма зачисления; если задана, используется вместо amount_to"`
 	Time          *string  `json:"time,omitempty" jsonschema:"время HH:MM или HH:MM:SS без преобразования часового пояса; при создании по умолчанию 00:00:00, при обновлении пропуск сохраняет время"`
 	ID            int64    `json:"id" jsonschema:"ID обновляемой транзакции"`
 	Date          string   `json:"date" jsonschema:"дата транзакции YYYY-MM-DD"`
 	Description   string   `json:"description" jsonschema:"краткое назначение операции"`
 	Comment       *string  `json:"comment,omitempty" jsonschema:"дополнительная информация до 16000 символов; пропуск сохраняет комментарий, пустая строка очищает"`
-	Amount        float64  `json:"amount" jsonschema:"сумма в валюте счёта списания (from), положительное число"`
+	Amount        float64  `json:"amount,omitempty" jsonschema:"положительная сумма в валюте списания с точностью валюты (до 8 знаков); обязательна, если не задана amount_exact"`
 	FromAccountID int64    `json:"from_account_id" jsonschema:"ID счёта списания (откуда уходят деньги)"`
 	ToAccountID   int64    `json:"to_account_id" jsonschema:"ID счёта зачисления (куда приходят деньги)"`
 	AmountTo      *float64 `json:"amount_to,omitempty" jsonschema:"сумма в валюте счёта зачисления обязательна для разных валют; для одной валюты по умолчанию равна amount"`

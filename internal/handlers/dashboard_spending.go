@@ -40,7 +40,7 @@ func (h *Handler) dashboardSpendingTrends(userID int64, month, now time.Time) (m
 	}
 	end := month.AddDate(0, 0, currentDays)
 	rows, err := h.db.Query(`
-		SELECT SUBSTR(CAST(t.post_date AS CHAR), 1, 10), c.mnemonic, SUM(s.value_num)
+		SELECT SUBSTR(CAST(t.post_date AS CHAR), 1, 10), c.mnemonic, ROUND(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom),0)
 		FROM splits s
 		JOIN transactions t ON t.id = s.tx_id AND t.user_id = s.user_id
 		JOIN accounts a ON a.id = s.account_id AND a.user_id = s.user_id
@@ -48,7 +48,7 @@ func (h *Handler) dashboardSpendingTrends(userID int64, month, now time.Time) (m
 		WHERE s.user_id = ? AND a.account_type = 'EXPENSE'
 		  AND t.post_date >= ? AND t.post_date < ?
 		GROUP BY SUBSTR(CAST(t.post_date AS CHAR), 1, 10), c.mnemonic
-		HAVING SUM(s.value_num) <> 0
+		HAVING ROUND(SUM(CAST(s.value_num AS DECIMAL(65,16)) * 100.0 / s.value_denom),0) <> 0
 	`, userID, previousMonth, end)
 	if err != nil {
 		return nil, err
